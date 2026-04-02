@@ -1,0 +1,41 @@
+---
+Language: Cpp
+Standard: Latest
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+NamespaceIndentation: None
+
+AccessModifierOffset: -4
+EmptyLineBeforeAccessModifier: Always
+
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: Never
+ConstructorInitializerIndentWidth: 4
+AlwaysBreakTemplateDeclarations: Yes
+
+# disabling something that i can easily say is demonic
+AllowShortFunctionsOnASingleLine: None
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: false          
+  AfterNamespace: false      
+  AfterStruct: false         
+  AfterEnum: false           
+  AfterControlStatement: Never 
+
+  AfterFunction: false       
+
+  BeforeCatch: false         
+  BeforeElse: false          
+  IndentBraces: false
+  SplitEmptyFunction: true   # another demonic thing disabled
+
+PointerAlignment: Right     # T *ptr instead of demonic T* ptr
+ReferenceAlignment: Right   # T &ref instead of demonic T& ref
+ColumnLimit: 100
+AlignConsecutiveDeclarations: false 
+...
