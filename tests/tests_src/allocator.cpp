@@ -139,4 +139,32 @@ TEST_CASE("Default Allocator Management") {
     CHECK(globals::get_default_allocator() == original);
 }
 
+TEST_CASE("Allocation Debug Stack Management") {
+    AllocationStack stack(16);
+    AllocationStack *original = globals::get_allocation_stack();
+
+    AllocationStack *previous = globals::set_allocation_stack(&stack);
+    CHECK(previous == original);
+    CHECK(globals::get_allocation_stack() == &stack);
+
+    stack.record(AllocationFrame{
+        .timestamp = 1,
+        .action = AllocatorAction::Allocate,
+        .prev_pointer = nullptr,
+        .next_pointer = reinterpret_cast<void *>(0x1),
+        .prev_size = 0,
+        .next_size = 64,
+        .alignment = 8,
+        .tag = "test",
+        .success = true,
+        .attempt = 0,
+    });
+
+    CHECK(stack.count() == 1);
+    CHECK(stack.frames().size() == 1);
+    CHECK(stack.frames()[0].tag == "test");
+
+    globals::set_allocation_stack(original);
+}
+
 } // namespace fr

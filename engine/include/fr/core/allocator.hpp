@@ -14,6 +14,7 @@
 #include "fr/core/globals.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
+#include "fr/core/time.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
@@ -76,7 +77,24 @@ public:
 
         U8 max_retries = globals::get_oom_retries();
         for (U8 attempt = 0;; ++attempt) {
-            if (void *result = do_try_allocate(sz, alignment)) {
+            void *result = do_try_allocate(sz, alignment);
+
+#ifdef FR_IS_DEBUG
+            globals::get_allocation_stack()->record(AllocationFrame{
+                .timestamp = time::get_steady_now_ns(),
+                .action = AllocatorAction::Allocate,
+                .prev_pointer = nullptr,
+                .next_pointer = result,
+                .prev_size = 0,
+                .next_size = sz,
+                .alignment = alignment,
+                .tag = debug_tag(),
+                .success = (result != nullptr),
+                .attempt = attempt,
+            });
+#endif
+
+            if (result) {
                 return result;
             }
 
@@ -117,7 +135,24 @@ public:
 
         U8 max_retries = globals::get_oom_retries();
         for (U8 attempt = 0;; ++attempt) {
-            if (void *result = do_try_reallocate(ptr, old_sz, new_sz, alignment)) {
+            void *result = do_try_reallocate(ptr, old_sz, new_sz, alignment);
+
+#ifdef FR_IS_DEBUG
+            globals::get_allocation_stack()->record(AllocationFrame{
+                .timestamp = time::get_steady_now_ns(),
+                .action = AllocatorAction::Reallocate,
+                .prev_pointer = ptr,
+                .next_pointer = result,
+                .prev_size = old_sz,
+                .next_size = new_sz,
+                .alignment = alignment,
+                .tag = debug_tag(),
+                .success = (result != nullptr),
+                .attempt = attempt,
+            });
+#endif
+
+            if (result) {
                 return result;
             }
 
@@ -152,6 +187,21 @@ public:
 
         FR_ASSERT(sz != 0, "Deallocation size must be non-zero");
         FR_ASSERT(mem::is_valid_alignment(alignment), "Alignment must be a power of two");
+
+#ifdef FR_IS_DEBUG
+        globals::get_allocation_stack()->record(AllocationFrame{
+            .timestamp = time::get_steady_now_ns(),
+            .action = AllocatorAction::Deallocate,
+            .prev_pointer = ptr,
+            .next_pointer = nullptr,
+            .prev_size = sz,
+            .next_size = 0,
+            .alignment = alignment,
+            .tag = debug_tag(),
+            .success = true,
+            .attempt = 0,
+        });
+#endif
 
         do_deallocate(ptr, sz, alignment);
     }
