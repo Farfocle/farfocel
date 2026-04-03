@@ -6,6 +6,7 @@ set(TEST_SOURCES
     "tests_src/allocator.cpp"
     "tests_src/dynamic_array.cpp"
     "tests_src/slice.cpp"
+    "tests_src/tuple.cpp"
 )
 
 if(TEST_SOURCES)

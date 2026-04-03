@@ -4,10 +4,10 @@
  *
  * @brief Tuple implementation. Mostly for my own personal misery. Tuples are hard. This tuple is
  * implemented in a so-to-speak standard way, namely it uses recursive template instantiation to
- * attach idices to items. Let's say the user wants a tuple with types A, B, C:
+ * attach indices to items. Let's say the user wants a tuple with types A, B, C:
  * Tuple<A, B, C> := TupleLeaf<0, A> + TupleLeaf<1, B> + TupleLeaf<2, C>
- * Actually there is one more level on abstraction here - TupleBase. TupleBase
- * inherits from the leafs and thus creates a sequencial memory storage for the data (from index 0
+ * Actually there is one more level of abstraction here - TupleBase. TupleBase
+ * inherits from the leaves and thus creates a sequential memory storage for the data (from index 0
  * to 2 in this case). It is my favorite pastime activity lately - abusing the C++ language.
  *
  * Exercise for an astute reader:
@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include <functional>
 #include <type_traits>
 #include <utility>
 
@@ -29,11 +28,11 @@
 namespace fr {
 namespace impl {
 
-/// @brief Inherting multiple times from the same type is not legal, so we construct a storage
+/// @brief Inheriting multiple times from the same type is not legal, so we construct a storage
 /// struct parameterized by the index `I` and the type `T`.
 template <USize I, typename T>
 struct TupleLeaf {
-    // [[no_unique_address]] anables EBO
+    // [[no_unique_address]] enables EBO for empty element types.
     [[no_unique_address]] T value;
 
     constexpr TupleLeaf() noexcept
@@ -59,7 +58,7 @@ struct TupleBase<std::index_sequence<Is...>, Ts...> : TupleLeaf<Is, Ts>... {
                  ...)
     = default;
 
-    /// @brief Expands the parameter pack to contruct the leafs
+    /// @brief Expands the parameter pack to construct all leaves in index order.
     template <typename... Us>
         requires(sizeof...(Us) == sizeof...(Ts))
     constexpr explicit TupleBase(Us &&...us) noexcept
@@ -83,6 +82,10 @@ template <USize I, typename... Ts>
 using pick_t = typename pick<I, Ts...>::type;
 } // namespace impl
 
+/** @brief Heterogeneous container with tuple protocol support.
+ * @note Inherits privately from `TupleBase` and exposes a typed API through `at`, `each`, and
+ * `map`.
+ */
 template <typename... Ts>
 class Tuple : impl::TupleBase<std::index_sequence_for<Ts...>, Ts...> {
     using Base = impl::TupleBase<std::index_sequence_for<Ts...>, Ts...>;
@@ -104,7 +107,7 @@ public:
     /**
      * @brief Returns item at index I.
      * @note Explicit object parameters are used here to avoid duplication of the `at` method. This
-     * way one method perfectly forwards all the possibilites (Tuple&, const Tuple&, Tuple&&, const
+     * way one method perfectly forwards all the possibilities (Tuple&, const Tuple&, Tuple&&, const
      * Tuple&&).
      */
     template <USize I>
@@ -120,12 +123,17 @@ public:
 
     /**
      * @brief Invokes the callback for every item in the tuple.
-     * @note Utilizes some dark magic, be warry!
-     * @todo Add coditional noexcept (?) and a concept.
+     * @note Invocation order matches the tuple index order.
      */
     template <typename F>
     constexpr void each(this auto &&self, F &&f) noexcept {
         [&]<USize... Is>(std::index_sequence<Is...>) {
+            FR_STATIC_ASSERT(
+                (std::is_invocable_v<
+                     F, decltype(std::forward_like<decltype(self)>(self).template at<Is>())> &&
+                 ...),
+                "fr::Tuple::each(F &&f): Callback must be invocable with each element of the "
+                "tuple.");
             (f(std::forward_like<decltype(self)>(self).template at<Is>()), ...);
         }(std::index_sequence_for<Ts...>{});
     }
@@ -133,13 +141,24 @@ public:
     /**
      * @brief Invokes the callback for every item in the tuple and maps the result onto another
      * tuple.
-     * @note Utilizes some dark magic, be warry!
-     * @todo Add coditional noexcept (?) and a concept.
+     * @note The returned tuple element type at index `I` is the callback result type for item `I`.
      */
     template <typename F>
     constexpr auto map(this auto &&self, F &&f) noexcept {
         return [&]<USize... Is>(std::index_sequence<Is...>) {
-            return Tuple(f(std::forward_like<decltype(self)>(self).template at<Is>())...);
+            FR_STATIC_ASSERT(
+                (std::is_invocable_v<
+                     F, decltype(std::forward_like<decltype(self)>(self).template at<Is>())> &&
+                 ...),
+                "fr::Tuple::map(F &&f): Callback must be invocable with each element of the "
+                "tuple.");
+            FR_STATIC_ASSERT(
+                (!std::is_void_v<std::invoke_result_t<
+                     F, decltype(std::forward_like<decltype(self)>(self).template at<Is>())>> &&
+                 ...),
+                "fr::Tuple::map(F &&f): Callback must return a non-void value for each element of "
+                "the tuple.");
+            return fr::Tuple(f(std::forward_like<decltype(self)>(self).template at<Is>())...);
         }(std::index_sequence_for<Ts...>{});
     }
 
@@ -147,11 +166,51 @@ public:
         return sizeof...(Ts);
     }
 
+    /// @brief Returns the first item in the tuple.
+    constexpr auto &&first(this auto &&self) noexcept {
+        FR_STATIC_ASSERT(sizeof...(Ts) > 0, "fr::Tuple::first(): Tuple must not be empty.");
+        return std::forward_like<decltype(self)>(self).template at<0>();
+    }
+
+    /// @brief Returns the second item in the tuple.
+    constexpr auto &&second(this auto &&self) noexcept {
+        FR_STATIC_ASSERT(sizeof...(Ts) > 1,
+                         "fr::Tuple::second(): Tuple must have at least two elements.");
+        return std::forward_like<decltype(self)>(self).template at<1>();
+    }
+
+    /// @brief Returns the last item in the tuple.
+    constexpr auto &&last(this auto &&self) noexcept {
+        FR_STATIC_ASSERT(sizeof...(Ts) > 0, "fr::Tuple::last(): Tuple must not be empty.");
+        return std::forward_like<decltype(self)>(self).template at<sizeof...(Ts) - 1>();
+    }
+
     /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing
     /// the hidden friend idiom.
-    template <USize I, typename Self>
-    friend constexpr auto &&get(Self &&self) noexcept {
-        return std::forward<Self>(self).template at<I>();
+    template <USize I>
+    friend constexpr auto &&get(Tuple &self) noexcept {
+        return self.template at<I>();
+    }
+
+    /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing
+    /// the hidden friend idiom.
+    template <USize I>
+    friend constexpr auto &&get(const Tuple &self) noexcept {
+        return self.template at<I>();
+    }
+
+    /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing
+    /// the hidden friend idiom.
+    template <USize I>
+    friend constexpr auto &&get(Tuple &&self) noexcept {
+        return std::move(self).template at<I>();
+    }
+
+    /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing
+    /// the hidden friend idiom.
+    template <USize I>
+    friend constexpr auto &&get(const Tuple &&self) noexcept {
+        return std::move(self).template at<I>();
     }
 };
 
@@ -161,7 +220,7 @@ template <typename... Ts>
 Tuple(Ts...) -> Tuple<Ts...>;
 } // namespace fr
 
-// Those annotations are part of the tuple protocol, they allow for structured bindings.
+// These specializations are part of the tuple protocol and enable structured bindings.
 namespace std {
 template <typename... Ts>
 struct tuple_size<fr::Tuple<Ts...>> : std::integral_constant<USize, sizeof...(Ts)> {};
