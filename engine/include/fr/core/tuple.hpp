@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <functional>
 #include <type_traits>
 #include <utility>
 
@@ -107,7 +108,7 @@ public:
      * Tuple&&).
      */
     template <USize I>
-    constexpr auto &&at(this auto &&self) {
+    constexpr auto &&at(this auto &&self) noexcept {
         FR_STATIC_ASSERT(I < sizeof...(Ts),
                          "fr::Tuple::at<USize I>(this auto &&self) -> Index (I) out of bounds");
 
@@ -115,6 +116,35 @@ public:
         using LeafType = impl::TupleLeaf<I, ItemType>;
 
         return std::forward_like<decltype(self)>(static_cast<LeafType &>(self).value);
+    }
+
+    /**
+     * @brief Invokes the callback for every item in the tuple.
+     * @note Utilizes some dark magic, be warry!
+     * @todo Add coditional noexcept (?) and a concept.
+     */
+    template <typename F>
+    constexpr void each(this auto &&self, F &&f) noexcept {
+        [&]<USize... Is>(std::index_sequence<Is...>) {
+            (f(std::forward_like<decltype(self)>(self).template at<Is>()), ...);
+        }(std::index_sequence_for<Ts...>{});
+    }
+
+    /**
+     * @brief Invokes the callback for every item in the tuple and maps the result onto another
+     * tuple.
+     * @note Utilizes some dark magic, be warry!
+     * @todo Add coditional noexcept (?) and a concept.
+     */
+    template <typename F>
+    constexpr auto map(this auto &&self, F &&f) noexcept {
+        return [&]<USize... Is>(std::index_sequence<Is...>) {
+            return Tuple(f(std::forward_like<decltype(self)>(self).template at<Is>())...);
+        }(std::index_sequence_for<Ts...>{});
+    }
+
+    USize size() const noexcept {
+        return sizeof...(Ts);
     }
 
     /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing

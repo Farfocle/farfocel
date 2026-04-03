@@ -25,14 +25,22 @@ int main() {
         for (S32 n : part) {
             std::println("part -> {}", n);
         }
-
-        std::println("----");
-        auto pair = fr::Tuple(42, 0.42f);
-        auto [a, b] = pair;
-
-        std::println("pair.0 -> {}", a);
-        std::println("pair.1 -> {}", b);
     }
+
+    std::println("----");
+    auto t = fr::Tuple(42, 0.42f, true);
+    auto [a, b, c] = t;
+
+    std::println("size -> {}", t.size());
+    std::println("a -> {}", a);
+    std::println("b -> {}", b);
+    std::println("c -> {}", c);
+
+    t.each([](const auto &item) { std::println("each -> {}", item); });
+
+    t.map([](const auto &item) { return sizeof(item); }).each([](const auto &item) {
+        std::println("each -> sizeof -> {}", item);
+    });
 
     std::println("----");
     for (const auto &frame : fr::globals::get_allocation_stack()->frames()) {
