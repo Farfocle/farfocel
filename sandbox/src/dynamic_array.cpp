@@ -3,6 +3,7 @@
 #include "fr/core/allocator.hpp"
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/globals.hpp"
+#include "fr/core/tuple.hpp"
 #include "fr/core/typedefs.hpp"
 
 int main() {
@@ -24,8 +25,15 @@ int main() {
         for (S32 n : part) {
             std::println("part -> {}", n);
         }
+
+        std::println("----");
+        auto pair = fr::Tuple(42, 0.42f);
+
+        std::println("pair.0 -> {}", pair.at<0>());
+        std::println("pair.1 -> {}", pair.at<1>());
     }
 
+    std::println("----");
     for (const auto &frame : fr::globals::get_allocation_stack()->frames()) {
         std::println("frame ts={} action={} prev={:p} next={:p} prev_size={} next_size={} align={} "
                      "tag={} success={} attempt={}",
