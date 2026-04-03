@@ -13,6 +13,8 @@ namespace fr {
 
 class String : public fr_stl_str::StringBase {
 public:
+    static constexpr USize npos = static_cast<USize>(-1);
+
     using fr_stl_str::StringBase::StringBase;
 
     ////////
