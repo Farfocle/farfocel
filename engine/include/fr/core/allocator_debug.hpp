@@ -2,7 +2,9 @@
  * @file allocator_debug.hpp
  * @author Kiju
  *
- * @brief Helpers for debugging allocators.
+ * @brief Helpers for debugging allocators. For now only AllocationStack is implemented, but
+ * propably it is more than enough for our needs. AllocationStack is ment to be held in a global
+ * context where allocators can access it to record allocations.
  */
 
 #pragma once
