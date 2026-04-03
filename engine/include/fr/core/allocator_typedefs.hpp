@@ -21,6 +21,19 @@ enum class OOMHandlerAction : U8 { Fail, Retry };
  */
 using OOMHandler = OOMHandlerAction (*)(USize sz, USize alignment) noexcept;
 
+/// @brief Ownership inspection result for debug tooling.
+enum class OwnershipResult : U8 {
+    /// @brief Allocator owns this pointer.
+    Owns,
+
+    /// @brief Allocator does NOT own this pointer.
+    DoesNotOwn,
+
+    /// @brief Allocator cannot determine ownership of this pointer. Often the case when dealing
+    /// with general purpose heap allocators.
+    Unknown,
+};
+
 /// @brief Recored allocator action for debugging.
 enum class AllocatorAction : U8 {
     Allocate,
@@ -39,19 +52,7 @@ struct AllocationFrame {
     USize alignment{alignof(void *)};
     const char *tag{"NIL"};
     bool success{false};
-};
-
-/// @brief Ownership inspection result for debug tooling.
-enum class OwnershipResult : U8 {
-    /// @brief Allocator owns this pointer.
-    Owns,
-
-    /// @brief Allocator does NOT own this pointer.
-    DoesNotOwn,
-
-    /// @brief Allocator cannot determine ownership of this pointer. Often the case when dealing
-    /// with general purpose heap allocators.
-    Unknown,
+    U8 attempt{0};
 };
 
 } // namespace fr
