@@ -28,9 +28,10 @@ int main() {
 
         std::println("----");
         auto pair = fr::Tuple(42, 0.42f);
+        auto [a, b] = pair;
 
-        std::println("pair.0 -> {}", pair.at<0>());
-        std::println("pair.1 -> {}", pair.at<1>());
+        std::println("pair.0 -> {}", a);
+        std::println("pair.1 -> {}", b);
     }
 
     std::println("----");

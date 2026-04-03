@@ -116,6 +116,13 @@ public:
 
         return std::forward_like<decltype(self)>(static_cast<LeafType &>(self).value);
     }
+
+    /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing
+    /// the hidden friend idiom.
+    template <USize I, typename Self>
+    friend constexpr auto &&get(Self &&self) noexcept {
+        return std::forward<Self>(self).template at<I>();
+    }
 };
 
 /// @brief Deduction guide, so the user can write Tuple(42, 0.42f)
@@ -123,3 +130,14 @@ public:
 template <typename... Ts>
 Tuple(Ts...) -> Tuple<Ts...>;
 } // namespace fr
+
+// Those annotations are part of the tuple protocol, they allow for structured bindings.
+namespace std {
+template <typename... Ts>
+struct tuple_size<fr::Tuple<Ts...>> : std::integral_constant<USize, sizeof...(Ts)> {};
+
+template <USize I, typename... Ts>
+struct tuple_element<I, fr::Tuple<Ts...>> {
+    using type = fr::impl::pick_t<I, Ts...>;
+};
+} // namespace std
