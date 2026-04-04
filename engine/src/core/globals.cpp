@@ -5,8 +5,8 @@
  */
 
 #include "fr/core/globals.hpp"
+#include "fr/core/allocation_stack.hpp"
 #include "fr/core/allocator.hpp"
-#include "fr/core/allocator_debug.hpp"
 #include "fr/core/allocator_typedefs.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/malloc_allocator.hpp"

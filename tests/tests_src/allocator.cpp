@@ -1,6 +1,15 @@
-// author: Kiju
-#include "fr/core/allocator.hpp"
+/**
+ * @file allocator.cpp
+ * @author: Kiju
+ *
+ * @brief Test suite for polymorphic allocators, oom handlers and allocator tracing with
+ * AllocationStack.
+ */
+
 #include "doctest.h"
+
+#include "fr/core/allocation_stack.hpp"
+#include "fr/core/allocator.hpp"
 #include "fr/core/arena_allocator.hpp"
 #include "fr/core/block_allocator.hpp"
 #include "fr/core/globals.hpp"

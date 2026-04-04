@@ -5,7 +5,7 @@ set(ENGINE_HEADERS
 #### core
     "include/fr/core/allocator.hpp"
     "include/fr/core/allocator_typedefs.hpp"
-    "include/fr/core/allocator_debug.hpp"
+    "include/fr/core/allocation_stack.hpp"
     "include/fr/core/arena_allocator.hpp"
     "include/fr/core/block_allocator.hpp"
     "include/fr/core/dynamic_array.hpp"
