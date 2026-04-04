@@ -50,7 +50,7 @@ struct AllocationFrame {
     USize prev_size{0};
     USize next_size{0};
     USize alignment{alignof(void *)};
-    const char *tag{"NIL"};
+    const char *tag{"@noname"};
     bool success{false};
     U8 attempt{0};
 };

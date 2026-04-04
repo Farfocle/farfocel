@@ -2,7 +2,7 @@
  * @file arena_allocator.hpp
  * @author Kiju
  *
- * @brief Fixed-capacity arena allocator over caller-provided memory.
+ * @brief Fixed-size arena allocator over caller-provided memory buffer.
  */
 
 #pragma once
@@ -16,16 +16,25 @@
 
 namespace fr {
 
-/// @brief Non-owning, non-growing arena allocator.
+/// @brief Non-owning, non-growing arena allocator. This allocator can only exist in a valid,
+/// non-null state.
 class ArenaAllocator final : public Allocator {
 public:
-    ArenaAllocator(void *buffer, USize capacity, const char *tag = "NIL") noexcept
+    ArenaAllocator(void *buffer, USize buffer_sz, const char *tag = "@noname") noexcept
         : m_buffer(static_cast<Byte *>(buffer)),
-          m_capacity(capacity),
+          m_buffer_size(buffer_sz),
           m_custom_tag(tag) {
-        FR_ASSERT(buffer != nullptr || capacity == 0,
-                  "fr::ArenaAllocator(void *buffer, USize capacity): Buffer must be non-null when "
-                  "capacity is non-zero");
+
+        FR_ASSERT(
+            buffer,
+            "fr::ArenaAllocator(void *buffer, USize buffer_sz, const char *tag = \"@noname\"): "
+            "Buffer must be non-null");
+
+        FR_ASSERT(
+            buffer_sz > 0,
+            "fr::ArenaAllocator(void *buffer, USize buffer_sz, const char *tag = \"@noname\"): "
+            "Buffer size must be non-zero");
+
         std::snprintf(m_full_tag, sizeof(m_full_tag), "ArenaAllocator: %s", m_custom_tag);
     }
 
@@ -35,7 +44,7 @@ public:
     }
 
     [[nodiscard]] USize capacity() const noexcept {
-        return m_capacity;
+        return m_buffer_size;
     }
 
     [[nodiscard]] USize used() const noexcept {
@@ -43,16 +52,12 @@ public:
     }
 
     [[nodiscard]] USize remaining() const noexcept {
-        return m_capacity - m_offset;
+        return m_buffer_size - m_offset;
     }
 
     OwnershipResult owns(void *ptr) const noexcept override {
-        if (!ptr || m_capacity == 0) {
-            return OwnershipResult::DoesNotOwn;
-        }
-
         Byte *byte_ptr = static_cast<Byte *>(ptr);
-        return (byte_ptr >= m_buffer && byte_ptr < (m_buffer + m_capacity))
+        return (byte_ptr >= m_buffer && byte_ptr < (m_buffer + m_buffer_size))
                    ? OwnershipResult::Owns
                    : OwnershipResult::DoesNotOwn;
     }
@@ -66,7 +71,7 @@ protected:
         alignment = mem::normalize_alignment(alignment);
         USize aligned_offset = (m_offset + (alignment - 1)) & ~(alignment - 1);
 
-        if (aligned_offset > m_capacity || sz > (m_capacity - aligned_offset)) {
+        if (aligned_offset > m_buffer_size || sz > (m_buffer_size - aligned_offset)) {
             return nullptr;
         }
 
@@ -86,8 +91,9 @@ protected:
         }
 
         const USize ptr_offset = static_cast<USize>(byte_ptr - m_buffer);
+
         if (ptr_offset + old_sz == m_offset) {
-            if (ptr_offset > m_capacity || new_sz > (m_capacity - ptr_offset)) {
+            if (new_sz > (m_buffer_size - ptr_offset)) {
                 return nullptr;
             }
 
@@ -110,9 +116,9 @@ protected:
 
 private:
     Byte *m_buffer{nullptr};
-    USize m_capacity{0};
+    USize m_buffer_size{0};
     USize m_offset{0};
-    const char *m_custom_tag{"NIL"};
+    const char *m_custom_tag{""};
     char m_full_tag[64]{};
 };
 } // namespace fr
