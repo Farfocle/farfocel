@@ -161,11 +161,14 @@ TEST_CASE("ArenaAllocator - Reallocate Fails") {
     // Try to grow last block beyond capacity
     CHECK(arena.try_reallocate(ptr, 32, 65, 8) == nullptr);
 
-    // Try to reallocate non-last block when no space left
     void *ptr2 = arena.allocate(16, 8);
     REQUIRE(ptr2 != nullptr);
-    // ptr is now non-last. m_offset = 32 + 16 = 48. remaining = 16.
-    CHECK(arena.try_reallocate(ptr, 32, 17, 8) == nullptr);
+
+    // Try to reallocate non-last block to a smaller size (should succeed now due to optimization)
+    CHECK(arena.try_reallocate(ptr, 32, 17, 8) == ptr);
+    
+    // Try to reallocate non-last block to a larger size when no space left (should fail)
+    CHECK(arena.try_reallocate(ptr, 32, 33, 8) == nullptr);
 }
 
 TEST_CASE("ArenaAllocator - Ownership and Tags") {

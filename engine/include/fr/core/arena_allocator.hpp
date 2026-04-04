@@ -69,12 +69,13 @@ public:
 protected:
     void *do_try_allocate(USize sz, USize alignment) noexcept override {
         alignment = mem::normalize_alignment(alignment);
-        USize aligned_offset = (m_offset + (alignment - 1)) & ~(alignment - 1);
+        USize padding = mem::align_forward_padding(m_buffer + m_offset, alignment);
 
-        if (aligned_offset > m_buffer_size || sz > (m_buffer_size - aligned_offset)) {
+        if (padding > m_buffer_size - m_offset || sz > m_buffer_size - m_offset - padding) {
             return nullptr;
         }
 
+        USize aligned_offset = m_offset + padding;
         void *result = static_cast<void *>(m_buffer + aligned_offset);
         m_offset = aligned_offset + sz;
 
@@ -93,11 +94,28 @@ protected:
         const USize ptr_offset = static_cast<USize>(byte_ptr - m_buffer);
 
         if (ptr_offset + old_sz == m_offset) {
-            if (new_sz > (m_buffer_size - ptr_offset)) {
+            USize padding = mem::align_forward_padding(ptr, alignment);
+            if (padding == 0) {
+                if (new_sz > (m_buffer_size - ptr_offset)) {
+                    return nullptr;
+                }
+
+                m_offset = ptr_offset + new_sz;
+                return ptr;
+            }
+
+            m_offset = ptr_offset;
+            void *new_ptr = do_try_allocate(new_sz, alignment);
+            if (!new_ptr) {
+                m_offset = ptr_offset + old_sz;
                 return nullptr;
             }
 
-            m_offset = ptr_offset + new_sz;
+            std::memmove(new_ptr, ptr, old_sz < new_sz ? old_sz : new_sz);
+            return new_ptr;
+        }
+
+        if (new_sz <= old_sz && mem::align_forward_padding(ptr, alignment) == 0) {
             return ptr;
         }
 

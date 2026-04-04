@@ -50,6 +50,34 @@ inline USize normalize_alignment(USize alignment) noexcept {
 }
 
 /**
+ * @brief Calculate the number of bytes needed to align a pointer.
+ * @param ptr Pointer to align.
+ * @param alignment Required alignment.
+ * @return Number of padding bytes.
+ * @pre @p alignment is a power of two.
+ */
+inline USize align_forward_padding(const void *ptr, USize alignment) noexcept {
+    FR_ASSERT(is_valid_alignment(alignment), "Alignment must be a power of two");
+    const auto ptr_val = reinterpret_cast<std::uintptr_t>(ptr);
+    const auto aligned = (ptr_val + alignment - 1) & ~(alignment - 1);
+    return static_cast<USize>(aligned - ptr_val);
+}
+
+/**
+ * @brief Align a pointer forward to a specific alignment.
+ * @param ptr Pointer to align.
+ * @param alignment Required alignment.
+ * @return Aligned pointer.
+ * @pre @p alignment is a power of two.
+ */
+inline void *align_forward(void *ptr, USize alignment) noexcept {
+    FR_ASSERT(is_valid_alignment(alignment), "Alignment must be a power of two");
+    const auto ptr_val = reinterpret_cast<std::uintptr_t>(ptr);
+    const auto aligned = (ptr_val + alignment - 1) & ~(alignment - 1);
+    return reinterpret_cast<void *>(aligned);
+}
+
+/**
  * @brief Copy a trivially copyable range as raw bytes.
  * @tparam T Element type.
  * @param src Source range.

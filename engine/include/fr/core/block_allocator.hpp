@@ -11,6 +11,7 @@
 
 #include "fr/core/allocator.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
@@ -92,7 +93,7 @@ public:
     }
 
 protected:
-    void *do_try_allocate(USize sz, USize /*alignment*/) noexcept override {
+    void *do_try_allocate(USize sz, USize alignment) noexcept override {
         FR_ASSERT(sz <= m_block_size, "fr::BlockAllocator::do_try_allocate(USize sz, USize): Size "
                                       "`sz` has to be smaller or equal to the block size");
 
@@ -101,6 +102,11 @@ protected:
         }
 
         void *ptr = m_head;
+        if (mem::align_forward_padding(ptr, alignment) != 0) {
+            FR_PANIC("BlockAllocator block does not satisfy requested alignment");
+            return nullptr;
+        }
+
         m_head = m_head->next;
         --m_free_count;
 
@@ -110,12 +116,12 @@ protected:
     /// @note Rellocation only happens if the new size is smaller or equal to the old one. Othewise
     /// it returns a nullptr - signaling an error state.
     void *do_try_reallocate(void *ptr, USize /*old_sz*/, USize new_sz,
-                            USize /*alignment*/) noexcept override {
+                            USize alignment) noexcept override {
         FR_ASSERT(owns(ptr) == OwnershipResult::Owns,
                   "fr::BlockAllocator::reallocate(void *ptr, USize, USize new_sz, USize): Pointer "
                   "not owned by this allocator");
 
-        if (new_sz <= m_block_size) {
+        if (new_sz <= m_block_size && mem::align_forward_padding(ptr, alignment) == 0) {
             return ptr;
         }
 
