@@ -16,7 +16,6 @@ class StringView {
 public:
     static constexpr USize npos = static_cast<USize>(-1);
 
-    /// @brief Default constructor
     constexpr StringView() noexcept
         : m_data(nullptr),
           m_size(0) {
@@ -30,7 +29,8 @@ public:
     constexpr StringView(const char *str, USize len) noexcept
         : m_data(str),
           m_size(len) {
-        FR_ASSERT(str, "fr::StringView(const char *str, USize len): str must not be nullptr");
+        FR_ASSERT(str != nullptr || len == 0, "fr::StringView(const char *str, USize len): str "
+                                              "cannot be nullptr if len is greater than 0");
     }
 
     /**
@@ -41,7 +41,7 @@ public:
         : m_data(str),
           m_size(0) {
 
-        FR_ASSERT(str, "fr::StringView(const char *str, USize len): str must not be nullptr");
+        FR_ASSERT(str != nullptr, "fr::StringView(const char *str): str must not be nullptr");
         m_size = const_strlen(str);
     }
 
@@ -88,7 +88,7 @@ public:
      * @brief Gets the current text size
      * @return Number of characters in the view
      */
-    [[nodiscard]] constexpr USize get_size() const noexcept {
+    [[nodiscard]] constexpr USize size() const noexcept {
         return m_size;
     }
 
@@ -191,7 +191,7 @@ public:
      * @param prefix The view to check for
      * @return True if it starts with the prefix, false otherwise
      */
-    constexpr bool start_with(StringView prefix) const noexcept {
+    constexpr bool starts_with(StringView prefix) const noexcept {
         if (prefix.m_size > m_size)
             return false;
         return const_strncmp(m_data, prefix.m_data, prefix.m_size) == 0;
@@ -215,6 +215,9 @@ public:
      * @return Index of the found character, or npos if not found
      */
     constexpr USize find(char c, USize pos = 0) const noexcept {
+        if (pos >= m_size)
+            return npos;
+
         for (USize i = pos; i < m_size; ++i)
             if (m_data[i] == c)
                 return i;
@@ -272,8 +275,6 @@ private:
                 return 1;
             if (c1 < c2)
                 return -1;
-            if (c1 == '\0')
-                return 0;
         }
         return 0;
     }
@@ -289,7 +290,7 @@ private:
  * @return True if sizes and contents the same
  */
 inline constexpr bool operator==(StringView lhs, StringView rhs) noexcept {
-    return lhs.get_size() == rhs.get_size() && lhs.compare(rhs) == 0;
+    return lhs.size() == rhs.size() && lhs.compare(rhs) == 0;
 }
 
 /**

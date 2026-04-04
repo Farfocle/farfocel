@@ -199,7 +199,7 @@ public:
      * @note It uses a very cool trick I found in folly to avoid conditional branches via the use of
      * CMOV instruction
      */
-    [[nodiscard]] USize get_size() const noexcept {
+    [[nodiscard]] USize size() const noexcept {
         // if string is short, final_size constains garbage
         USize final_size = m_data.long_string.size;
 
