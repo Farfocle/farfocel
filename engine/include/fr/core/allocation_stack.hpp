@@ -9,14 +9,15 @@
 
 #pragma once
 
-#include "fr/core/allocator_typedefs.hpp"
-#include "fr/core/macros.hpp"
-#include "fr/core/slice.hpp"
-#include "fr/core/typedefs.hpp"
 #include <memory>
 #include <mutex>
 #include <new>
 #include <utility>
+
+#include "fr/core/allocator_typedefs.hpp"
+#include "fr/core/macros.hpp"
+#include "fr/core/slice.hpp"
+#include "fr/core/typedefs.hpp"
 
 namespace fr {
 

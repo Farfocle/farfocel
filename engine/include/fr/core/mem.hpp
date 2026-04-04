@@ -43,21 +43,38 @@ inline bool is_overaligned(USize alignment) noexcept {
  * @pre @p alignment is a power of two.
  */
 inline USize normalize_alignment(USize alignment) noexcept {
-    FR_ASSERT(impl::is_pow2(alignment), "Alignment must be a power of two");
+    FR_ASSERT(impl::is_pow2(alignment),
+              "fr::mem::normalize_alignment(USize alignment): Alignment must be a power of two");
+
     return std::max(alignof(void *), alignment);
 }
 
 /**
- * @brief Fill a memory range with a specific byte value.
- * @param ptr Range start.
- * @param value Byte value to set.
- * @param count Number of bytes.
- * @pre @p ptr is non-null if count > 0.
+ * @brief Calculate the number of bytes needed to align a pointer.
+ * @param ptr Pointer to align.
+ * @param alignment Required alignment.
+ * @return Number of padding bytes.
+ * @pre @p alignment is a power of two.
  */
-inline void set_raw_range(void *ptr, char value, USize count) noexcept {
-    FR_ASSERT(count == 0 || ptr != nullptr, "fr::mem::set_raw_range(void *ptr, char, value, USize "
-                                            "count): Pointer must be non-null for non-zero size");
-    std::memset(ptr, value, count);
+inline USize align_forward_padding(const void *ptr, USize alignment) noexcept {
+    FR_ASSERT(is_valid_alignment(alignment), "Alignment must be a power of two");
+    const auto ptr_val = reinterpret_cast<std::uintptr_t>(ptr);
+    const auto aligned = (ptr_val + alignment - 1) & ~(alignment - 1);
+    return static_cast<USize>(aligned - ptr_val);
+}
+
+/**
+ * @brief Align a pointer forward to a specific alignment.
+ * @param ptr Pointer to align.
+ * @param alignment Required alignment.
+ * @return Aligned pointer.
+ * @pre @p alignment is a power of two.
+ */
+inline void *align_forward(void *ptr, USize alignment) noexcept {
+    FR_ASSERT(is_valid_alignment(alignment), "Alignment must be a power of two");
+    const auto ptr_val = reinterpret_cast<std::uintptr_t>(ptr);
+    const auto aligned = (ptr_val + alignment - 1) & ~(alignment - 1);
+    return reinterpret_cast<void *>(aligned);
 }
 
 /**

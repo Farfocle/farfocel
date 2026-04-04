@@ -1,6 +1,17 @@
-// author: Kiju
-#include "fr/core/allocator.hpp"
+/**
+ * @file allocator.cpp
+ * @author: Kiju
+ *
+ * @brief Test suite for polymorphic allocators, oom handlers and allocator tracing with
+ * AllocationStack.
+ */
+
 #include "doctest.h"
+
+#include "fr/core/allocation_stack.hpp"
+#include "fr/core/allocator.hpp"
+#include "fr/core/arena_allocator.hpp"
+#include "fr/core/block_allocator.hpp"
 #include "fr/core/globals.hpp"
 #include "fr/core/malloc_allocator.hpp"
 
@@ -57,6 +68,220 @@ TEST_CASE("MallocAllocator - Reallocate") {
     }
 
     alloc->deallocate(new_ptr, 2048, 8);
+}
+
+TEST_CASE("ArenaAllocator - Basic") {
+    U8 backing[128] = {};
+    ArenaAllocator arena(backing, sizeof(backing));
+
+    void *ptr = arena.allocate(16, 8);
+    CHECK(ptr != nullptr);
+    CHECK((reinterpret_cast<USize>(ptr) % 8) == 0);
+    CHECK(arena.owns(ptr) == OwnershipResult::Owns);
+    CHECK(arena.remaining() == 112);
+}
+
+TEST_CASE("ArenaAllocator - Custom Tag") {
+    U8 backing[64] = {};
+    ArenaAllocator arena(backing, sizeof(backing), "MyArena");
+    CHECK(std::strcmp(arena.tag(), "ArenaAllocator: MyArena") == 0);
+}
+
+TEST_CASE("ArenaAllocator - Exhaustion And Reset") {
+    U8 backing[64] = {};
+    ArenaAllocator arena(backing, sizeof(backing));
+
+    void *a = arena.allocate(24, 8);
+    CHECK(a != nullptr);
+    void *b = arena.allocate(24, 8);
+    CHECK(b != nullptr);
+    arena.deallocate(a, 24, 8);
+    CHECK(arena.try_allocate(24, 8) == nullptr);
+
+    arena.reset();
+    CHECK(arena.used() == 0);
+    CHECK(arena.remaining() == sizeof(backing));
+    CHECK(arena.allocate(64, 8) != nullptr);
+}
+
+TEST_CASE("ArenaAllocator - Reallocate Last Block") {
+    U8 backing[128] = {};
+    ArenaAllocator arena(backing, sizeof(backing));
+
+    void *ptr = arena.allocate(16, 8);
+    REQUIRE(ptr != nullptr);
+    std::memset(ptr, 0xAB, 16);
+
+    void *grown = arena.reallocate(ptr, 16, 32, 8);
+    CHECK(grown == ptr);
+
+    U8 *data = static_cast<U8 *>(grown);
+    for (USize i = 0; i < 16; ++i) {
+        if (data[i] != 0xAB) {
+            FAIL("Data not preserved after arena reallocate");
+            break;
+        }
+    }
+}
+
+TEST_CASE("ArenaAllocator - Reallocate Non-Last Block") {
+    U8 backing[128] = {};
+    ArenaAllocator arena(backing, sizeof(backing));
+
+    void *ptr1 = arena.allocate(16, 8);
+    void *ptr2 = arena.allocate(16, 8);
+    REQUIRE(ptr1 != nullptr);
+    REQUIRE(ptr2 != nullptr);
+
+    std::memset(ptr1, 0xCC, 16);
+
+    // ptr1 is not the last block anymore, ptr2 is.
+    // Reallocating ptr1 should move it.
+    void *moved = arena.reallocate(ptr1, 16, 32, 8);
+    CHECK(moved != ptr1);
+    CHECK(moved != ptr2);
+    CHECK(arena.owns(moved) == OwnershipResult::Owns);
+
+    U8 *data = static_cast<U8 *>(moved);
+    for (USize i = 0; i < 16; ++i) {
+        if (data[i] != 0xCC) {
+            FAIL("Data not preserved after arena non-last block reallocate");
+            break;
+        }
+    }
+}
+
+TEST_CASE("ArenaAllocator - Reallocate Fails") {
+    U8 backing[64] = {};
+    ArenaAllocator arena(backing, sizeof(backing));
+
+    void *ptr = arena.allocate(32, 8);
+    REQUIRE(ptr != nullptr);
+
+    // Try to grow last block beyond capacity
+    CHECK(arena.try_reallocate(ptr, 32, 65, 8) == nullptr);
+
+    void *ptr2 = arena.allocate(16, 8);
+    REQUIRE(ptr2 != nullptr);
+
+    // Try to reallocate non-last block to a smaller size (should succeed now due to optimization)
+    CHECK(arena.try_reallocate(ptr, 32, 17, 8) == ptr);
+    
+    // Try to reallocate non-last block to a larger size when no space left (should fail)
+    CHECK(arena.try_reallocate(ptr, 32, 33, 8) == nullptr);
+}
+
+TEST_CASE("ArenaAllocator - Ownership and Tags") {
+    U8 backing[64] = {};
+    ArenaAllocator arena(backing, sizeof(backing));
+    U8 other_buffer[64] = {};
+
+    CHECK(arena.owns(nullptr) == OwnershipResult::DoesNotOwn);
+    CHECK(arena.owns(other_buffer) == OwnershipResult::DoesNotOwn);
+
+    void *ptr = arena.allocate(16, 8);
+    CHECK(arena.owns(ptr) == OwnershipResult::Owns);
+    CHECK(std::strcmp(arena.tag(), "ArenaAllocator: @noname") == 0);
+
+    // Test reallocating pointer not owned by arena
+    U8 unowned[16] = {};
+    CHECK(arena.try_reallocate(unowned, 16, 32, 8) == nullptr);
+}
+
+TEST_CASE("ArenaAllocator - Alignment Handling") {
+    U8 backing[256] = {};
+    // Ensure backing is somewhat aligned so we can test internal alignment
+    USize addr = reinterpret_cast<USize>(backing);
+    USize aligned_addr = (addr + 63) & ~63;
+    USize offset = aligned_addr - addr;
+
+    ArenaAllocator arena(backing + offset, 256 - offset);
+
+    void *p1 = arena.allocate(1, 1);
+    CHECK(p1 != nullptr);
+
+    void *p2 = arena.allocate(1, 64);
+    CHECK(p2 != nullptr);
+    CHECK((reinterpret_cast<USize>(p2) % 64) == 0);
+
+    void *p3 = arena.allocate(1, 32);
+    CHECK(p3 != nullptr);
+    CHECK((reinterpret_cast<USize>(p3) % 32) == 0);
+}
+
+TEST_CASE("BlockAllocator - Basic") {
+    U8 backing[128] = {};
+    BlockAllocator pool(backing, sizeof(backing), 32, "MyPool");
+
+    CHECK(pool.block_size() == 32);
+    CHECK(pool.total_blocks() == 4);
+    CHECK(pool.free_blocks() == 4);
+    CHECK(std::strcmp(pool.tag(), "BlockAllocator: MyPool") == 0);
+
+    void *p1 = pool.allocate(32, 8);
+    CHECK(p1 != nullptr);
+    CHECK(pool.free_blocks() == 3);
+    CHECK(pool.owns(p1) == OwnershipResult::Owns);
+
+    void *p2 = pool.allocate(16, 8); // Should fit in 32 byte block
+    CHECK(p2 != nullptr);
+    CHECK(pool.free_blocks() == 2);
+
+    pool.deallocate(p1, 32, 8);
+    CHECK(pool.free_blocks() == 3);
+
+    void *p1_again = pool.allocate(32, 8);
+    CHECK(p1_again == p1); // Free list should return the last freed block
+    CHECK(pool.free_blocks() == 2);
+}
+
+TEST_CASE("BlockAllocator - Exhaustion") {
+    U8 backing[64] = {};
+    BlockAllocator pool(backing, sizeof(backing), 32);
+
+    void *p1 = pool.allocate(32, 8);
+    void *p2 = pool.allocate(32, 8);
+    CHECK(p1 != nullptr);
+    CHECK(p2 != nullptr);
+    CHECK(pool.free_blocks() == 0);
+
+    CHECK(pool.try_allocate(32, 8) == nullptr);
+
+    pool.deallocate(p1, 32, 8);
+    CHECK(pool.free_blocks() == 1);
+    CHECK(pool.allocate(32, 8) == p1);
+}
+
+TEST_CASE("BlockAllocator - Reallocate") {
+    U8 backing[64] = {};
+    BlockAllocator pool(backing, sizeof(backing), 32);
+
+    void *p1 = pool.allocate(16, 8);
+    std::memset(p1, 0xDE, 16);
+
+    // Reallocate within same block size
+    void *p1_same = pool.reallocate(p1, 16, 32, 8);
+    CHECK(p1_same == p1);
+    CHECK(static_cast<U8 *>(p1_same)[0] == 0xDE);
+
+    // Reallocate beyond block size should fail (as it's a block allocator)
+    CHECK(pool.try_reallocate(p1, 32, 33, 8) == nullptr);
+}
+
+TEST_CASE("BlockAllocator - Reset") {
+    U8 backing[64] = {};
+    BlockAllocator pool(backing, sizeof(backing), 32);
+
+    void *p1 = pool.allocate(32, 8);
+    void *p2 = pool.allocate(32, 8);
+    REQUIRE(p1 != nullptr);
+    REQUIRE(p2 != nullptr);
+    CHECK(pool.free_blocks() == 0);
+
+    pool.reset();
+    CHECK(pool.free_blocks() == 2);
+    void *p3 = pool.allocate(32, 8);
+    CHECK(p3 != nullptr);
 }
 
 class FailAllocator final : public Allocator {

@@ -2,10 +2,12 @@ project(farfocel_engine)
 
 
 set(ENGINE_HEADERS
-# Core
+#### core
     "include/fr/core/allocator.hpp"
     "include/fr/core/allocator_typedefs.hpp"
-    "include/fr/core/allocator_debug.hpp"
+    "include/fr/core/allocation_stack.hpp"
+    "include/fr/core/arena_allocator.hpp"
+    "include/fr/core/block_allocator.hpp"
     "include/fr/core/dynamic_array.hpp"
     "include/fr/core/globals.hpp"
     "include/fr/core/impl.hpp"
@@ -21,14 +23,11 @@ set(ENGINE_HEADERS
     "include/fr/core/tuple.hpp"
     "include/fr/core/typedefs.hpp"
     "include/fr/core/unique_ptr.hpp"
-
-
 )
 
 set(ENGINE_SOURCES
-# core
+#### core
     "src/core/globals.cpp"
-
 )
 
 
