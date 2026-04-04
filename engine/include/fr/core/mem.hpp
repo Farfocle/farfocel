@@ -48,6 +48,19 @@ inline USize normalize_alignment(USize alignment) noexcept {
 }
 
 /**
+ * @brief Fill a memory range with a specific byte value.
+ * @param ptr Range start.
+ * @param value Byte value to set.
+ * @param count Number of bytes.
+ * @pre @p ptr is non-null if count > 0.
+ */
+inline void set_raw_range(void *ptr, char value, USize count) noexcept {
+    FR_ASSERT(count == 0 || ptr != nullptr, "fr::mem::set_raw_range(void *ptr, char, value, USize "
+                                            "count): Pointer must be non-null for non-zero size");
+    std::memset(ptr, value, count);
+}
+
+/**
  * @brief Copy a trivially copyable range as raw bytes.
  * @tparam T Element type.
  * @param src Source range.
