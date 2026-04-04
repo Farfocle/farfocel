@@ -43,7 +43,9 @@ inline bool is_overaligned(USize alignment) noexcept {
  * @pre @p alignment is a power of two.
  */
 inline USize normalize_alignment(USize alignment) noexcept {
-    FR_ASSERT(impl::is_pow2(alignment), "Alignment must be a power of two");
+    FR_ASSERT(impl::is_pow2(alignment),
+              "fr::mem::normalize_alignment(USize alignment): Alignment must be a power of two");
+
     return std::max(alignof(void *), alignment);
 }
 
