@@ -17,6 +17,7 @@ set(ENGINE_HEADERS
     "include/fr/core/storage.hpp"
     "include/fr/core/string_base.hpp"
     "include/fr/core/time.hpp"
+    "include/fr/core/tuple.hpp"
     "include/fr/core/typedefs.hpp"
     "include/fr/core/unique_ptr.hpp"
 
