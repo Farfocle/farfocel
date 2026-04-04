@@ -88,7 +88,7 @@ public:
                 .prev_size = 0,
                 .next_size = sz,
                 .alignment = alignment,
-                .tag = debug_tag(),
+                .tag = tag(),
                 .success = (result != nullptr),
                 .attempt = attempt,
             });
@@ -146,7 +146,7 @@ public:
                 .prev_size = old_sz,
                 .next_size = new_sz,
                 .alignment = alignment,
-                .tag = debug_tag(),
+                .tag = tag(),
                 .success = (result != nullptr),
                 .attempt = attempt,
             });
@@ -197,7 +197,7 @@ public:
             .prev_size = sz,
             .next_size = 0,
             .alignment = alignment,
-            .tag = debug_tag(),
+            .tag = tag(),
             .success = true,
             .attempt = 0,
         });
@@ -211,12 +211,12 @@ public:
      * @param ptr Pointer to check.
      * @return OwnershipResult::Unknown by default.
      */
-    virtual OwnershipResult debug_owns(void * /*ptr*/) const noexcept {
+    virtual OwnershipResult owns(void * /*ptr*/) const noexcept {
         return OwnershipResult::Unknown;
     };
 
     /// @brief Human-readable allocator name for debugging.
-    virtual const char *debug_tag() const noexcept {
+    virtual const char *tag() const noexcept {
         return "UnnamedAllocator";
     };
 

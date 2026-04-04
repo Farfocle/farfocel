@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <cstdio>
 #include <cstring>
 
 #include "fr/core/allocator.hpp"
@@ -18,12 +19,14 @@ namespace fr {
 /// @brief Non-owning, non-growing arena allocator.
 class ArenaAllocator final : public Allocator {
 public:
-    ArenaAllocator(void *buffer, USize capacity) noexcept
+    ArenaAllocator(void *buffer, USize capacity, const char *tag = "NIL") noexcept
         : m_buffer(static_cast<Byte *>(buffer)),
-          m_capacity(capacity) {
+          m_capacity(capacity),
+          m_custom_tag(tag) {
         FR_ASSERT(buffer != nullptr || capacity == 0,
                   "fr::ArenaAllocator(void *buffer, USize capacity): Buffer must be non-null when "
                   "capacity is non-zero");
+        std::snprintf(m_full_tag, sizeof(m_full_tag), "ArenaAllocator: %s", m_custom_tag);
     }
 
     /// @brief Reset the arena to its initial empty state.
@@ -43,7 +46,7 @@ public:
         return m_capacity - m_offset;
     }
 
-    OwnershipResult debug_owns(void *ptr) const noexcept override {
+    OwnershipResult owns(void *ptr) const noexcept override {
         if (!ptr || m_capacity == 0) {
             return OwnershipResult::DoesNotOwn;
         }
@@ -54,8 +57,8 @@ public:
                    : OwnershipResult::DoesNotOwn;
     }
 
-    const char *debug_tag() const noexcept override {
-        return "ArenaAllocator";
+    const char *tag() const noexcept override {
+        return m_full_tag;
     }
 
 protected:
@@ -78,7 +81,7 @@ protected:
         alignment = mem::normalize_alignment(alignment);
 
         Byte *byte_ptr = static_cast<Byte *>(ptr);
-        if (debug_owns(ptr) != OwnershipResult::Owns) {
+        if (owns(ptr) != OwnershipResult::Owns) {
             return nullptr;
         }
 
@@ -109,5 +112,7 @@ private:
     Byte *m_buffer{nullptr};
     USize m_capacity{0};
     USize m_offset{0};
+    const char *m_custom_tag{"NIL"};
+    char m_full_tag[64]{};
 };
 } // namespace fr

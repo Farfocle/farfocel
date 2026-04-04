@@ -67,8 +67,14 @@ TEST_CASE("ArenaAllocator - Basic") {
     void *ptr = arena.allocate(16, 8);
     CHECK(ptr != nullptr);
     CHECK((reinterpret_cast<USize>(ptr) % 8) == 0);
-    CHECK(arena.debug_owns(ptr) == OwnershipResult::Owns);
+    CHECK(arena.owns(ptr) == OwnershipResult::Owns);
     CHECK(arena.remaining() == 112);
+}
+
+TEST_CASE("ArenaAllocator - Custom Tag") {
+    U8 backing[64] = {};
+    ArenaAllocator arena(backing, sizeof(backing), "MyArena");
+    CHECK(std::strcmp(arena.tag(), "ArenaAllocator: MyArena") == 0);
 }
 
 TEST_CASE("ArenaAllocator - Exhaustion And Reset") {
@@ -124,7 +130,7 @@ TEST_CASE("ArenaAllocator - Reallocate Non-Last Block") {
     void *moved = arena.reallocate(ptr1, 16, 32, 8);
     CHECK(moved != ptr1);
     CHECK(moved != ptr2);
-    CHECK(arena.debug_owns(moved) == OwnershipResult::Owns);
+    CHECK(arena.owns(moved) == OwnershipResult::Owns);
 
     U8 *data = static_cast<U8 *>(moved);
     for (USize i = 0; i < 16; ++i) {
@@ -157,12 +163,12 @@ TEST_CASE("ArenaAllocator - Ownership and Tags") {
     ArenaAllocator arena(backing, sizeof(backing));
     U8 other_buffer[64] = {};
 
-    CHECK(arena.debug_owns(nullptr) == OwnershipResult::DoesNotOwn);
-    CHECK(arena.debug_owns(other_buffer) == OwnershipResult::DoesNotOwn);
+    CHECK(arena.owns(nullptr) == OwnershipResult::DoesNotOwn);
+    CHECK(arena.owns(other_buffer) == OwnershipResult::DoesNotOwn);
 
     void *ptr = arena.allocate(16, 8);
-    CHECK(arena.debug_owns(ptr) == OwnershipResult::Owns);
-    CHECK(std::strcmp(arena.debug_tag(), "ArenaAllocator") == 0);
+    CHECK(arena.owns(ptr) == OwnershipResult::Owns);
+    CHECK(std::strcmp(arena.tag(), "ArenaAllocator: NIL") == 0);
 
     // Test reallocating pointer not owned by arena
     U8 unowned[16] = {};

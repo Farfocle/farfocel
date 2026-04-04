@@ -34,11 +34,11 @@ protected:
     }
 
     /// @brief Ownership information is not available for NewDeleteAllocator.
-    OwnershipResult debug_owns(void * /*ptr*/) const noexcept override {
+    OwnershipResult owns(void * /*ptr*/) const noexcept override {
         return OwnershipResult::Unknown;
     }
 
-    const char *debug_tag() const noexcept override {
+    const char *tag() const noexcept override {
         return "NewDeleteAllocator";
     }
 };
