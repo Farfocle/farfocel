@@ -36,7 +36,9 @@ public:
     [[nodiscard("Discarding the pointer leads to memory leaks!")]] void *
     allocate(USize sz, USize alignment) noexcept {
         void *result = try_allocate(sz, alignment);
-        FR_ASSERT(result, "Failed to allocate memory");
+
+        FR_ASSERT(result,
+                  "fr::Allocator::allocate(USize sz, USize aligment): Failed to allocate memory");
 
         return result;
     }
@@ -56,7 +58,9 @@ public:
     [[nodiscard("Discarding the pointer leads to memory leaks!")]] void *
     reallocate(void *ptr, USize old_sz, USize new_sz, USize alignment) noexcept {
         void *result = try_reallocate(ptr, old_sz, new_sz, alignment);
-        FR_ASSERT(result, "Failed to allocate memory");
+
+        FR_ASSERT(result, "fr::Allocator::rellocate(void *ptr, USize old_sz, USize new_sz, USize "
+                          "alignment): Failed to reallocate");
 
         return result;
     }
@@ -72,8 +76,12 @@ public:
      */
     [[nodiscard("Discarding the pointer leads to memory leaks!")]] void *
     try_allocate(USize sz, USize alignment) noexcept {
-        FR_ASSERT(sz != 0, "Allocation size must be non-zero");
-        FR_ASSERT(mem::is_valid_alignment(alignment), "Alignment must be a power of two");
+        FR_ASSERT(sz != 0, "fr::Allocator::try_allocate(USize sz, USize aligment): Allocation size "
+                           "must be non-zero");
+
+        FR_ASSERT(mem::is_valid_alignment(alignment),
+                  "fr::Allocator::try_allocate(USize sz, USize aligment): Alignment must be a "
+                  "power of two");
 
         U8 max_retries = globals::get_oom_retries();
         for (U8 attempt = 0;; ++attempt) {
@@ -128,10 +136,18 @@ public:
      */
     [[nodiscard("Discarding the pointer leads to memory leaks!")]] void *
     try_reallocate(void *ptr, USize old_sz, USize new_sz, USize alignment) noexcept {
-        FR_ASSERT(ptr, "Reallocation source pointer must be non-null");
-        FR_ASSERT(old_sz != 0, "Old size must be non-zero");
-        FR_ASSERT(new_sz != 0, "New size must be non-zero");
-        FR_ASSERT(mem::is_valid_alignment(alignment), "Alignment must be a power of two");
+        FR_ASSERT(ptr, "fr::Allocator::try_reallocate(void *ptr, USize old_sz, USize new_sz, USize "
+                       "alignment): Reallocation source pointer must be non-null");
+
+        FR_ASSERT(old_sz != 0, "fr::Allocator::try_reallocate(void *ptr, USize old_sz, USize "
+                               "new_sz, USize alignment): Old size must be non-zero");
+
+        FR_ASSERT(new_sz != 0, "fr::Allocator::try_reallocate(void *ptr, USize old_sz, USize "
+                               "new_sz, USize alignment): New size must be non-zero");
+
+        FR_ASSERT(mem::is_valid_alignment(alignment),
+                  "fr::Allocator::try_reallocate(void *ptr, USize old_sz, USize new_sz, USize "
+                  "alignment): Alignment must be a power of two");
 
         U8 max_retries = globals::get_oom_retries();
         for (U8 attempt = 0;; ++attempt) {
@@ -185,8 +201,12 @@ public:
             return;
         }
 
-        FR_ASSERT(sz != 0, "Deallocation size must be non-zero");
-        FR_ASSERT(mem::is_valid_alignment(alignment), "Alignment must be a power of two");
+        FR_ASSERT(sz != 0, "fr::Allocator::deallocate(void* ptr, USize sz, USize alignment): "
+                           "Deallocation size must be non-zero");
+
+        FR_ASSERT(mem::is_valid_alignment(alignment),
+                  "fr::Allocator::deallocate(void* ptr, USize sz, USize alignment): Alignment must "
+                  "be a power of two");
 
 #ifdef FR_IS_DEBUG
         globals::get_allocation_stack()->record(AllocationFrame{
