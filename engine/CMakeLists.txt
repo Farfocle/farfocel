@@ -16,7 +16,6 @@ set(ENGINE_HEADERS
     "include/fr/core/mem.hpp"
     "include/fr/core/new_delete_allocator.hpp"
     "include/fr/core/slice.hpp"
-    "include/fr/core/storage.hpp"
     "include/fr/core/string_view.hpp"
     "include/fr/core/string_base.hpp"
     "include/fr/core/time.hpp"

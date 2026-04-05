@@ -277,7 +277,7 @@ inline void default_init_range(T *ptr, USize sz) noexcept {
 }
 
 /**
- * @brief Value-initialize a range.
+ * @brief Zero-initialize a range.
  * @tparam T Element type.
  * @param ptr Range start.
  * @param sz Number of elements.
@@ -286,7 +286,7 @@ inline void default_init_range(T *ptr, USize sz) noexcept {
  * @pre If @p T is non-trivial, it is nothrow default constructible.
  */
 template <typename T>
-inline void value_init_range(T *ptr, USize sz) noexcept {
+inline void zero_init_range(T *ptr, USize sz) noexcept {
     FR_ASSERT(sz == 0 || ptr != nullptr, "Pointer must be non-null for non-zero size");
 
     if constexpr (std::is_trivially_default_constructible_v<T>) {
@@ -296,6 +296,28 @@ inline void value_init_range(T *ptr, USize sz) noexcept {
                          "T must be nothrow default constructible for value_init_range");
         for (USize i = 0; i < sz; ++i)
             std::construct_at(ptr + i);
+    }
+}
+
+/**
+ * @brief Value-initialize a range.
+ * @tparam T Element type.
+ * @param ptr Range start.
+ * @param sz Number of elements.
+ * @param value Fill value.
+ * @pre @p ptr is non-null.
+ * @pre @p ptr points to uninitialized storage for @p sz objects.
+ * @pre If @p T is non-trivial, it is nothrow default constructible.
+ */
+template <typename T>
+inline void value_init_range(T *ptr, USize sz, const T &value) noexcept {
+    FR_ASSERT(sz == 0 || ptr != nullptr, "Pointer must be non-null for non-zero size");
+
+    FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, const T &>),
+                     "T must be nothtow constructible with const T &");
+
+    for (USize i = 0; i < sz; ++i) {
+        std::construct_at(ptr + i, value);
     }
 }
 
