@@ -24,10 +24,19 @@ if(DOXYGEN_FOUND)
         "${doxygen_awesome_css_SOURCE_DIR}/doxygen-awesome.css"
         "${doxygen_awesome_css_SOURCE_DIR}/doxygen-awesome-sidebar-only.css"
     )
+
+    set(DOXYGEN_PROJECT_NAME "Farfocel Game Engine")
+    set(DOXYGEN_OUTPUT_DIR "${DOXYGEN_OUTPUT_DIRECTORY}")
+    set(DOXYGEN_INPUT "${FR_DOXYGEN_INPUT}")
+    set(DOXYGEN_AWESOME_CSS "${doxygen_awesome_css_SOURCE_DIR}/doxygen-awesome.css")
+    
+    configure_file(Doxyfile ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
+
     doxygen_add_docs(docs
         ${FR_DOXYGEN_INPUT}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         COMMENT "Generating the Doxygen documentation..."
+        CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/Doxyfile"
     )
 
 else()
