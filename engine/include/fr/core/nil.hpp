@@ -11,7 +11,7 @@
 
 namespace fr {
 
-/// @brief Sentinel tyoe for anything that is empty or devoid of data, but not in a unkown, invalid
+/// @brief Sentinel type for anything that is empty or devoid of data, but not in a unkown, invalid
 /// state.
 struct NilTag {
     explicit constexpr NilTag() = default;

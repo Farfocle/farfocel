@@ -10,6 +10,7 @@ set(ENGINE_HEADERS
     "include/fr/core/block_allocator.hpp"
     "include/fr/core/dynamic_array.hpp"
     "include/fr/core/globals.hpp"
+    "include/fr/core/hash.hpp"
     "include/fr/core/impl.hpp"
     "include/fr/core/macros.hpp"
     "include/fr/core/malloc_allocator.hpp"
