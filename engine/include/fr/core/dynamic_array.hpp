@@ -30,6 +30,7 @@ namespace fr {
  * slice views, fast push/pop, and both ordered and unordered removal.
  * @note All operations assume that T is nothrow constructible/destructible.
  */
+
 template <typename T>
 class DynamicArray {
 private:

@@ -5,6 +5,7 @@ set(TEST_SOURCES
     "tests_src/main.cpp"
     "tests_src/allocator.cpp"
     "tests_src/dynamic_array.cpp"
+    "tests_src/optional.cpp"
     "tests_src/slice.cpp"
     "tests_src/tuple.cpp"
 )
