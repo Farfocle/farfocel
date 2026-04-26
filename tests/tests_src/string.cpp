@@ -67,7 +67,7 @@ TEST_CASE("String - SSO max") {
 
     dynamic_str.append(" STRING that defaldkjfalsdjflsadfj ljsadlfkajsdl kjfaslkdjf lsjdaf lksajdf "
                        "olkjfo wejf oiwjef oijweo fjwao djifasdlf jasldkf jasldkfj");
-    CHECK(dynamic_str.size() == 51);
+    CHECK(dynamic_str.size() == 138);
     CHECK(!dynamic_str.is_short_string());
 
     dynamic_str.erase(5);
@@ -121,8 +121,8 @@ TEST_CASE("String - Search") {
     CHECK(str.find_first_of("aeiou") == 2);
     CHECK(str.find_first_not_of("The ") == 4);
 
-    CHECK(str.find_last_of("aeiou") == 37);
-    CHECK(str.find_last_not_of("god ") == 39);
+    CHECK(str.find_last_of("aeiou") == 41);
+    CHECK(str.find_last_not_of("god ") == 38);
 }
 
 TEST_CASE("String - Utilities") {
