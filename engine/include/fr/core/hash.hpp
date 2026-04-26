@@ -107,4 +107,17 @@ inline Hash combine_hashes(Hash a, Hash b) noexcept {
 
 /// @brief Large prime number is a good seed for hash functions.
 inline constexpr U64 HASH_SEED = 0xa0761d6478bd642f;
+
+/**
+ * @brief Simple and fast hash for a block of memory.
+ */
+inline Hash hash_bytes(const void *ptr, USize len) noexcept {
+    U64 h = HASH_SEED;
+    const U8 *data = static_cast<const U8 *>(ptr);
+    for (USize i = 0; i < len; ++i) {
+        h = (h ^ data[i]) * 0x100000001b3ULL;
+    }
+    return Hash::from_raw(h);
+}
+
 } // namespace fr

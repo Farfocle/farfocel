@@ -8,6 +8,7 @@
  */
 #pragma once
 
+#include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
 
@@ -320,6 +321,10 @@ inline constexpr bool operator<(StringView lhs, StringView rhs) noexcept {
  */
 inline constexpr bool operator>(StringView lhs, StringView rhs) noexcept {
     return lhs.compare(rhs) > 0;
+}
+
+inline Hash hash(StringView sv) noexcept {
+    return hash_bytes(sv.data(), sv.size());
 }
 
 } // namespace fr

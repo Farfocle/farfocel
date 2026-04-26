@@ -8,6 +8,8 @@ set(TEST_SOURCES
     "tests_src/optional.cpp"
     "tests_src/slice.cpp"
     "tests_src/tuple.cpp"
+    "tests_src/string.cpp"
+    "tests_src/hash_set.cpp"
 )
 
 if(TEST_SOURCES)

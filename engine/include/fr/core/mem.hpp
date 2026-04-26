@@ -99,6 +99,38 @@ inline void copy_raw_range(const T *src, USize sz, T *dst) noexcept {
 }
 
 /**
+ * @brief Set a trivially copyable range to a specific byte value.
+ * @tparam T Element type.
+ * @param ptr Range start.
+ * @param value Byte value to set.
+ * @param sz Number of elements.
+ * @pre @p T is trivially copyable.
+ * @pre If @p sz > 0, @p ptr points to valid storage for @p sz elements.
+ */
+template <typename T>
+inline void set_raw_range(T *ptr, int value, USize sz) noexcept {
+    FR_STATIC_ASSERT(std::is_trivially_copyable_v<T>,
+                     "T must be trivially copyable for set_raw_range");
+    FR_ASSERT(sz == 0 || ptr != nullptr, "Pointer must be non-null for non-zero size");
+
+    std::memset(static_cast<void *>(ptr), value, sz * sizeof(T));
+}
+
+template <typename T>
+inline void destroy_item(T *ptr) noexcept {
+    FR_STATIC_ASSERT(std::is_nothrow_destructible_v<T>,
+                     "T must be nothrow destructible for destroy_item");
+
+    if (!ptr) {
+        return;
+    }
+
+    if constexpr (!std::is_trivially_destructible_v<T>) {
+        std::destroy_at(ptr);
+    }
+}
+
+/**
  * @brief Destroy a range in reverse order.
  * @tparam T Element type.
  * @param ptr Range start.

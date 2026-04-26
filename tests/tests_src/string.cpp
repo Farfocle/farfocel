@@ -157,7 +157,7 @@ TEST_CASE("String - Iterators and element accesss") {
     CHECK(str == "Bata");
 
     USize count = 0;
-    for (char c : str) {
+    for ([[maybe_unused]] char c : str) {
         count++;
     }
     CHECK(count == 4);

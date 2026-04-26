@@ -861,4 +861,8 @@ inline std::ostream &operator<<(std::ostream &os, const String &str) {
     return os;
 }
 
+inline Hash hash(const String &str) noexcept {
+    return hash(str.view());
+}
+
 } // namespace fr
