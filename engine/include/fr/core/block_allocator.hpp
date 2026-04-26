@@ -93,10 +93,7 @@ public:
     }
 
 protected:
-    void *do_try_allocate(USize sz, USize alignment) noexcept override {
-        FR_ASSERT(sz <= m_block_size, "fr::BlockAllocator::do_try_allocate(USize sz, USize): Size "
-                                      "`sz` has to be smaller or equal to the block size");
-
+    void *do_try_allocate(USize /*sz*/, USize alignment) noexcept override {
         if (!m_head) {
             return nullptr;
         }
@@ -136,11 +133,6 @@ protected:
         FR_ASSERT(owns(ptr) == OwnershipResult::Owns,
                   "fr::BlockAllocator::deallocate(void *ptr, USize, USize): Pointer not owned by "
                   "this allocator");
-
-        USize offset = static_cast<USize>(static_cast<Byte *>(ptr) - m_buffer);
-
-        FR_ASSERT(offset % m_block_size == 0, "fr::BlockAllocator::deallocate(void *ptr, USize, "
-                                              "USize): Pointer is not block-aligned");
 
         FreeBlock *new_free = static_cast<FreeBlock *>(ptr);
         new_free->next = m_head;

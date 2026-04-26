@@ -1,32 +1,33 @@
-#include "fr/core/hash_set.hpp"
 #include <doctest.h>
+
+#include "fr/core/hash_set.hpp"
 #include "fr/core/string.hpp"
 
 namespace fr {
 
 TEST_CASE("HashSet - Basic Operations") {
-    HashSet<int> set;
+    HashSet<S32> set;
 
-        CHECK(set.is_empty());
-        CHECK(set.load() == 0);
-    
-        SUBCASE("Insert and Contains") {
-            CHECK(set.insert(10));
-            CHECK(set.insert(20));
-            CHECK(set.insert(30));
-            
-            CHECK(set.load() == 3);
-            CHECK(!set.is_empty());
-    
-            CHECK(set.contains(10));
-            CHECK(set.contains(20));
-            CHECK(set.contains(30));
-            CHECK(!set.contains(40));
-    
-            // Duplicate insert should fail
-            CHECK(!set.insert(10));
-            CHECK(set.load() == 3);
-        }
+    CHECK(set.is_empty());
+    CHECK(set.load() == 0);
+
+    SUBCASE("Insert and Contains") {
+        CHECK(set.insert(10));
+        CHECK(set.insert(20));
+        CHECK(set.insert(30));
+
+        CHECK(set.load() == 3);
+        CHECK(!set.is_empty());
+
+        CHECK(set.contains(10));
+        CHECK(set.contains(20));
+        CHECK(set.contains(30));
+        CHECK(!set.contains(40));
+
+        // Duplicate insert should fail
+        CHECK(!set.insert(10));
+        CHECK(set.load() == 3);
+    }
     SUBCASE("Remove") {
         set.insert(10);
         set.insert(20);
@@ -66,14 +67,14 @@ TEST_CASE("HashSet - String Keys") {
 }
 
 TEST_CASE("HashSet - Iteration") {
-    HashSet<int> set;
+    HashSet<S32> set;
     set.insert(10);
     set.insert(20);
     set.insert(30);
 
-    int sum = 0;
-    int count = 0;
-    for (int val : set) {
+    S32 sum = 0;
+    USize count = 0;
+    for (S32 val : set) {
         sum += val;
         count++;
     }
@@ -83,20 +84,20 @@ TEST_CASE("HashSet - Iteration") {
 }
 
 TEST_CASE("HashSet - Resizing and Rehash") {
-    HashSet<int> set;
+    HashSet<S32> set;
 
     // Force many insertions to trigger growth
-    const int num_elements = 100;
-    for (int i = 0; i < num_elements; ++i) {
-        set.insert(i);
+    const USize num_elements = 100;
+    for (USize i = 0; i < num_elements; ++i) {
+        set.insert(static_cast<S32>(i));
     }
 
     CHECK(set.load() == num_elements);
     CHECK(set.capacity() >= num_elements);
 
     bool all_found = true;
-    for (int i = 0; i < num_elements; ++i) {
-        if (!set.contains(i)) {
+    for (USize i = 0; i < num_elements; ++i) {
+        if (!set.contains(static_cast<S32>(i))) {
             all_found = false;
             break;
         }
@@ -105,33 +106,33 @@ TEST_CASE("HashSet - Resizing and Rehash") {
 }
 
 TEST_CASE("HashSet - Move and Copy") {
-    HashSet<int> original;
+    HashSet<S32> original;
     original.insert(1);
     original.insert(2);
 
     SUBCASE("Copy constructor") {
-        HashSet<int> copy = original;
+        HashSet<S32> copy = original;
         CHECK(copy.load() == 2);
         CHECK(copy.contains(1));
         CHECK(copy.contains(2));
     }
 
     SUBCASE("Move constructor") {
-        HashSet<int> moved = std::move(original);
+        HashSet<S32> moved = std::move(original);
         CHECK(moved.load() == 2);
         CHECK(original.is_empty());
         CHECK(moved.contains(1));
     }
 
     SUBCASE("Copy assignment") {
-        HashSet<int> copy;
+        HashSet<S32> copy;
         copy = original;
         CHECK(copy.load() == 2);
         CHECK(copy.contains(1));
     }
 
     SUBCASE("Move assignment") {
-        HashSet<int> moved;
+        HashSet<S32> moved;
         moved = std::move(original);
         CHECK(moved.load() == 2);
         CHECK(moved.contains(1));
