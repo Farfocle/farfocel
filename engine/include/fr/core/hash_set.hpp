@@ -7,16 +7,17 @@
 
 #pragma once
 
+#include <cstddef>
+#include <iterator>
+#include <type_traits>
+#include <utility>
+
 #include "fr/core/allocator.hpp"
 #include "fr/core/globals.hpp"
 #include "fr/core/hash.hpp"
 #include "fr/core/impl.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
-#include <cstddef>
-#include <iterator>
-#include <type_traits>
-#include <utility>
 
 namespace fr {
 
@@ -145,7 +146,7 @@ public:
         : m_alloc(alloc) {
     }
 
-    HashSet(const HashSet &other)
+    HashSet(const HashSet &other) noexcept
         : m_alloc(other.m_alloc) {
         if (other.m_capacity > 0) {
             do_grow(other.m_capacity);
@@ -167,9 +168,10 @@ public:
         other.m_load = 0;
     }
 
-    HashSet &operator=(const HashSet &other) {
+    HashSet &operator=(const HashSet &other) noexcept {
         if (this != &other) {
             clear();
+
             for (const auto &key : other) {
                 insert(key);
             }
@@ -194,7 +196,7 @@ public:
         return *this;
     }
 
-    ~HashSet() {
+    ~HashSet() noexcept {
         do_destroy_storage();
     }
 
@@ -215,14 +217,18 @@ public:
     }
 
     Iter begin() const noexcept {
-        if (m_capacity == 0)
+        if (m_capacity == 0) {
             return end();
+        }
+
         return Iter(m_ctrls, m_slots);
     }
 
     Iter end() const noexcept {
-        if (m_capacity == 0)
+        if (m_capacity == 0) {
             return Iter(nullptr, nullptr);
+        }
+
         return Iter(m_ctrls + m_capacity, m_slots + m_capacity);
     }
 
@@ -238,38 +244,8 @@ public:
         return (m_capacity * 7) / 8;
     }
 
-    /**
-     * @brief Finds an element in the set.
-     * @return Iterator to the element if found, end() otherwise.
-     */
-    Iter find(const Key &key) const noexcept {
-        if (m_capacity == 0) {
-            return end();
-        }
-
-        Hash h = ActualHashFn{}(key);
-        USize mask = m_capacity - 1;
-        USize idx = h.h57() & mask;
-        S8 h2 = static_cast<S8>(h.l7());
-
-        for (USize i = 0; i < m_capacity; ++i) {
-            USize curr = (idx + i) & mask;
-            Ctrl c = m_ctrls[curr];
-
-            if (c.value == Ctrl::empty) {
-                return end();
-            }
-            if (c.value == h2) {
-                if (ActualCmpFn{}(m_slots[curr].key, key)) {
-                    return Iter(&m_ctrls[curr], &m_slots[curr]);
-                }
-            }
-        }
-        return end();
-    }
-
     bool contains(const Key &key) const noexcept {
-        return find(key) != end();
+        return do_find_idx(key) != -1;
     }
 
     /**
@@ -289,29 +265,58 @@ public:
      * @return True if removed, false if not found.
      */
     bool remove(const Key &key) noexcept {
-        Iter it = find(key);
-        if (it == end())
+        std::ptrdiff_t idx = do_find_idx(key);
+        if (idx == -1) {
             return false;
+        }
 
-        it.m_ctrl->value = Ctrl::tombstone;
-        std::destroy_at(&it.m_slot->key);
-        m_load--;
+        m_ctrls[idx].value = Ctrl::tombstone;
+        std::destroy_at(&m_slots[idx].key);
+        --m_load;
+
         return true;
     }
 
     void clear() noexcept {
-        if (m_capacity == 0)
-            return;
         for (USize i = 0; i < m_capacity; ++i) {
             if (m_ctrls[i].is_occupied()) {
                 std::destroy_at(&m_slots[i].key);
             }
             m_ctrls[i].value = Ctrl::empty;
         }
+
         m_load = 0;
     }
 
 private:
+    std::ptrdiff_t do_find_idx(const Key &key) const noexcept {
+        if (m_capacity == 0) {
+            return -1;
+        }
+
+        Hash h = ActualHashFn{}(key);
+        USize mask = m_capacity - 1;
+        USize idx = h.h57() & mask;
+        S8 h2 = static_cast<S8>(h.l7());
+
+        for (USize i = 0; i < m_capacity; ++i) {
+            USize curr = (idx + i) & mask;
+            Ctrl c = m_ctrls[curr];
+
+            if (c.value == Ctrl::empty) {
+                return -1;
+            }
+
+            if (c.value == h2) {
+                if (ActualCmpFn{}(m_slots[curr].key, key)) {
+                    return static_cast<std::ptrdiff_t>(curr);
+                }
+            }
+        }
+
+        return -1;
+    }
+
     template <typename K>
     bool do_insert_impl(K &&key) {
         if (m_capacity == 0 || m_load + 1 > max_load()) {
@@ -336,14 +341,15 @@ private:
             }
 
             if (c.value == Ctrl::empty) {
-                if (first_free == -1)
+                if (first_free == -1) {
                     first_free = static_cast<std::ptrdiff_t>(curr);
+                }
+
                 break;
             }
 
-            if (c.value == Ctrl::tombstone) {
-                if (first_free == -1)
-                    first_free = static_cast<std::ptrdiff_t>(curr);
+            if (c.value == Ctrl::tombstone && first_free == -1) {
+                first_free = static_cast<std::ptrdiff_t>(curr);
             }
         }
 
@@ -353,7 +359,8 @@ private:
         m_ctrls[target].value = h2;
         m_slots[target].hash = h;
         std::construct_at(&m_slots[target].key, std::forward<K>(key));
-        m_load++;
+        ++m_load;
+
         return true;
     }
 
@@ -411,7 +418,7 @@ private:
         m_ctrls[idx].value = static_cast<S8>(h.l7());
         m_slots[idx].hash = h;
         std::construct_at(&m_slots[idx].key, std::move(key));
-        m_load++;
+        ++m_load;
     }
 
     void do_destroy_storage() noexcept {

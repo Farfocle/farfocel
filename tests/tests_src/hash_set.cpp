@@ -7,27 +7,26 @@ namespace fr {
 TEST_CASE("HashSet - Basic Operations") {
     HashSet<int> set;
 
-    CHECK(set.is_empty());
-    CHECK(set.load() == 0);
-
-    SUBCASE("Insert and Find") {
-        CHECK(set.insert(10));
-        CHECK(set.insert(20));
-        CHECK(set.insert(30));
-
-        CHECK(set.load() == 3);
-        CHECK(!set.is_empty());
-
-        CHECK(set.contains(10));
-        CHECK(set.contains(20));
-        CHECK(set.contains(30));
-        CHECK(!set.contains(40));
-
-        // Duplicate insert should fail
-        CHECK(!set.insert(10));
-        CHECK(set.load() == 3);
-    }
-
+        CHECK(set.is_empty());
+        CHECK(set.load() == 0);
+    
+        SUBCASE("Insert and Contains") {
+            CHECK(set.insert(10));
+            CHECK(set.insert(20));
+            CHECK(set.insert(30));
+            
+            CHECK(set.load() == 3);
+            CHECK(!set.is_empty());
+    
+            CHECK(set.contains(10));
+            CHECK(set.contains(20));
+            CHECK(set.contains(30));
+            CHECK(!set.contains(40));
+    
+            // Duplicate insert should fail
+            CHECK(!set.insert(10));
+            CHECK(set.load() == 3);
+        }
     SUBCASE("Remove") {
         set.insert(10);
         set.insert(20);
