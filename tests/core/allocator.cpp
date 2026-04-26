@@ -6,7 +6,7 @@
  * AllocationStack.
  */
 
-#include "doctest.h"
+#include <doctest.h>
 
 #include "fr/core/allocation_stack.hpp"
 #include "fr/core/allocator.hpp"

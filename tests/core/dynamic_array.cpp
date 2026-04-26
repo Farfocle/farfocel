@@ -1,5 +1,5 @@
 #include "fr/core/dynamic_array.hpp"
-#include "doctest.h"
+#include <doctest.h>
 
 namespace fr {
 

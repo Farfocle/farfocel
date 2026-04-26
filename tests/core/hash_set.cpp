@@ -1,5 +1,5 @@
 #include "fr/core/hash_set.hpp"
-#include "doctest.h"
+#include <doctest.h>
 #include "fr/core/string.hpp"
 
 namespace fr {

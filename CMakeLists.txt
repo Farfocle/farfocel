@@ -98,9 +98,8 @@ if(ENABLE_TSAN)
     target_link_options(farfocel_compiler_options INTERFACE -fsanitize=thread)
 endif()
 
+add_subdirectory(3rdparty)
 add_subdirectory(engine)
-
-    #add_subdirectory(editor)
-    add_subdirectory(sandbox)
+add_subdirectory(sandbox)
 add_subdirectory(tests)
 add_subdirectory(docs)

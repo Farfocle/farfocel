@@ -1,5 +1,5 @@
 #include "fr/core/string.hpp"
-#include "doctest.h"
+#include <doctest.h>
 #include "fr/core/string_view.hpp"
 
 namespace fr {
