@@ -10,6 +10,7 @@ set(CORE_TEST_SOURCES
     "tuple.cpp"
     "string.cpp"
     "hash_set.cpp"
+    "hash_map.cpp"
 )
 
 add_executable(farfocel_core_tests ${CORE_TEST_SOURCES})

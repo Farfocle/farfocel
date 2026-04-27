@@ -40,13 +40,7 @@ struct DefaultCmp {
 
 } // namespace impl_hash_set
 
-/**
- * @brief Swiss-table inspired hash set.
- *
- * Uses a split-hash strategy:
- * - H1 (high 57 bits): Index into the table.
- * - H2 (low 7 bits): Metadata stored in control bytes for fast probing.
- */
+/// @brief Swiss-table inspired hash set.
 template <typename Key, typename HashFn = impl_hash_set::DeafultHashFnTag,
           typename CmpFn = impl_hash_set::DeafultCmpFnTag>
 class HashSet {
@@ -78,6 +72,7 @@ private:
     };
 
 public:
+    /// @brief Iterator for the HashSet. Skips over empty and tombstone slots.
     struct Iter {
         using iterator_category = std::forward_iterator_tag;
         using value_type = Key;
@@ -85,14 +80,17 @@ public:
         using pointer = const Key *;
         using reference = const Key &;
 
+        /// @brief Access the key.
         const Key &operator*() const noexcept {
             return m_slot->key;
         }
 
+        /// @brief Access the key via pointer.
         const Key *operator->() const noexcept {
             return &m_slot->key;
         }
 
+        /// @brief Prefix increment. Moves to the next occupied slot.
         Iter &operator++() noexcept {
             ++m_ctrl;
             ++m_slot;
@@ -100,16 +98,19 @@ public:
             return *this;
         }
 
+        /// @brief Postfix increment.
         Iter operator++(int) {
             Iter copy = *this;
             ++(*this);
             return copy;
         }
 
+        /// @brief Equality comparison for iterators.
         bool operator==(const Iter &other) const noexcept {
             return m_ctrl == other.m_ctrl;
         }
 
+        /// @brief Inequality comparison for iterators.
         bool operator!=(const Iter &other) const noexcept {
             return m_ctrl != other.m_ctrl;
         }
@@ -147,14 +148,16 @@ public:
         : m_alloc(alloc) {
     }
 
-    /// @brief Copy-constructs a new HashSet.
+    /// @brief Copy-constructs a new HashSet. Deep copy.
     HashSet(const HashSet &other) noexcept
         : m_alloc(other.m_alloc) {
-        if (other.m_capacity > 0) {
-            do_grow(other.m_capacity);
-            for (const auto &key : other) {
-                insert(key);
-            }
+        if (other.m_capacity == 0) {
+            return;
+        }
+
+        do_grow(other.m_capacity);
+        for (const auto &key : other) {
+            insert(key);
         }
     }
 
@@ -171,33 +174,39 @@ public:
         other.m_load = 0;
     }
 
-    /// @brief Copy-assigns from another HashSet.
+    /// @brief Copy-assigns from another HashSet. Triggers clear and deep copy.
     HashSet &operator=(const HashSet &other) noexcept {
-        if (this != &other) {
-            clear();
-
-            for (const auto &key : other) {
-                insert(key);
-            }
+        if (this == &other) {
+            return *this;
         }
+
+        clear();
+
+        for (const auto &key : other) {
+            insert(key);
+        }
+
         return *this;
     }
 
-    /// @brief Move-assigns from another HashSet.
+    /// @brief Move-assigns from another HashSet. Destroys current storage first.
     HashSet &operator=(HashSet &&other) noexcept {
-        if (this != &other) {
-            do_destroy_storage();
-            m_alloc = other.m_alloc;
-            m_capacity = other.m_capacity;
-            m_load = other.m_load;
-            m_slots = other.m_slots;
-            m_ctrls = other.m_ctrls;
-
-            other.m_slots = nullptr;
-            other.m_ctrls = nullptr;
-            other.m_capacity = 0;
-            other.m_load = 0;
+        if (this == &other) {
+            return *this;
         }
+
+        do_destroy_storage();
+        m_alloc = other.m_alloc;
+        m_capacity = other.m_capacity;
+        m_load = other.m_load;
+        m_slots = other.m_slots;
+        m_ctrls = other.m_ctrls;
+
+        other.m_slots = nullptr;
+        other.m_ctrls = nullptr;
+        other.m_capacity = 0;
+        other.m_load = 0;
+
         return *this;
     }
 
@@ -244,12 +253,12 @@ public:
         return Iter(m_ctrls + m_capacity, m_slots + m_capacity);
     }
 
-    /// @brief Returns a constant iterator to the first element.
+    /// @brief Constant iterator entry point.
     Iter cbegin() const noexcept {
         return begin();
     }
 
-    /// @brief Returns a constant iterator to the element following the last element.
+    /// @brief Constant iterator end point.
     Iter cend() const noexcept {
         return end();
     }
@@ -259,28 +268,28 @@ public:
         return (m_capacity * 7) / 8;
     }
 
-    /// @brief Checks if a key exists in the set.
+    /// @brief Checks if a key exists in the set. O(1) average.
     bool contains(const Key &key) const noexcept {
         return do_find_idx(key) != -1;
     }
 
-    /// @brief Inserts a copy of the key into the set.
+    /// @brief Inserts a copy of the key. Returns false if already exists. May trigger growth.
     bool insert(const Key &key) {
         return do_insert(key);
     }
 
-    /// @brief Inserts the key into the set by moving it.
+    /// @brief Inserts a key by moving it. Returns false if already exists. May trigger growth.
     bool insert(Key &&key) {
         return do_insert(std::move(key));
     }
 
-    /// @brief Constructs a key in-place within the set's memory.
+    /// @brief Constructs a key in-place. Returns false if already exists. May trigger growth.
     template <typename... Args>
     bool emplace(Args &&...args) {
         return do_insert(Key(std::forward<Args>(args)...));
     }
 
-    /// @brief Removes a key from the set.
+    /// @brief Removes a key. Returns false if not found. Leaves a tombstone.
     bool remove(const Key &key) noexcept {
         std::ptrdiff_t idx = do_find_idx(key);
         if (idx == -1) {
@@ -294,7 +303,7 @@ public:
         return true;
     }
 
-    /// @brief Removes all elements from the set without deallocating storage.
+    /// @brief Removes all elements without deallocating storage. Resets tombstones.
     void clear() noexcept {
         for (USize i = 0; i < m_capacity; ++i) {
             if (m_ctrls[i].is_occupied()) {
@@ -446,6 +455,7 @@ private:
                     std::destroy_at(&m_slots[i].key);
                 }
             }
+
             m_alloc->deallocate(m_slots, do_sizeof_slots(m_capacity) + do_sizeof_ctrls(m_capacity),
                                 alignof(Slot));
             m_slots = nullptr;
