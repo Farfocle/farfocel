@@ -20,7 +20,7 @@ struct DeafultCmpFnTag {};
 template <typename Key>
 struct DefaultHash {
     inline Hash operator()(const Key &key) const noexcept {
-        return hash(key);
+        return call_hash(key);
     }
 };
 

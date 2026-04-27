@@ -14,6 +14,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
 
@@ -87,6 +88,13 @@ public:
         } else {
             return std::forward_like<decltype(self)>(self.m_second);
         }
+    }
+
+    /**
+     * @brief Returns a hash of the pair.
+     */
+    constexpr Hash hash() const noexcept {
+        return combine_hashes(call_hash(m_first), call_hash(m_second));
     }
 
     /// @brief Structured binding protocol.

@@ -12,13 +12,14 @@
 
 #pragma once
 
+#include <algorithm>
+#include <ostream>
+
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/string_base.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/typedefs.hpp"
-#include <algorithm>
-#include <ostream>
 
 namespace fr {
 
@@ -783,6 +784,13 @@ public:
         return StringView(data(), size());
     }
 
+    /**
+     * @brief Returns a hash of the string.
+     */
+    Hash hash() const noexcept {
+        return view().hash();
+    }
+
 private:
     /**
      * @brief Checks if the view is made of this particular string
@@ -859,10 +867,6 @@ inline String operator+(const String &lhs, const String &rhs) {
 inline std::ostream &operator<<(std::ostream &os, const String &str) {
     os.write(str.data(), str.size());
     return os;
-}
-
-inline Hash hash(const String &str) noexcept {
-    return hash(str.view());
 }
 
 } // namespace fr

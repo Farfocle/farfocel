@@ -42,26 +42,6 @@ struct Hash32 {
 };
 
 namespace impl_hash {
-template <typename T>
-concept HasMemberHash = requires(const T &v) {
-    { v.hash() } noexcept -> std::same_as<Hash>;
-};
-
-template <typename T>
-concept HasMemberHash32 = requires(const T &v) {
-    { v.hash32() } noexcept -> std::same_as<Hash>;
-};
-
-template <typename T>
-concept HasADLHash = requires(const T &v) {
-    { hash(v) } noexcept -> std::same_as<Hash>;
-};
-
-template <typename T>
-concept HasADLHash32 = requires(const T &v) {
-    { hash32(v) } noexcept -> std::same_as<Hash>;
-};
-
 /// @brief splitmix64 is a fast bijective mixer - excelent to primitives.
 inline U64 splitmix64(U64 v) noexcept {
     v ^= v >> 30;
@@ -71,11 +51,7 @@ inline U64 splitmix64(U64 v) noexcept {
     v ^= v >> 31;
     return v;
 }
-
 } // namespace impl_hash
-
-template <typename T>
-concept IsHashable = impl_hash::HasMemberHash<T> || impl_hash::HasADLHash<T>;
 
 inline Hash hash(U32 v) noexcept {
     return Hash::from_raw(impl_hash::splitmix64(v));
@@ -134,14 +110,40 @@ inline Hash hash_bytes(const void *ptr, USize len) noexcept {
     return Hash::from_raw(h);
 }
 
+namespace impl_hash {
+template <typename T>
+concept HasMemberHash = requires(const T &v) {
+    { v.hash() } noexcept -> std::same_as<Hash>;
+};
+
+template <typename T>
+concept HasMemberHash32 = requires(const T &v) {
+    { v.hash32() } noexcept -> std::same_as<Hash>;
+};
+
+template <typename T>
+concept HasADLHash = requires(const T &v) {
+    { hash(v) } noexcept -> std::same_as<Hash>;
+};
+
+template <typename T>
+concept HasADLHash32 = requires(const T &v) {
+    { hash32(v) } noexcept -> std::same_as<Hash>;
+};
+} // namespace impl_hash
+
+template <typename T>
+concept IsHashable = impl_hash::HasMemberHash<T> || impl_hash::HasADLHash<T>;
+
 template <typename T>
 inline Hash call_hash(const T &value) noexcept {
-    if constexpr (impl_hash::HasADLHash<T>) {
-        return hash(value);
-    } else if constexpr (impl_hash::HasMemberHash<T>) {
+    if constexpr (impl_hash::HasMemberHash<T>) {
         return value.hash();
+    } else if constexpr (impl_hash::HasADLHash<T>) {
+        return hash(value);
     } else {
-        FR_STATIC_ASSERT(false, "value is not hashable");
+        FR_STATIC_ASSERT(false, "value is not hashable: provide either a .hash() member function "
+                                "or a hash(T) overload in the same namespace as T.");
     }
 }
 } // namespace fr

@@ -4,8 +4,8 @@
  *
  * @brief This is a window into the characters of a string that does not hold its own memory.
  * This must be used instead of referenced fr::string
- *
  */
+
 #pragma once
 
 #include "fr/core/hash.hpp"
@@ -169,6 +169,13 @@ public:
     }
 
     /**
+     * @brief Returns a hash of the current view.
+     */
+    [[nodiscard]] constexpr Hash hash() const noexcept {
+        return hash_bytes(m_data, m_size);
+    }
+
+    /**
      * @brief Comparison of two views
      * @param other The view to compare with
      * @return 0 if identical, < 0 if this is lexicographically before other, > 0 if after
@@ -321,10 +328,6 @@ inline constexpr bool operator<(StringView lhs, StringView rhs) noexcept {
  */
 inline constexpr bool operator>(StringView lhs, StringView rhs) noexcept {
     return lhs.compare(rhs) > 0;
-}
-
-inline Hash hash(StringView sv) noexcept {
-    return hash_bytes(sv.data(), sv.size());
 }
 
 } // namespace fr

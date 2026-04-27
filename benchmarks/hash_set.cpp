@@ -1,3 +1,8 @@
+/**
+ * @file hash_set.cpp
+ * @brief Comparison benchmark: fr::HashSet vs std::unordered_set
+ */
+
 #define ANKERL_NANOBENCH_IMPLEMENT
 #include <nanobench.h>
 
@@ -7,10 +12,6 @@
 #include "fr/core/hash_set.hpp"
 #include "fr/core/string.hpp"
 
-/**
- * @file hash_set_bench.cpp
- * @brief Comparison benchmark: fr::HashSet vs std::unordered_set
- */
 S32 main() {
     ankerl::nanobench::Bench bench;
     bench.title("HashSet Comparison").unit("operation").relative(true);

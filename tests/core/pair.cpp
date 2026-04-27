@@ -1,7 +1,7 @@
-
 #include <doctest.h>
 
 #include "fr/core/pair.hpp"
+#include "fr/core/string.hpp"
 
 namespace fr {
 
@@ -63,6 +63,23 @@ TEST_CASE("Pair - References") {
     Pair<S32 &, S32> p(val, 20);
     p.first() = 30;
     CHECK(val == 30);
+}
+
+TEST_CASE("Pair - Hashing") {
+    Pair p1(S32(10), S32(20));
+    Pair p2(S32(10), S32(20));
+    Pair p3(S32(20), S32(10));
+
+    Hash h1 = p1.hash();
+    Hash h2 = p2.hash();
+    Hash h3 = p3.hash();
+
+    CHECK(h1.value == h2.value);
+    CHECK(h1.value != h3.value);
+
+    // Test with String
+    Pair p4(fr::String("Hello"), S32(42));
+    CHECK(p4.hash().value != 0);
 }
 
 } // namespace fr

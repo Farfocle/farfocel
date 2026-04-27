@@ -1,5 +1,6 @@
-#include "fr/core/optional.hpp"
 #include <doctest.h>
+
+#include "fr/core/optional.hpp"
 #include "fr/core/typedefs.hpp"
 
 using namespace fr;
