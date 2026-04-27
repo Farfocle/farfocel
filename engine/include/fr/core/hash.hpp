@@ -10,12 +10,13 @@
 #include <bit>
 #include <concepts>
 
+#include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
 
 struct Hash {
-    U64 value;
+    U64 value{};
 
     static Hash from_raw(U64 v) noexcept {
         return Hash{.value = v};
@@ -32,10 +33,23 @@ struct Hash {
     }
 };
 
-namespace impl {
+struct Hash32 {
+    U32 value{0};
+
+    static Hash32 from_raw(U32 v) noexcept {
+        return Hash32{.value = v};
+    }
+};
+
+namespace impl_hash {
 template <typename T>
 concept HasMemberHash = requires(const T &v) {
     { v.hash() } noexcept -> std::same_as<Hash>;
+};
+
+template <typename T>
+concept HasMemberHash32 = requires(const T &v) {
+    { v.hash32() } noexcept -> std::same_as<Hash>;
 };
 
 template <typename T>
@@ -48,11 +62,6 @@ concept HasADLHash32 = requires(const T &v) {
     { hash32(v) } noexcept -> std::same_as<Hash>;
 };
 
-} // namespace impl
-
-template <typename T>
-concept IsHashable = impl::HasMemberHash<T> || impl::HasADLHash<T>;
-
 /// @brief splitmix64 is a fast bijective mixer - excelent to primitives.
 inline U64 splitmix64(U64 v) noexcept {
     v ^= v >> 30;
@@ -63,28 +72,33 @@ inline U64 splitmix64(U64 v) noexcept {
     return v;
 }
 
+} // namespace impl_hash
+
+template <typename T>
+concept IsHashable = impl_hash::HasMemberHash<T> || impl_hash::HasADLHash<T>;
+
 inline Hash hash(U32 v) noexcept {
-    return Hash::from_raw(splitmix64(v));
+    return Hash::from_raw(impl_hash::splitmix64(v));
 }
 
 inline Hash hash(U64 v) noexcept {
-    return Hash::from_raw(splitmix64(v));
+    return Hash::from_raw(impl_hash::splitmix64(v));
 }
 
 inline Hash hash(S32 v) noexcept {
-    return Hash::from_raw(splitmix64(static_cast<U64>(v)));
+    return Hash::from_raw(impl_hash::splitmix64(static_cast<U64>(v)));
 }
 
 inline Hash hash(S64 v) noexcept {
-    return Hash::from_raw(splitmix64(static_cast<U64>(v)));
+    return Hash::from_raw(impl_hash::splitmix64(static_cast<U64>(v)));
 }
 
 inline Hash hash(F32 v) noexcept {
-    return Hash::from_raw(splitmix64(std::bit_cast<U32>(v)));
+    return Hash::from_raw(impl_hash::splitmix64(std::bit_cast<U32>(v)));
 }
 
 inline Hash hash(F64 v) noexcept {
-    return Hash::from_raw(splitmix64(std::bit_cast<U64>(v)));
+    return Hash::from_raw(impl_hash::splitmix64(std::bit_cast<U64>(v)));
 }
 
 inline Hash hash(bool v) noexcept {
@@ -108,16 +122,26 @@ inline Hash combine_hashes(Hash a, Hash b) noexcept {
 /// @brief Large prime number is a good seed for hash functions.
 inline constexpr U64 HASH_SEED = 0xa0761d6478bd642f;
 
-/**
- * @brief Simple and fast hash for a block of memory.
- */
+/// @brief Simple and fast hash for a block of memory.
 inline Hash hash_bytes(const void *ptr, USize len) noexcept {
     U64 h = HASH_SEED;
     const U8 *data = static_cast<const U8 *>(ptr);
+
     for (USize i = 0; i < len; ++i) {
         h = (h ^ data[i]) * 0x100000001b3ULL;
     }
+
     return Hash::from_raw(h);
 }
 
+template <typename T>
+inline Hash call_hash(const T &value) noexcept {
+    if constexpr (impl_hash::HasADLHash<T>) {
+        return hash(value);
+    } else if constexpr (impl_hash::HasMemberHash<T>) {
+        return value.hash();
+    } else {
+        FR_STATIC_ASSERT(false, "value is not hashable");
+    }
+}
 } // namespace fr

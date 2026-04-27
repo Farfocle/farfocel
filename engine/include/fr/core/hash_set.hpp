@@ -15,7 +15,6 @@
 #include "fr/core/allocator.hpp"
 #include "fr/core/globals.hpp"
 #include "fr/core/hash.hpp"
-#include "fr/core/impl.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
 
@@ -140,12 +139,15 @@ public:
     using iterator = Iter;
     using const_iterator = Iter;
 
+    /// @brief Constructs an empty HashSet using the default allocator.
     HashSet() = default;
 
+    /// @brief Constructs an empty HashSet using a specific allocator.
     explicit HashSet(Allocator *alloc) noexcept
         : m_alloc(alloc) {
     }
 
+    /// @brief Copy-constructs a new HashSet.
     HashSet(const HashSet &other) noexcept
         : m_alloc(other.m_alloc) {
         if (other.m_capacity > 0) {
@@ -156,6 +158,7 @@ public:
         }
     }
 
+    /// @brief Move-constructs a new HashSet, stealing storage from another.
     HashSet(HashSet &&other) noexcept
         : m_alloc(other.m_alloc),
           m_capacity(other.m_capacity),
@@ -168,6 +171,7 @@ public:
         other.m_load = 0;
     }
 
+    /// @brief Copy-assigns from another HashSet.
     HashSet &operator=(const HashSet &other) noexcept {
         if (this != &other) {
             clear();
@@ -179,6 +183,7 @@ public:
         return *this;
     }
 
+    /// @brief Move-assigns from another HashSet.
     HashSet &operator=(HashSet &&other) noexcept {
         if (this != &other) {
             do_destroy_storage();
@@ -196,26 +201,32 @@ public:
         return *this;
     }
 
+    /// @brief Destroys the HashSet and all its elements.
     ~HashSet() noexcept {
         do_destroy_storage();
     }
 
+    /// @brief Creates an empty HashSet with a specific allocator.
     static HashSet with_allocator(Allocator *alloc) noexcept {
         return HashSet(alloc);
     }
 
+    /// @brief Returns the number of elements currently in the set.
     USize load() const noexcept {
         return m_load;
     }
 
+    /// @brief Returns the total number of slots available in the current storage.
     USize capacity() const noexcept {
         return m_capacity;
     }
 
+    /// @brief Checks if the set is empty.
     bool is_empty() const noexcept {
         return m_load == 0;
     }
 
+    /// @brief Returns an iterator to the first element.
     Iter begin() const noexcept {
         if (m_capacity == 0) {
             return end();
@@ -224,6 +235,7 @@ public:
         return Iter(m_ctrls, m_slots);
     }
 
+    /// @brief Returns an iterator to the element following the last element.
     Iter end() const noexcept {
         if (m_capacity == 0) {
             return Iter(nullptr, nullptr);
@@ -232,38 +244,43 @@ public:
         return Iter(m_ctrls + m_capacity, m_slots + m_capacity);
     }
 
+    /// @brief Returns a constant iterator to the first element.
     Iter cbegin() const noexcept {
         return begin();
     }
 
+    /// @brief Returns a constant iterator to the element following the last element.
     Iter cend() const noexcept {
         return end();
     }
 
+    /// @brief Returns the maximum number of elements before a rehash is triggered.
     USize max_load() const noexcept {
         return (m_capacity * 7) / 8;
     }
 
+    /// @brief Checks if a key exists in the set.
     bool contains(const Key &key) const noexcept {
         return do_find_idx(key) != -1;
     }
 
-    /**
-     * @brief Inserts a key into the set.
-     * @return True if inserted, false if already present.
-     */
+    /// @brief Inserts a copy of the key into the set.
     bool insert(const Key &key) {
-        return do_insert_impl(key);
+        return do_insert(key);
     }
 
+    /// @brief Inserts the key into the set by moving it.
     bool insert(Key &&key) {
-        return do_insert_impl(std::move(key));
+        return do_insert(std::move(key));
     }
 
-    /**
-     * @brief Removes a key from the set.
-     * @return True if removed, false if not found.
-     */
+    /// @brief Constructs a key in-place within the set's memory.
+    template <typename... Args>
+    bool emplace(Args &&...args) {
+        return do_insert(Key(std::forward<Args>(args)...));
+    }
+
+    /// @brief Removes a key from the set.
     bool remove(const Key &key) noexcept {
         std::ptrdiff_t idx = do_find_idx(key);
         if (idx == -1) {
@@ -277,6 +294,7 @@ public:
         return true;
     }
 
+    /// @brief Removes all elements from the set without deallocating storage.
     void clear() noexcept {
         for (USize i = 0; i < m_capacity; ++i) {
             if (m_ctrls[i].is_occupied()) {
@@ -318,7 +336,7 @@ private:
     }
 
     template <typename K>
-    bool do_insert_impl(K &&key) {
+    bool do_insert(K &&key) {
         if (m_capacity == 0 || m_load + 1 > max_load()) {
             do_grow(m_capacity == 0 ? 16 : m_capacity * 2);
         }

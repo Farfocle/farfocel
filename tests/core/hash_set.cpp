@@ -28,6 +28,16 @@ TEST_CASE("HashSet - Basic Operations") {
         CHECK(!set.insert(10));
         CHECK(set.load() == 3);
     }
+
+    SUBCASE("Emplace") {
+        CHECK(set.emplace(100));
+        CHECK(set.contains(100));
+        CHECK(set.load() == 1);
+
+        // Duplicate emplace should fail
+        CHECK(!set.emplace(100));
+        CHECK(set.load() == 1);
+    }
     SUBCASE("Remove") {
         set.insert(10);
         set.insert(20);
