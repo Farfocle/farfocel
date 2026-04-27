@@ -5,6 +5,7 @@ set(CORE_TEST_SOURCES
     "allocator.cpp"
     "dynamic_array.cpp"
     "optional.cpp"
+    "pair.cpp"
     "slice.cpp"
     "tuple.cpp"
     "string.cpp"
