@@ -2,6 +2,7 @@
 
 set(BENCHMARK_SOURCES
     "hash_set.cpp"
+    "hash_map.cpp"
 )
 
 foreach(source ${BENCHMARK_SOURCES})
