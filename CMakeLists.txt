@@ -13,7 +13,6 @@ add_library(farfocel_compiler_options INTERFACE)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
-
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/lib")

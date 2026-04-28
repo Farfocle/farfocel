@@ -16,6 +16,7 @@
 #include "fr/core/globals.hpp"
 #include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/core/math.hpp"
 #include "fr/core/optional.hpp"
 #include "fr/core/pair.hpp"
 #include "fr/core/typedefs.hpp"
@@ -23,9 +24,18 @@
 namespace fr {
 namespace impl {
 
+/**
+ * @brief Internal tag for default hash function.
+ */
 struct DeafultHashFnTag {};
+/**
+ * @brief Internal tag for default comparison function.
+ */
 struct DeafultCmpFnTag {};
 
+/**
+ * @brief Default hash function utilizing the call_hash protocol.
+ */
 template <typename Key>
 struct DefaultHash {
     inline Hash operator()(const Key &key) const noexcept {
@@ -33,6 +43,9 @@ struct DefaultHash {
     }
 };
 
+/**
+ * @brief Default equality comparison utilizing operator==.
+ */
 template <typename Key>
 struct DefaultCmp {
     inline bool operator()(const Key &lhs, const Key &rhs) const noexcept {
@@ -41,6 +54,16 @@ struct DefaultCmp {
 };
 } // namespace impl
 
+/**
+ * @brief Dense hash map using linear probing and control-byte filtering.
+ * @tparam Key Key type.
+ * @tparam Value Value type.
+ * @tparam HashFn Hash function type.
+ * @tparam CmpFn Equality comparison function type.
+ *
+ * HashMap provides O(1) average-time complexity for insertions, lookups, and removals.
+ * It uses a Swiss Table-like architecture to achieve high cache efficiency.
+ */
 template <typename Key, typename Value, typename HashFn = impl::DeafultHashFnTag,
           typename CmpFn = impl::DeafultCmpFnTag>
 class HashMap {
@@ -73,7 +96,12 @@ class HashMap {
     };
 
 private:
-    /// @brief Iterator implementation for HashMap. Uses a proxy Pair for structured bindings.
+    /**
+     * @brief Iterator implementation for HashMap.
+     * @tparam IsConst Whether the iterator is constant.
+     *
+     * Iterators for HashMap are forward iterators. They skip over empty and tombstone slots.
+     */
     template <bool IsConst>
     struct IterImpl {
         using iterator_category = std::forward_iterator_tag;
@@ -87,12 +115,16 @@ private:
         using SlotPtr = std::conditional_t<IsConst, const Slot *, Slot *>;
         using CtrlPtr = std::conditional_t<IsConst, const Ctrl *, Ctrl *>;
 
-        /// @brief Dereference operator. Returns a proxy Pair of references.
+        /**
+         * @brief Dereference operator. Returns a proxy Pair of references.
+         */
         reference operator*() const noexcept {
             return reference(m_slot->key, m_slot->value);
         }
 
-        /// @brief Prefix increment. Moves to the next occupied slot.
+        /**
+         * @brief Prefix increment. Moves to the next occupied slot.
+         */
         IterImpl &operator++() noexcept {
             ++m_ctrl;
             ++m_slot;
@@ -100,19 +132,25 @@ private:
             return *this;
         }
 
-        /// @brief Postfix increment.
+        /**
+         * @brief Postfix increment.
+         */
         IterImpl operator++(int) noexcept {
             IterImpl copy = *this;
             ++(*this);
             return copy;
         }
 
-        /// @brief Equality comparison for iterators.
+        /**
+         * @brief Equality comparison for iterators.
+         */
         bool operator==(const IterImpl &other) const noexcept {
             return m_ctrl == other.m_ctrl;
         }
 
-        /// @brief Inequality comparison for iterators.
+        /**
+         * @brief Inequality comparison for iterators.
+         */
         bool operator!=(const IterImpl &other) const noexcept {
             return m_ctrl != other.m_ctrl;
         }
@@ -146,15 +184,23 @@ public:
     using iterator = IterMut;
     using const_iterator = IterConst;
 
-    /// @brief Constructs an empty HashMap using the default allocator.
+    /**
+     * @brief Constructs an empty HashMap using the default allocator.
+     */
     HashMap() = default;
 
-    /// @brief Constructs an empty HashMap using a specific allocator.
+    /**
+     * @brief Constructs an empty HashMap using a specific allocator.
+     * @param alloc Pointer to the allocator.
+     */
     explicit HashMap(Allocator *alloc) noexcept
         : m_alloc(alloc) {
     }
 
-    /// @brief Copy-constructs a new HashMap. Deep copy.
+    /**
+     * @brief Copy-constructs a new HashMap.
+     * @param other Source map.
+     */
     HashMap(const HashMap &other) noexcept
         : m_alloc(other.m_alloc) {
         if (other.m_capacity > 0) {
@@ -166,7 +212,10 @@ public:
         }
     }
 
-    /// @brief Move-constructs a new HashMap, stealing storage from another.
+    /**
+     * @brief Move-constructs a new HashMap.
+     * @param other Source map.
+     */
     HashMap(HashMap &&other) noexcept
         : m_alloc(other.m_alloc),
           m_capacity(other.m_capacity),
@@ -179,7 +228,11 @@ public:
         other.m_load = 0;
     }
 
-    /// @brief Copy-assigns from another HashMap. Triggers clear and deep copy.
+    /**
+     * @brief Copy-assigns from another HashMap.
+     * @param other Source map.
+     * @return Reference to this map.
+     */
     HashMap &operator=(const HashMap &other) noexcept {
         if (this != &other) {
             clear();
@@ -191,7 +244,11 @@ public:
         return *this;
     }
 
-    /// @brief Move-assigns from another HashMap. Destroys current storage first.
+    /**
+     * @brief Move-assigns from another HashMap.
+     * @param other Source map.
+     * @return Reference to this map.
+     */
     HashMap &operator=(HashMap &&other) noexcept {
         if (this != &other) {
             do_destroy_storage();
@@ -209,108 +266,168 @@ public:
         return *this;
     }
 
-    /// @brief Destroys the HashMap and all its elements.
+    /**
+     * @brief Destroys the HashMap.
+     */
     ~HashMap() noexcept {
         do_destroy_storage();
     }
 
-    /// @brief Creates an empty HashMap with a specific allocator.
+    /**
+     * @brief Creates an empty HashMap with a specific allocator.
+     * @param alloc Pointer to the allocator.
+     * @return A new empty HashMap instance.
+     * @pre @p alloc must not be null.
+     */
     static HashMap with_allocator(Allocator *alloc) noexcept {
+        FR_ASSERT(alloc, "Allocator must not be null");
         return HashMap(alloc);
     }
 
-    /// @brief Returns the number of elements currently in the map.
+    /**
+     * @brief Returns the number of elements in the map.
+     */
     USize load() const noexcept {
         return m_load;
     }
 
-    /// @brief Returns the total number of slots available in the current storage.
+    /**
+     * @brief Returns the total number of slots.
+     */
     USize capacity() const noexcept {
         return m_capacity;
     }
 
-    /// @brief Checks if the map is empty.
+    /**
+     * @brief Checks if the map is empty.
+     */
     bool is_empty() const noexcept {
         return m_load == 0;
     }
 
-    /// @brief Returns a mutable iterator to the first element.
+    /**
+     * @brief Returns a mutable iterator to the first element.
+     */
     IterMut begin() noexcept {
         if (m_capacity == 0)
             return end();
         return IterMut(m_ctrls, m_slots);
     }
 
-    /// @brief Returns a mutable iterator to the element following the last element.
+    /**
+     * @brief Returns a mutable iterator to the end.
+     */
     IterMut end() noexcept {
         if (m_capacity == 0)
             return IterMut(nullptr, nullptr);
         return IterMut(m_ctrls + m_capacity, m_slots + m_capacity);
     }
 
-    /// @brief Returns a constant iterator to the first element.
+    /**
+     * @brief Returns a constant iterator to the first element.
+     */
     IterConst begin() const noexcept {
         if (m_capacity == 0)
             return end();
         return IterConst(m_ctrls, m_slots);
     }
 
-    /// @brief Returns a constant iterator to the element following the last element.
+    /**
+     * @brief Returns a constant iterator to the end.
+     */
     IterConst end() const noexcept {
         if (m_capacity == 0)
             return IterConst(nullptr, nullptr);
         return IterConst(m_ctrls + m_capacity, m_slots + m_capacity);
     }
 
-    /// @brief Constant iterator entry point.
+    /**
+     * @brief Constant iterator entry point.
+     */
     IterConst cbegin() const noexcept {
         return begin();
     }
 
-    /// @brief Constant iterator end point.
+    /**
+     * @brief Constant iterator end point.
+     */
     IterConst cend() const noexcept {
         return end();
     }
 
-    /// @brief Returns the maximum number of elements before a rehash is triggered.
+    /**
+     * @brief Returns the maximum number of elements before rehash.
+     */
     USize max_load() const noexcept {
         return (m_capacity * 7) / 8;
     }
 
-    /// @brief Checks if a key exists in the map. O(1) average.
+    /**
+     * @brief Checks if a key exists in the map.
+     * @param key Key to find.
+     * @return True if key exists.
+     */
     bool contains(const Key &key) const noexcept {
         return do_find_idx(key) != -1;
     }
 
-    /// @brief Returns an Optional pointer to the value. Safe, non-modifying lookup.
+    /**
+     * @brief Returns an Optional pointer to the value.
+     * @param key Key to find.
+     * @return Optional containing pointer to value if found.
+     */
     Optional<Value *> find(const Key &key) noexcept {
         std::ptrdiff_t idx = do_find_idx(key);
         return idx == -1 ? none() : some(&m_slots[idx].value);
     }
 
-    /// @brief Returns an Optional pointer to the value (const). Safe, non-modifying lookup.
+    /**
+     * @brief Returns a constant Optional pointer to the value.
+     * @param key Key to find.
+     * @return Optional containing constant pointer to value if found.
+     */
     Optional<const Value *> find(const Key &key) const noexcept {
         std::ptrdiff_t idx = do_find_idx(key);
         return idx == -1 ? none() : some(static_cast<const Value *>(&m_slots[idx].value));
     }
 
-    /// @brief Inserts a key-value pair. Returns false if key exists. May trigger growth.
+    /**
+     * @brief Inserts a key-value pair.
+     * @param key Key to insert.
+     * @param value Value to insert.
+     * @return True if insertion happened, false if key already exists.
+     */
     bool insert(const Key &key, const Value &value) {
         return do_insert(key, value);
     }
 
-    /// @brief Inserts a key-value pair by moving the value. May trigger growth.
+    /**
+     * @brief Inserts a key-value pair by moving the value.
+     * @param key Key to insert.
+     * @param value Value to move.
+     * @return True if insertion happened, false if key already exists.
+     */
     bool insert(const Key &key, Value &&value) {
         return do_insert(key, std::move(value));
     }
 
-    /// @brief Constructs a value in-place for the given key. May trigger growth.
+    /**
+     * @brief Constructs a value in-place for the given key.
+     * @tparam Args Argument types.
+     * @param key Key to insert.
+     * @param args Arguments for Value constructor.
+     * @return True if insertion happened, false if key already exists.
+     */
     template <typename... Args>
     bool emplace(const Key &key, Args &&...args) {
         return do_insert(key, Value(std::forward<Args>(args)...));
     }
 
-    /// @brief Removes an entry. Returns false if not found. Leaves a tombstone.
+    /**
+     * @brief Removes an entry.
+     * @param key Key to remove.
+     * @return True if entry was found and removed.
+     */
     bool remove(const Key &key) noexcept {
         std::ptrdiff_t idx = do_find_idx(key);
         if (idx == -1)
@@ -324,7 +441,9 @@ public:
         return true;
     }
 
-    /// @brief Removes all elements without deallocating storage. Resets tombstones.
+    /**
+     * @brief Removes all elements.
+     */
     void clear() noexcept {
         if (!m_slots)
             return;
@@ -342,13 +461,13 @@ public:
     /**
      * @brief Access-or-insert lookup.
      *
-     * Unlike find(), this operator ensures a value exists for the given key:
      * 1. If the key exists, it returns a reference to the existing value.
      * 2. If the key is missing, it default-constructs a new Value, inserts it,
      *    and returns a reference to it.
      *
-     * @note This method may trigger a rehash/growth if a new entry is added.
-     * @note If Value is a complex type, ensure it is default-constructible.
+     * @param key Key to look up.
+     * @return Reference to the value.
+     * @note May trigger a rehash/growth.
      */
     Value &operator[](const Key &key) {
         std::ptrdiff_t idx = do_find_idx(key);
@@ -464,7 +583,7 @@ private:
 
     void do_grow(USize new_capacity) noexcept {
         FR_ASSERT(new_capacity > m_capacity, "New capacity has to be greater than the old one");
-        FR_ASSERT(impl::is_pow2(new_capacity), "Capacity must be a power of two");
+        FR_ASSERT(math::is_pow2(new_capacity), "Capacity must be a power of two");
 
         USize old_capacity = m_capacity;
         Slot *old_slots = m_slots;

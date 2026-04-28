@@ -12,8 +12,8 @@
 #include <type_traits>
 #include <utility>
 
-#include "fr/core/impl.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/core/math.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr::mem {
@@ -24,7 +24,7 @@ namespace fr::mem {
  * @return True if @p alignment is a power of two.
  */
 inline bool is_valid_alignment(USize alignment) noexcept {
-    return impl::is_pow2(alignment);
+    return math::is_pow2(alignment);
 }
 
 /**
@@ -43,7 +43,7 @@ inline bool is_overaligned(USize alignment) noexcept {
  * @pre @p alignment is a power of two.
  */
 inline USize normalize_alignment(USize alignment) noexcept {
-    FR_ASSERT(impl::is_pow2(alignment),
+    FR_ASSERT(math::is_pow2(alignment),
               "fr::mem::normalize_alignment(USize alignment): Alignment must be a power of two");
 
     return std::max(alignof(void *), alignment);

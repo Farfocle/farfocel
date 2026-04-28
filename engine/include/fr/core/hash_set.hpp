@@ -16,14 +16,24 @@
 #include "fr/core/globals.hpp"
 #include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/core/math.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
 
 namespace impl_hash_set {
+/**
+ * @brief Internal tag for default hash function.
+ */
 struct DeafultHashFnTag {};
+/**
+ * @brief Internal tag for default comparison function.
+ */
 struct DeafultCmpFnTag {};
 
+/**
+ * @brief Default hash function utilizing the call_hash protocol.
+ */
 template <typename Key>
 struct DefaultHash {
     inline Hash operator()(const Key &key) const noexcept {
@@ -31,6 +41,9 @@ struct DefaultHash {
     }
 };
 
+/**
+ * @brief Default equality comparison utilizing operator==.
+ */
 template <typename Key>
 struct DefaultCmp {
     inline bool operator()(const Key &lhs, const Key &rhs) const noexcept {
@@ -40,7 +53,15 @@ struct DefaultCmp {
 
 } // namespace impl_hash_set
 
-/// @brief Swiss-table inspired hash set.
+/**
+ * @brief Swiss-table inspired hash set.
+ * @tparam Key Element type.
+ * @tparam HashFn Hash function type.
+ * @tparam CmpFn Equality comparison function type.
+ *
+ * This implementation uses a flat memory layout with control bytes (Swiss Table)
+ * to speed up lookups and minimize cache misses.
+ */
 template <typename Key, typename HashFn = impl_hash_set::DeafultHashFnTag,
           typename CmpFn = impl_hash_set::DeafultCmpFnTag>
 class HashSet {
@@ -72,7 +93,9 @@ private:
     };
 
 public:
-    /// @brief Iterator for the HashSet. Skips over empty and tombstone slots.
+    /**
+     * @brief Iterator for the HashSet. Skips over empty and tombstone slots.
+     */
     struct Iter {
         using iterator_category = std::forward_iterator_tag;
         using value_type = Key;
@@ -80,17 +103,26 @@ public:
         using pointer = const Key *;
         using reference = const Key &;
 
-        /// @brief Access the key.
+        /**
+         * @brief Access the key.
+         * @return Constant reference to the key.
+         */
         const Key &operator*() const noexcept {
             return m_slot->key;
         }
 
-        /// @brief Access the key via pointer.
+        /**
+         * @brief Access the key via pointer.
+         * @return Constant pointer to the key.
+         */
         const Key *operator->() const noexcept {
             return &m_slot->key;
         }
 
-        /// @brief Prefix increment. Moves to the next occupied slot.
+        /**
+         * @brief Prefix increment. Moves to the next occupied slot.
+         * @return Reference to this iterator.
+         */
         Iter &operator++() noexcept {
             ++m_ctrl;
             ++m_slot;
@@ -98,19 +130,26 @@ public:
             return *this;
         }
 
-        /// @brief Postfix increment.
+        /**
+         * @brief Postfix increment.
+         * @return Copy of the iterator before increment.
+         */
         Iter operator++(int) {
             Iter copy = *this;
             ++(*this);
             return copy;
         }
 
-        /// @brief Equality comparison for iterators.
+        /**
+         * @brief Equality comparison for iterators.
+         */
         bool operator==(const Iter &other) const noexcept {
             return m_ctrl == other.m_ctrl;
         }
 
-        /// @brief Inequality comparison for iterators.
+        /**
+         * @brief Inequality comparison for iterators.
+         */
         bool operator!=(const Iter &other) const noexcept {
             return m_ctrl != other.m_ctrl;
         }
@@ -140,15 +179,24 @@ public:
     using iterator = Iter;
     using const_iterator = Iter;
 
-    /// @brief Constructs an empty HashSet using the default allocator.
+    /**
+     * @brief Constructs an empty HashSet using the default allocator.
+     */
     HashSet() = default;
 
-    /// @brief Constructs an empty HashSet using a specific allocator.
+    /**
+     * @brief Constructs an empty HashSet using a specific allocator.
+     * @param alloc Pointer to the allocator to use.
+     */
     explicit HashSet(Allocator *alloc) noexcept
         : m_alloc(alloc) {
     }
 
-    /// @brief Copy-constructs a new HashSet. Deep copy.
+    /**
+     * @brief Copy-constructs a new HashSet.
+     * @param other The HashSet to copy from.
+     * @note Performs a deep copy of all elements.
+     */
     HashSet(const HashSet &other) noexcept
         : m_alloc(other.m_alloc) {
         if (other.m_capacity == 0) {
@@ -161,7 +209,10 @@ public:
         }
     }
 
-    /// @brief Move-constructs a new HashSet, stealing storage from another.
+    /**
+     * @brief Move-constructs a new HashSet, stealing storage from @p other.
+     * @param other The HashSet to move from.
+     */
     HashSet(HashSet &&other) noexcept
         : m_alloc(other.m_alloc),
           m_capacity(other.m_capacity),
@@ -174,7 +225,11 @@ public:
         other.m_load = 0;
     }
 
-    /// @brief Copy-assigns from another HashSet. Triggers clear and deep copy.
+    /**
+     * @brief Copy-assigns from another HashSet.
+     * @param other The HashSet to copy from.
+     * @return Reference to this set.
+     */
     HashSet &operator=(const HashSet &other) noexcept {
         if (this == &other) {
             return *this;
@@ -189,7 +244,11 @@ public:
         return *this;
     }
 
-    /// @brief Move-assigns from another HashSet. Destroys current storage first.
+    /**
+     * @brief Move-assigns from another HashSet.
+     * @param other The HashSet to move from.
+     * @return Reference to this set.
+     */
     HashSet &operator=(HashSet &&other) noexcept {
         if (this == &other) {
             return *this;
@@ -210,32 +269,48 @@ public:
         return *this;
     }
 
-    /// @brief Destroys the HashSet and all its elements.
+    /**
+     * @brief Destroys the HashSet and all its elements.
+     */
     ~HashSet() noexcept {
         do_destroy_storage();
     }
 
-    /// @brief Creates an empty HashSet with a specific allocator.
+    /**
+     * @brief Creates an empty HashSet with a specific allocator.
+     * @param alloc Pointer to the allocator.
+     * @return A new empty HashSet instance.
+     * @pre @p alloc must not be null.
+     */
     static HashSet with_allocator(Allocator *alloc) noexcept {
+        FR_ASSERT(alloc, "Allocator must not be null");
         return HashSet(alloc);
     }
 
-    /// @brief Returns the number of elements currently in the set.
+    /**
+     * @brief Returns the number of elements currently in the set.
+     */
     USize load() const noexcept {
         return m_load;
     }
 
-    /// @brief Returns the total number of slots available in the current storage.
+    /**
+     * @brief Returns the total number of slots available in the current storage.
+     */
     USize capacity() const noexcept {
         return m_capacity;
     }
 
-    /// @brief Checks if the set is empty.
+    /**
+     * @brief Checks if the set is empty.
+     */
     bool is_empty() const noexcept {
         return m_load == 0;
     }
 
-    /// @brief Returns an iterator to the first element.
+    /**
+     * @brief Returns an iterator to the first element.
+     */
     Iter begin() const noexcept {
         if (m_capacity == 0) {
             return end();
@@ -244,7 +319,9 @@ public:
         return Iter(m_ctrls, m_slots);
     }
 
-    /// @brief Returns an iterator to the element following the last element.
+    /**
+     * @brief Returns an iterator to the element following the last element.
+     */
     Iter end() const noexcept {
         if (m_capacity == 0) {
             return Iter(nullptr, nullptr);
@@ -253,43 +330,74 @@ public:
         return Iter(m_ctrls + m_capacity, m_slots + m_capacity);
     }
 
-    /// @brief Constant iterator entry point.
+    /**
+     * @brief Constant iterator entry point.
+     */
     Iter cbegin() const noexcept {
         return begin();
     }
 
-    /// @brief Constant iterator end point.
+    /**
+     * @brief Constant iterator end point.
+     */
     Iter cend() const noexcept {
         return end();
     }
 
-    /// @brief Returns the maximum number of elements before a rehash is triggered.
+    /**
+     * @brief Returns the maximum number of elements before a rehash is triggered.
+     */
     USize max_load() const noexcept {
         return (m_capacity * 7) / 8;
     }
 
-    /// @brief Checks if a key exists in the set. O(1) average.
+    /**
+     * @brief Checks if a key exists in the set.
+     * @param key The key to search for.
+     * @return True if the key is present.
+     */
     bool contains(const Key &key) const noexcept {
         return do_find_idx(key) != -1;
     }
 
-    /// @brief Inserts a copy of the key. Returns false if already exists. May trigger growth.
+    /**
+     * @brief Inserts a copy of the key.
+     * @param key The key to insert.
+     * @return True if the key was inserted, false if it already exists.
+     * @note May trigger a rehash/growth.
+     */
     bool insert(const Key &key) {
         return do_insert(key);
     }
 
-    /// @brief Inserts a key by moving it. Returns false if already exists. May trigger growth.
+    /**
+     * @brief Inserts a key by moving it.
+     * @param key The key to move.
+     * @return True if the key was inserted, false if it already exists.
+     * @note May trigger a rehash/growth.
+     */
     bool insert(Key &&key) {
         return do_insert(std::move(key));
     }
 
-    /// @brief Constructs a key in-place. Returns false if already exists. May trigger growth.
+    /**
+     * @brief Constructs a key in-place.
+     * @tparam Args Constructor argument types.
+     * @param args Arguments for the key constructor.
+     * @return True if the key was inserted, false if it already exists.
+     * @note May trigger a rehash/growth.
+     */
     template <typename... Args>
     bool emplace(Args &&...args) {
         return do_insert(Key(std::forward<Args>(args)...));
     }
 
-    /// @brief Removes a key. Returns false if not found. Leaves a tombstone.
+    /**
+     * @brief Removes a key.
+     * @param key The key to remove.
+     * @return True if the key was found and removed, false otherwise.
+     * @note Leaves a tombstone in the removed slot.
+     */
     bool remove(const Key &key) noexcept {
         std::ptrdiff_t idx = do_find_idx(key);
         if (idx == -1) {
@@ -303,7 +411,9 @@ public:
         return true;
     }
 
-    /// @brief Removes all elements without deallocating storage. Resets tombstones.
+    /**
+     * @brief Removes all elements without deallocating storage.
+     */
     void clear() noexcept {
         for (USize i = 0; i < m_capacity; ++i) {
             if (m_ctrls[i].is_occupied()) {
@@ -393,7 +503,7 @@ private:
 
     void do_grow(USize new_capacity) noexcept {
         FR_ASSERT(new_capacity > m_capacity, "New capacity has to be greater than the old one");
-        FR_ASSERT(impl::is_pow2(new_capacity), "Capacity must be a power of two");
+        FR_ASSERT(math::is_pow2(new_capacity), "Capacity must be a power of two");
 
         USize old_capacity = m_capacity;
         Slot *old_slots = m_slots;

@@ -1,6 +1,6 @@
 # Core test suite
 
-set(CORE_TEST_SOURCES
+set(TEST_CORE_SOURCES
     "main.cpp"
     "allocator.cpp"
     "dynamic_array.cpp"
@@ -13,9 +13,9 @@ set(CORE_TEST_SOURCES
     "hash_map.cpp"
 )
 
-add_executable(farfocel_core_tests ${CORE_TEST_SOURCES})
+add_executable(farfocel_test_core ${TEST_CORE_SOURCES})
 
-target_link_libraries(farfocel_core_tests 
+target_link_libraries(farfocel_test_core
     PRIVATE 
         engine 
         farfocel_compiler_options 
@@ -23,4 +23,4 @@ target_link_libraries(farfocel_core_tests
 )
 
 include(CTest)
-add_test(NAME core_tests COMMAND farfocel_core_tests)
+add_test(NAME test_core COMMAND farfocel_test_core)
