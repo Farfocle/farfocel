@@ -75,13 +75,12 @@ public:
     /**
      * @brief Access item at index I (0 or 1).
      *
-     * @detail Uses C++23 explicit object parameters to perfectly forward the access
-     * regardless of whether the pair is a reference, const, or an rvalue.
+     * @tparam I Index to access.
+     * @return Reference to the element.
      */
     template <USize I>
     constexpr auto &&at(this auto &&self) noexcept {
-        FR_STATIC_ASSERT(I < 2,
-                         "fr::Pair::at<USize I>(this auto &&self) -> Index (I) out of bounds");
+        FR_STATIC_ASSERT(I < 2, "index out of bounds");
 
         if constexpr (I == 0) {
             return std::forward_like<decltype(self)>(self.m_first);

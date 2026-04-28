@@ -169,7 +169,7 @@ inline constexpr U64 HASH_SEED = 0xa0761d6478bd642f;
  * @pre @p ptr must be non-null if @p len > 0.
  */
 inline Hash hash_bytes(const void *ptr, USize len) noexcept {
-    FR_ASSERT(len == 0 || ptr != nullptr, "fr::hash_bytes: ptr must not be null if len > 0");
+    FR_ASSERT(len == 0 || ptr != nullptr, "pointer must be non-null if size is non-zero");
 
     U64 h = HASH_SEED;
     const U8 *data = static_cast<const U8 *>(ptr);

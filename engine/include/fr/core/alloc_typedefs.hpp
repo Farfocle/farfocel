@@ -10,41 +10,57 @@
 
 namespace fr {
 
-/// @brief Action requested by an out-of-memory handler.
+/**
+ * @brief Action requested by an out-of-memory handler.
+ */
 enum class OOMHandlerAction : U8 { Fail, Retry };
 
 /**
  * @brief Out-of-memory callback.
+ *
  * @param sz Allocation size in bytes.
  * @param alignment Alignment in bytes.
  * @return Action to perform (Fail or Retry).
  */
 using OOMHandler = OOMHandlerAction (*)(USize sz, USize alignment) noexcept;
 
-/// @brief Ownership inspection result for debug tooling.
+/**
+ * @brief Ownership inspection result for debug tooling.
+ */
 enum class OwnershipResult : U8 {
-    /// @brief Allocator owns this pointer.
+    /**
+     * @brief Allocator owns this pointer.
+     */
     Owns,
 
-    /// @brief Allocator does NOT own this pointer.
+    /**
+     * @brief Allocator does NOT own this pointer.
+     */
     DoesNotOwn,
 
-    /// @brief Allocator cannot determine ownership of this pointer. Often the case when dealing
-    /// with general purpose heap allocators.
+    /**
+     * @brief Allocator cannot determine ownership of this pointer.
+     *
+     * Often the case when dealing with general purpose heap allocators.
+     */
     Unknown,
 };
 
-/// @brief Recored allocator action for debugging.
-enum class AllocatorAction : U8 {
+/**
+ * @brief Recorded allocator action for debugging.
+ */
+enum class AllocAction : U8 {
     Allocate,
     Reallocate,
     Deallocate,
 };
 
-/// @brief Recorded allocation frame for debugging.
-struct AllocationFrame {
+/**
+ * @brief Recorded allocation frame for debugging.
+ */
+struct AllocFrame {
     U64 timestamp{0};
-    AllocatorAction action{AllocatorAction::Allocate};
+    AllocAction action{AllocAction::Allocate};
     void *prev_pointer{nullptr};
     void *next_pointer{nullptr};
     USize prev_size{0};

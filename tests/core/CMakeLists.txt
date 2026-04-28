@@ -2,7 +2,7 @@
 
 set(TEST_CORE_SOURCES
     "main.cpp"
-    "allocator.cpp"
+    "alloc.cpp"
     "dynamic_array.cpp"
     "optional.cpp"
     "pair.cpp"

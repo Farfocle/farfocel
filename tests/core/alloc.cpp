@@ -8,17 +8,17 @@
 
 #include <doctest.h>
 
-#include "fr/core/allocation_stack.hpp"
-#include "fr/core/allocator.hpp"
-#include "fr/core/arena_allocator.hpp"
-#include "fr/core/block_allocator.hpp"
+#include "fr/core/alloc.hpp"
+#include "fr/core/alloc_tracer.hpp"
+#include "fr/core/arena_alloc.hpp"
+#include "fr/core/block_alloc.hpp"
 #include "fr/core/globals.hpp"
-#include "fr/core/malloc_allocator.hpp"
+#include "fr/core/malloc_alloc.hpp"
 
 namespace fr {
 
 TEST_CASE("NewDeleteAllocator - Basic") {
-    Allocator *alloc = globals::get_new_delete_allocator();
+    Alloc *alloc = globals::get_new_delete_allocator();
     CHECK(alloc != nullptr);
 
     // Test basic allocation
@@ -34,7 +34,7 @@ TEST_CASE("NewDeleteAllocator - Basic") {
 }
 
 TEST_CASE("MallocAllocator - Basic") {
-    Allocator *alloc = globals::get_malloc_allocator();
+    Alloc *alloc = globals::get_malloc_allocator();
     CHECK(alloc != nullptr);
 
     // Test basic allocation
@@ -50,7 +50,7 @@ TEST_CASE("MallocAllocator - Basic") {
 }
 
 TEST_CASE("MallocAllocator - Reallocate") {
-    Allocator *alloc = globals::get_malloc_allocator();
+    Alloc *alloc = globals::get_malloc_allocator();
 
     void *ptr = alloc->allocate(1024, 8);
     std::memset(ptr, 0xAA, 1024);
@@ -72,7 +72,7 @@ TEST_CASE("MallocAllocator - Reallocate") {
 
 TEST_CASE("ArenaAllocator - Basic") {
     U8 backing[128] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
 
     void *ptr = arena.allocate(16, 8);
     CHECK(ptr != nullptr);
@@ -83,13 +83,13 @@ TEST_CASE("ArenaAllocator - Basic") {
 
 TEST_CASE("ArenaAllocator - Custom Tag") {
     U8 backing[64] = {};
-    ArenaAllocator arena(backing, sizeof(backing), "MyArena");
+    ArenaAlloc arena(backing, sizeof(backing), "MyArena");
     CHECK(std::strcmp(arena.tag(), "ArenaAllocator: MyArena") == 0);
 }
 
 TEST_CASE("ArenaAllocator - Exhaustion And Reset") {
     U8 backing[64] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
 
     void *a = arena.allocate(24, 8);
     CHECK(a != nullptr);
@@ -106,7 +106,7 @@ TEST_CASE("ArenaAllocator - Exhaustion And Reset") {
 
 TEST_CASE("ArenaAllocator - Reallocate Last Block") {
     U8 backing[128] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
 
     void *ptr = arena.allocate(16, 8);
     REQUIRE(ptr != nullptr);
@@ -126,7 +126,7 @@ TEST_CASE("ArenaAllocator - Reallocate Last Block") {
 
 TEST_CASE("ArenaAllocator - Reallocate Non-Last Block") {
     U8 backing[128] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
 
     void *ptr1 = arena.allocate(16, 8);
     void *ptr2 = arena.allocate(16, 8);
@@ -153,7 +153,7 @@ TEST_CASE("ArenaAllocator - Reallocate Non-Last Block") {
 
 TEST_CASE("ArenaAllocator - Reallocate Fails") {
     U8 backing[64] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
 
     void *ptr = arena.allocate(32, 8);
     REQUIRE(ptr != nullptr);
@@ -173,7 +173,7 @@ TEST_CASE("ArenaAllocator - Reallocate Fails") {
 
 TEST_CASE("ArenaAllocator - Ownership and Tags") {
     U8 backing[64] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
     U8 other_buffer[64] = {};
 
     CHECK(arena.owns(nullptr) == OwnershipResult::DoesNotOwn);
@@ -195,7 +195,7 @@ TEST_CASE("ArenaAllocator - Alignment Handling") {
     USize aligned_addr = (addr + 63) & ~63;
     USize offset = aligned_addr - addr;
 
-    ArenaAllocator arena(backing + offset, 256 - offset);
+    ArenaAlloc arena(backing + offset, 256 - offset);
 
     void *p1 = arena.allocate(1, 1);
     CHECK(p1 != nullptr);
@@ -211,7 +211,7 @@ TEST_CASE("ArenaAllocator - Alignment Handling") {
 
 TEST_CASE("BlockAllocator - Basic") {
     U8 backing[128] = {};
-    BlockAllocator pool(backing, sizeof(backing), 32, "MyPool");
+    BlockAlloc pool(backing, sizeof(backing), 32, "MyPool");
 
     CHECK(pool.block_size() == 32);
     CHECK(pool.total_blocks() == 4);
@@ -237,7 +237,7 @@ TEST_CASE("BlockAllocator - Basic") {
 
 TEST_CASE("BlockAllocator - Exhaustion") {
     U8 backing[64] = {};
-    BlockAllocator pool(backing, sizeof(backing), 32);
+    BlockAlloc pool(backing, sizeof(backing), 32);
 
     void *p1 = pool.allocate(32, 8);
     void *p2 = pool.allocate(32, 8);
@@ -254,7 +254,7 @@ TEST_CASE("BlockAllocator - Exhaustion") {
 
 TEST_CASE("BlockAllocator - Reallocate") {
     U8 backing[64] = {};
-    BlockAllocator pool(backing, sizeof(backing), 32);
+    BlockAlloc pool(backing, sizeof(backing), 32);
 
     void *p1 = pool.allocate(16, 8);
     std::memset(p1, 0xDE, 16);
@@ -270,7 +270,7 @@ TEST_CASE("BlockAllocator - Reallocate") {
 
 TEST_CASE("BlockAllocator - Reset") {
     U8 backing[64] = {};
-    BlockAllocator pool(backing, sizeof(backing), 32);
+    BlockAlloc pool(backing, sizeof(backing), 32);
 
     void *p1 = pool.allocate(32, 8);
     void *p2 = pool.allocate(32, 8);
@@ -284,7 +284,7 @@ TEST_CASE("BlockAllocator - Reset") {
     CHECK(p3 != nullptr);
 }
 
-class FailAllocator final : public Allocator {
+class FailAllocator final : public Alloc {
 public:
     U32 call_count = 0;
 
@@ -354,8 +354,8 @@ TEST_CASE("OOM Handler Layer") {
 }
 
 TEST_CASE("Default Allocator Management") {
-    Allocator *original = globals::get_default_allocator();
-    MallocAllocator my_alloc;
+    Alloc *original = globals::get_default_allocator();
+    MallocAlloc my_alloc;
 
     globals::set_default_allocator(&my_alloc);
     CHECK(globals::get_default_allocator() == &my_alloc);
@@ -365,16 +365,16 @@ TEST_CASE("Default Allocator Management") {
 }
 
 TEST_CASE("Allocation Debug Stack Management") {
-    AllocationStack stack(16);
-    AllocationStack *original = globals::get_allocation_stack();
+    AllocTracer stack(16);
+    AllocTracer *original = globals::get_allocation_stack();
 
-    AllocationStack *previous = globals::set_allocation_stack(&stack);
+    AllocTracer *previous = globals::set_allocation_stack(&stack);
     CHECK(previous == original);
     CHECK(globals::get_allocation_stack() == &stack);
 
-    stack.record(AllocationFrame{
+    stack.record(AllocFrame{
         .timestamp = 1,
-        .action = AllocatorAction::Allocate,
+        .action = AllocAction::Allocate,
         .prev_pointer = nullptr,
         .next_pointer = reinterpret_cast<void *>(0x1),
         .prev_size = 0,

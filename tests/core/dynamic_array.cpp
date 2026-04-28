@@ -9,7 +9,7 @@ struct Lifecycle {
     S32 value;
     bool *moved_from = nullptr;
 
-    Lifecycle(int v = 0)
+    Lifecycle(S32 v = 0)
         : value(v) {
         alive_count++;
     }

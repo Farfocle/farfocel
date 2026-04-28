@@ -157,17 +157,19 @@ public:
 
     /**
      * @brief Access element at index without bounds checking.
-     * @param idx Index of the element to access.
-     * @return Reference to the element at @p idx.
-     * @pre @p idx < size().
+     *
+     * @param idx Index of the element.
+     * @return Reference to the element.
+     * @pre idx < size().
      */
     T &operator[](USize idx) const noexcept {
-        FR_ASSERT(idx < m_size, "Index out of bounds");
+        FR_ASSERT(idx < m_size, "index out of bounds");
         return m_data[idx];
     }
 
     /**
      * @brief Number of elements in the slice.
+     *
      * @return Current size.
      */
     USize size() const noexcept {
@@ -176,7 +178,8 @@ public:
 
     /**
      * @brief Pointer to the underlying data.
-     * @return Raw pointer to the beginning of the view.
+     *
+     * @return Raw pointer.
      */
     T *data() const noexcept {
         return m_data;
@@ -184,6 +187,7 @@ public:
 
     /**
      * @brief Check if the slice is empty.
+     *
      * @return True if size is 0.
      */
     bool is_empty() const noexcept {
@@ -196,7 +200,8 @@ public:
 
     /**
      * @brief Create a constant slice view over the entire range.
-     * @return A constant Slice covering the same range.
+     *
+     * @return Constant Slice.
      */
     Slice<const std::remove_const_t<T>> slice() const noexcept {
         return do_slice_self();
@@ -204,7 +209,8 @@ public:
 
     /**
      * @brief Create a mutable slice view over the entire range.
-     * @return A mutable Slice covering the same range.
+     *
+     * @return Mutable Slice.
      * @note Only available if T is not const.
      */
     Slice<T> slice_mut() noexcept
@@ -215,10 +221,11 @@ public:
 
     /**
      * @brief Create a constant sub-slice view.
+     *
      * @param from Start index (inclusive).
      * @param to End index (inclusive).
-     * @return A constant Slice covering the range [from, to].
-     * @pre @p from <= @p to < size().
+     * @return Constant sub-slice.
+     * @pre from <= to < size().
      */
     Slice<const std::remove_const_t<T>> slice(USize from, USize to) const noexcept {
         return do_slice_bound(from, to);
@@ -226,11 +233,10 @@ public:
 
     /**
      * @brief Create a mutable sub-slice view.
+     *
      * @param from Start index (inclusive).
      * @param to End index (inclusive).
-     * @return A mutable Slice covering the range [from, to].
-     * @pre @p from <= @p to < size().
-     * @note Only available if T is not const.
+     * @return Mutable sub-slice.
      */
     Slice<T> slice_mut(USize from, USize to) const noexcept
         requires(!std::is_const_v<T>)
@@ -239,21 +245,20 @@ public:
     }
 
     /**
-     * @brief Create a constant sub-slice view starting from a specific index.
-     * @param from Start index (inclusive).
-     * @return A constant Slice covering [from, size()).
-     * @pre @p from < size() or (from == 0 && size() == 0).
+     * @brief Create a constant sub-slice starting from an index.
+     *
+     * @param from Start index.
+     * @return Constant sub-slice.
      */
     Slice<const std::remove_const_t<T>> slice_from(USize from) const noexcept {
         return do_slice_from(from);
     }
 
     /**
-     * @brief Create a mutable sub-slice view starting from a specific index.
-     * @param from Start index (inclusive).
-     * @return A mutable Slice covering [from, size()).
-     * @pre @p from < size() or (from == 0 && size() == 0).
-     * @note Only available if T is not const.
+     * @brief Create a mutable sub-slice starting from an index.
+     *
+     * @param from Start index.
+     * @return Mutable sub-slice.
      */
     Slice<T> slice_mut_from(USize from) const noexcept
         requires(!std::is_const_v<T>)
@@ -262,21 +267,20 @@ public:
     }
 
     /**
-     * @brief Create a constant sub-slice view up to a specific index.
-     * @param to End index (inclusive).
-     * @return A constant Slice covering [0, to].
-     * @pre @p to < size().
+     * @brief Create a constant sub-slice up to an index.
+     *
+     * @param to End index.
+     * @return Constant sub-slice.
      */
     Slice<const std::remove_const_t<T>> slice_to(USize to) const noexcept {
         return do_slice_to(to);
     }
 
     /**
-     * @brief Create a mutable sub-slice view up to a specific index.
-     * @param to End index (inclusive).
-     * @return A mutable Slice covering [0, to].
-     * @pre @p to < size().
-     * @note Only available if T is not const.
+     * @brief Create a mutable sub-slice up to an index.
+     *
+     * @param to End index.
+     * @return Mutable sub-slice.
      */
     Slice<T> slice_mut_to(USize to) const noexcept
         requires(!std::is_const_v<T>)
@@ -285,29 +289,49 @@ public:
     }
 
 private:
-    /// @brief Internal helper to create a slice of the full range.
+    /**
+     * @brief Internal helper to create a slice of the full range.
+     *
+     * @return Slice covering full range.
+     */
     inline Slice do_slice_self() const noexcept {
         return Slice(m_data, m_size);
     }
 
-    /// @brief Internal helper to create a bounded sub-slice.
+    /**
+     * @brief Internal helper to create a bounded sub-slice.
+     *
+     * @param from Start index.
+     * @param to End index.
+     * @return Bounded sub-slice.
+     */
     inline Slice do_slice_bound(USize from, USize to) const noexcept {
-        FR_ASSERT(from < m_size, "Start index out of bounds");
-        FR_ASSERT(to < m_size, "End index out of bounds");
-        FR_ASSERT(from <= to, "Start index must be less than or equal to end index");
+        FR_ASSERT(from < m_size, "start index out of bounds");
+        FR_ASSERT(to < m_size, "end index out of bounds");
+        FR_ASSERT(from <= to, "invalid range");
 
         return Slice(m_data + from, to - from + 1);
     }
 
-    /// @brief Internal helper to create a sub-slice starting from @p from.
+    /**
+     * @brief Internal helper to create a sub-slice starting from from.
+     *
+     * @param from Start index.
+     * @return Sub-slice from index.
+     */
     inline Slice do_slice_from(USize from) const noexcept {
-        FR_ASSERT(from < m_size || (from == 0 && m_size == 0), "Start index out of bounds");
+        FR_ASSERT(from < m_size || (from == 0 && m_size == 0), "index out of bounds");
         return Slice(m_data + from, m_size - from);
     }
 
-    /// @brief Internal helper to create a sub-slice ending at @p to.
+    /**
+     * @brief Internal helper to create a sub-slice ending at to.
+     *
+     * @param to End index.
+     * @return Sub-slice up to index.
+     */
     inline Slice do_slice_to(USize to) const noexcept {
-        FR_ASSERT(to < m_size, "End index out of bounds");
+        FR_ASSERT(to < m_size, "index out of bounds");
         return Slice(m_data, to + 1);
     }
 

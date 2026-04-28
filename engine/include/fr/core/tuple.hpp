@@ -113,8 +113,7 @@ public:
      */
     template <USize I>
     constexpr auto &&at(this auto &&self) noexcept {
-        FR_STATIC_ASSERT(I < sizeof...(Ts),
-                         "fr::Tuple::at<USize I>(this auto &&self) -> Index (I) out of bounds");
+        FR_STATIC_ASSERT(I < sizeof...(Ts), "index out of bounds");
 
         using ItemType = impl::pick_t<I, Ts...>;
         using LeafType = impl::TupleLeaf<I, ItemType>;
@@ -133,8 +132,7 @@ public:
                 (std::is_invocable_v<
                      F, decltype(std::forward_like<decltype(self)>(self).template at<Is>())> &&
                  ...),
-                "fr::Tuple::each(F &&f): Callback must be invocable with each element of the "
-                "tuple.");
+                "callback not invocable");
             (f(std::forward_like<decltype(self)>(self).template at<Is>()), ...);
         }(std::index_sequence_for<Ts...>{});
     }
@@ -151,14 +149,12 @@ public:
                 (std::is_invocable_v<
                      F, decltype(std::forward_like<decltype(self)>(self).template at<Is>())> &&
                  ...),
-                "fr::Tuple::map(F &&f): Callback must be invocable with each element of the "
-                "tuple.");
+                "callback not invocable");
             FR_STATIC_ASSERT(
                 (!std::is_void_v<std::invoke_result_t<
                      F, decltype(std::forward_like<decltype(self)>(self).template at<Is>())>> &&
                  ...),
-                "fr::Tuple::map(F &&f): Callback must return a non-void value for each element of "
-                "the tuple.");
+                "callback returns void");
             return fr::Tuple(f(std::forward_like<decltype(self)>(self).template at<Is>())...);
         }(std::index_sequence_for<Ts...>{});
     }
@@ -169,20 +165,19 @@ public:
 
     /// @brief Returns the first item in the tuple.
     constexpr auto &&first(this auto &&self) noexcept {
-        FR_STATIC_ASSERT(sizeof...(Ts) > 0, "fr::Tuple::first(): Tuple must not be empty.");
+        FR_STATIC_ASSERT(sizeof...(Ts) > 0, "empty tuple");
         return std::forward_like<decltype(self)>(self).template at<0>();
     }
 
     /// @brief Returns the second item in the tuple.
     constexpr auto &&second(this auto &&self) noexcept {
-        FR_STATIC_ASSERT(sizeof...(Ts) > 1,
-                         "fr::Tuple::second(): Tuple must have at least two elements.");
+        FR_STATIC_ASSERT(sizeof...(Ts) > 1, "tuple too small");
         return std::forward_like<decltype(self)>(self).template at<1>();
     }
 
     /// @brief Returns the last item in the tuple.
     constexpr auto &&last(this auto &&self) noexcept {
-        FR_STATIC_ASSERT(sizeof...(Ts) > 0, "fr::Tuple::last(): Tuple must not be empty.");
+        FR_STATIC_ASSERT(sizeof...(Ts) > 0, "empty tuple");
         return std::forward_like<decltype(self)>(self).template at<sizeof...(Ts) - 1>();
     }
 

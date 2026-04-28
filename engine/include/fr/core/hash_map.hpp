@@ -12,7 +12,7 @@
 #include <type_traits>
 #include <utility>
 
-#include "fr/core/allocator.hpp"
+#include "fr/core/alloc.hpp"
 #include "fr/core/globals.hpp"
 #include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
@@ -191,9 +191,10 @@ public:
 
     /**
      * @brief Constructs an empty HashMap using a specific allocator.
+     *
      * @param alloc Pointer to the allocator.
      */
-    explicit HashMap(Allocator *alloc) noexcept
+    explicit HashMap(Alloc *alloc) noexcept
         : m_alloc(alloc) {
     }
 
@@ -275,12 +276,13 @@ public:
 
     /**
      * @brief Creates an empty HashMap with a specific allocator.
+     *
      * @param alloc Pointer to the allocator.
      * @return A new empty HashMap instance.
-     * @pre @p alloc must not be null.
+     * @pre alloc must not be null.
      */
-    static HashMap with_allocator(Allocator *alloc) noexcept {
-        FR_ASSERT(alloc, "Allocator must not be null");
+    static HashMap with_allocator(Alloc *alloc) noexcept {
+        FR_ASSERT(alloc, "allocator must be non-null");
         return HashMap(alloc);
     }
 
@@ -494,7 +496,7 @@ public:
             }
         }
 
-        FR_ASSERT(target_idx != -1, "HashMap: Failed to find insertion slot for operator[]");
+        FR_ASSERT(target_idx != -1, "hash map overflow");
         USize target = static_cast<USize>(target_idx);
 
         m_ctrls[target].value = h2;
@@ -569,7 +571,7 @@ private:
             }
         }
 
-        FR_ASSERT(first_free != -1, "HashMap: Failed to find insertion slot");
+        FR_ASSERT(first_free != -1, "hash map overflow");
         USize target = static_cast<USize>(first_free);
 
         m_ctrls[target].value = h2;
@@ -582,8 +584,8 @@ private:
     }
 
     void do_grow(USize new_capacity) noexcept {
-        FR_ASSERT(new_capacity > m_capacity, "New capacity has to be greater than the old one");
-        FR_ASSERT(math::is_pow2(new_capacity), "Capacity must be a power of two");
+        FR_ASSERT(new_capacity > m_capacity, "capacity must grow");
+        FR_ASSERT(math::is_pow2(new_capacity), "capacity must be power of two");
 
         USize old_capacity = m_capacity;
         Slot *old_slots = m_slots;
@@ -673,7 +675,7 @@ private:
         return sizeof(Slot) * capacity;
     }
 
-    Allocator *m_alloc{globals::get_default_allocator()};
+    Alloc *m_alloc{globals::get_default_allocator()};
     USize m_capacity{0};
     USize m_load{0};
     Slot *m_slots{nullptr};

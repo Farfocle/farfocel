@@ -14,7 +14,7 @@
 #include <type_traits>
 #include <utility>
 
-#include "fr/core/allocator.hpp"
+#include "fr/core/alloc.hpp"
 #include "fr/core/globals.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
@@ -30,11 +30,10 @@ namespace fr {
  * slice views, fast push/pop, and both ordered and unordered removal.
  * @note All operations assume that T is nothrow constructible/destructible.
  */
-
 template <typename T>
 class DynamicArray {
 private:
-    Allocator *m_allocator{globals::get_default_allocator()};
+    Alloc *m_alloc{globals::get_default_allocator()};
     T *m_data{nullptr};
     USize m_size{0};
     USize m_capacity{0};
@@ -58,20 +57,21 @@ public:
 
     /**
      * @brief Construct an empty array.
+     *
      * @note Does not allocate any memory initially.
      */
     DynamicArray() noexcept = default;
 
     /**
      * @brief Construct an array from an initializer list.
+     *
      * @param list Initializer list of elements to copy into the array.
-     * @pre @p T must be nothrow copy constructible.
+     * @pre T must be nothrow copy constructible.
      * @note Allocates memory to fit all elements in @p list.
      */
     DynamicArray(std::initializer_list<T> list) noexcept {
-        FR_STATIC_ASSERT(
-            (std::is_nothrow_copy_constructible_v<T>),
-            "T must be nothrow copy constructible to use initializer_list constructor");
+        FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
+                         "T must be nothrow copy constructible");
         do_grow_if_needed(list.size());
 
         for (const T &item : list) {
@@ -81,8 +81,9 @@ public:
 
     /**
      * @brief Copy-construct a new array from an existing one.
+     *
      * @param other The array to copy from.
-     * @pre @p T must be nothrow copy constructible.
+     * @pre T must be nothrow copy constructible.
      * @note Performs a deep copy of all elements. Uses the same allocator as @p other.
      */
     DynamicArray(const DynamicArray &other) noexcept {
@@ -90,9 +91,10 @@ public:
     }
 
     /**
-     * @brief Move-construct a new array, stealing storage from @p other.
+     * @brief Move-construct a new array, stealing storage from other.
+     *
      * @param other The array to move from.
-     * @note After this operation, @p other will be empty and have no storage.
+     * @note After this operation, other will be empty and have no storage.
      */
     DynamicArray(DynamicArray &&other) noexcept {
         do_move_from(std::move(other));
@@ -100,19 +102,22 @@ public:
 
     /**
      * @brief Construct an empty array with a specific allocator.
-     * @param allocator Pointer to the allocator to use.
-     * @note Public constructor to allow explicitly setting the allocator.
+     *
+     * @param alloc Pointer to the allocator to use.
+     * @pre alloc must be non-null.
      */
-    explicit DynamicArray(Allocator *allocator) noexcept
-        : m_allocator(allocator) {
+    explicit DynamicArray(Alloc *alloc) noexcept
+        : m_alloc(alloc) {
+        FR_ASSERT(alloc, "allocator must be non-null");
     }
 
     /**
-     * @brief Copy-assign elements from @p other.
+     * @brief Copy-assign elements from other.
+     *
      * @param other The array to copy from.
      * @return Reference to this array.
-     * @pre @p T must be nothrow copy constructible and copy assignable.
-     * @note Performs a deep copy. If @p other has more elements than this array's capacity,
+     * @pre T must be nothrow copy constructible and copy assignable.
+     * @note Performs a deep copy. If other has more elements than this array's capacity,
      *       new storage will be allocated. The allocator is NOT propagated.
      */
     DynamicArray &operator=(const DynamicArray &other) noexcept {
@@ -125,10 +130,11 @@ public:
     }
 
     /**
-     * @brief Move-assign storage from @p other.
+     * @brief Move-assign storage from other.
+     *
      * @param other The array to move from.
      * @return Reference to this array.
-     * @note Existing elements are destroyed and current storage is freed before stealing from @p
+     * @note Existing elements are destroyed and current storage is freed before stealing from
      * other.
      */
     DynamicArray &operator=(DynamicArray &&other) noexcept {
@@ -157,17 +163,18 @@ public:
 
     /**
      * @brief Create an empty array using a specific allocator.
-     * @param allocator Pointer to the allocator to use for all future allocations.
+     *
+     * @param alloc Pointer to the allocator to use for all future allocations.
      * @return A new empty DynamicArray instance.
-     * @pre @p allocator must not be null.
+     * @pre alloc must be non-null.
      */
-    [[nodiscard]] static DynamicArray with_allocator(Allocator *allocator) noexcept {
-        FR_ASSERT(allocator, "Allocator must not be null");
-        return DynamicArray(allocator);
+    [[nodiscard]] static DynamicArray with_allocator(Alloc *alloc) noexcept {
+        return DynamicArray(alloc);
     }
 
     /**
      * @brief Create an empty array with an initial reserved capacity using the default allocator.
+     *
      * @param capacity The number of elements to reserve space for.
      * @return A new empty DynamicArray instance.
      */
@@ -177,15 +184,14 @@ public:
 
     /**
      * @brief Create an empty array with an initial reserved capacity using a specific allocator.
+     *
      * @param capacity The number of elements to reserve space for.
-     * @param allocator Pointer to the allocator to use.
+     * @param alloc Pointer to the allocator to use.
      * @return A new empty DynamicArray instance.
-     * @pre @p allocator must not be null.
+     * @pre alloc must be non-null.
      */
-    [[nodiscard]] static DynamicArray with_capacity(USize capacity, Allocator *allocator) noexcept {
-        FR_ASSERT(allocator, "Allocator must not be null");
-
-        DynamicArray darr(allocator);
+    [[nodiscard]] static DynamicArray with_capacity(USize capacity, Alloc *alloc) noexcept {
+        DynamicArray darr(alloc);
         darr.do_reserve(capacity);
 
         return darr;
@@ -193,9 +199,10 @@ public:
 
     /**
      * @brief Create an array of a specific size with default-initialized elements.
+     *
      * @param size Initial number of elements.
      * @return A new DynamicArray instance of the requested size.
-     * @pre @p T must be nothrow default constructible.
+     * @pre T must be nothrow default constructible.
      */
     [[nodiscard]] static DynamicArray with_size(USize size) noexcept {
         return with_size(size, globals::get_default_allocator());
@@ -203,16 +210,15 @@ public:
 
     /**
      * @brief Create an array of a specific size using a specific allocator.
+     *
      * @param size Initial number of elements.
-     * @param allocator Pointer to the allocator to use.
+     * @param alloc Pointer to the allocator to use.
      * @return A new DynamicArray instance of the requested size.
-     * @pre @p allocator must not be null.
-     * @pre @p T must be nothrow default constructible.
+     * @pre alloc must be non-null.
+     * @pre T must be nothrow default constructible.
      */
-    [[nodiscard]] static DynamicArray with_size(USize size, Allocator *allocator) noexcept {
-        FR_ASSERT(allocator, "Allocator must not be null");
-
-        DynamicArray arr(allocator);
+    [[nodiscard]] static DynamicArray with_size(USize size, Alloc *alloc) noexcept {
+        DynamicArray arr(alloc);
         arr.do_reserve(size);
 
         mem::default_init_range(arr.m_data, size);
@@ -223,10 +229,11 @@ public:
 
     /**
      * @brief Create an array filled with a specific value.
+     *
      * @param size Number of elements.
      * @param fill Value to copy into every element.
-     * @return A new DynamicArray instance filled with @p fill.
-     * @pre @p T must be nothrow copy constructible.
+     * @return A new DynamicArray instance filled with fill.
+     * @pre T must be nothrow copy constructible.
      */
     [[nodiscard]] static DynamicArray filled_with(USize size, const T &fill) noexcept {
         return filled_with(size, fill, globals::get_default_allocator());
@@ -234,20 +241,20 @@ public:
 
     /**
      * @brief Create an array filled with a specific value using a specific allocator.
+     *
      * @param size Number of elements.
-     * @param allocator Pointer to the allocator to use.
      * @param fill Value to copy into every element.
-     * @return A new DynamicArray instance filled with @p fill.
-     * @pre @p allocator must not be null.
-     * @pre @p T must be nothrow copy constructible.
+     * @param alloc Pointer to the allocator to use.
+     * @return A new DynamicArray instance filled with fill.
+     * @pre alloc must be non-null.
+     * @pre T must be nothrow copy constructible.
      */
     [[nodiscard]] static DynamicArray filled_with(USize size, const T &fill,
-                                                  Allocator *allocator) noexcept {
-        FR_ASSERT(allocator, "Allocator must not be null");
+                                                  Alloc *alloc) noexcept {
         FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
-                         "T must be nothrow copy constructible to use filled_with");
+                         "T must be nothrow copy constructible");
 
-        DynamicArray arr(allocator);
+        DynamicArray arr(alloc);
         arr.do_reserve(size);
 
         for (USize i = 0; i < size; ++i) {
@@ -265,6 +272,7 @@ public:
 
     /**
      * @brief Returns an iterator to the first element.
+     *
      * @return Pointer to the first element.
      */
     T *begin() noexcept {
@@ -273,6 +281,7 @@ public:
 
     /**
      * @brief Returns an iterator to the element following the last element.
+     *
      * @return Pointer past the last element.
      */
     T *end() noexcept {
@@ -281,6 +290,7 @@ public:
 
     /**
      * @brief Returns a constant iterator to the first element.
+     *
      * @return Constant pointer to the first element.
      */
     const T *begin() const noexcept {
@@ -289,6 +299,7 @@ public:
 
     /**
      * @brief Returns a constant iterator to the element following the last element.
+     *
      * @return Constant pointer past the last element.
      */
     const T *end() const noexcept {
@@ -297,6 +308,7 @@ public:
 
     /**
      * @brief Returns a constant iterator to the first element.
+     *
      * @return Constant pointer to the first element.
      */
     const T *cbegin() const noexcept {
@@ -305,6 +317,7 @@ public:
 
     /**
      * @brief Returns a constant iterator to the element following the last element.
+     *
      * @return Constant pointer past the last element.
      */
     const T *cend() const noexcept {
@@ -317,68 +330,75 @@ public:
 
     /**
      * @brief Access element at index without bounds checking.
+     *
      * @param idx Index of the element to access.
-     * @return Reference to the element at @p idx.
-     * @pre @p idx < size().
+     * @return Reference to the element at idx.
+     * @pre idx < size().
      */
     T &operator[](USize idx) noexcept {
-        FR_ASSERT(idx < m_size, "Index out of bounds");
+        FR_ASSERT(idx < m_size, "index out of bounds");
         return m_data[idx];
     }
 
     /**
      * @brief Access element at index without bounds checking (const).
+     *
      * @param idx Index of the element to access.
-     * @return Constant reference to the element at @p idx.
-     * @pre @p idx < size().
+     * @return Constant reference to the element at idx.
+     * @pre idx < size().
      */
     const T &operator[](USize idx) const noexcept {
-        FR_ASSERT(idx < m_size, "Index out of bounds");
+        FR_ASSERT(idx < m_size, "index out of bounds");
         return m_data[idx];
     }
 
     /**
      * @brief Access the first element.
+     *
      * @return Reference to the first element.
      * @pre !is_empty().
      */
     T &front() noexcept {
-        FR_ASSERT(!is_empty(), "Cannot access front of an empty array");
+        FR_ASSERT(!is_empty(), "empty array access");
         return m_data[0];
     }
 
     /**
      * @brief Access the first element (const).
+     *
      * @return Constant reference to the first element.
      * @pre !is_empty().
      */
     const T &front() const noexcept {
-        FR_ASSERT(!is_empty(), "Cannot access front of an empty array");
+        FR_ASSERT(!is_empty(), "empty array access");
         return m_data[0];
     }
 
     /**
      * @brief Access the last element.
+     *
      * @return Reference to the last element.
      * @pre !is_empty().
      */
     T &back() noexcept {
-        FR_ASSERT(!is_empty(), "Cannot access back of an empty array");
+        FR_ASSERT(!is_empty(), "empty array access");
         return m_data[m_size - 1];
     }
 
     /**
      * @brief Access the last element (const).
+     *
      * @return Constant reference to the last element.
      * @pre !is_empty().
      */
     const T &back() const noexcept {
-        FR_ASSERT(!is_empty(), "Cannot access back of an empty array");
+        FR_ASSERT(!is_empty(), "empty array access");
         return m_data[m_size - 1];
     }
 
     /**
      * @brief Direct access to the underlying storage.
+     *
      * @return Pointer to the beginning of the internal buffer.
      */
     T *data() noexcept {
@@ -387,6 +407,7 @@ public:
 
     /**
      * @brief Direct access to the underlying storage (const).
+     *
      * @return Constant pointer to the beginning of the internal buffer.
      */
     const T *data() const noexcept {
@@ -399,6 +420,7 @@ public:
 
     /**
      * @brief Create a constant slice view over the entire array.
+     *
      * @return A Slice covering [0, size()).
      */
     Slice<const T> slice() const & noexcept {
@@ -407,6 +429,7 @@ public:
 
     /**
      * @brief Create a mutable slice view over the entire array.
+     *
      * @return A mutable Slice covering [0, size()).
      * @note Only available if T is not const.
      */
@@ -421,10 +444,11 @@ public:
 
     /**
      * @brief Create a constant sub-slice view.
+     *
      * @param from Start index (inclusive).
      * @param to End index (inclusive).
      * @return A Slice covering the range [from, to].
-     * @pre @p from <= @p to < size().
+     * @pre from <= to < size().
      */
     Slice<const T> slice(USize from, USize to) const & noexcept {
         return slice().slice(from, to);
@@ -432,16 +456,17 @@ public:
 
     /**
      * @brief Create a mutable sub-slice view.
+     *
      * @param from Start index (inclusive).
      * @param to End index (inclusive).
      * @return A mutable Slice covering the range [from, to].
-     * @pre @p from <= @p to < size().
+     * @pre from <= to < size().
      * @note Only available if T is not const.
      */
     Slice<T> slice_mut(USize from, USize to) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice_mut(from, to);
+        return slice_mut().slice(from, to);
     }
 
     Slice<const T> slice(USize, USize) const && = delete;
@@ -449,9 +474,10 @@ public:
 
     /**
      * @brief Create a constant slice starting from a specific index.
+     *
      * @param from Start index (inclusive).
      * @return A Slice covering [from, size()).
-     * @pre @p from < size() or (from == 0 && size() == 0).
+     * @pre from < size() or (from == 0 && size() == 0).
      */
     Slice<const T> slice_from(USize from) const & noexcept {
         return slice().slice_from(from);
@@ -459,15 +485,16 @@ public:
 
     /**
      * @brief Create a mutable slice starting from a specific index.
+     *
      * @param from Start index (inclusive).
      * @return A mutable Slice covering [from, size()).
-     * @pre @p from < size() or (from == 0 && size() == 0).
+     * @pre from < size() or (from == 0 && size() == 0).
      * @note Only available if T is not const.
      */
     Slice<T> slice_mut_from(USize from) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice_mut_from(from);
+        return slice_mut().slice_from(from);
     }
 
     Slice<const T> slice_from(USize) const && = delete;
@@ -475,9 +502,10 @@ public:
 
     /**
      * @brief Create a constant slice up to a specific index.
+     *
      * @param to End index (inclusive).
      * @return A Slice covering [0, to].
-     * @pre @p to < size().
+     * @pre to < size().
      */
     Slice<const T> slice_to(USize to) const & noexcept {
         return slice().slice_to(to);
@@ -485,15 +513,16 @@ public:
 
     /**
      * @brief Create a mutable slice up to a specific index.
+     *
      * @param to End index (inclusive).
      * @return A mutable Slice covering [0, to].
-     * @pre @p to < size().
+     * @pre to < size().
      * @note Only available if T is not const.
      */
     Slice<T> slice_mut_to(USize to) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice_mut_to(to);
+        return slice_mut().slice_to(to);
     }
 
     Slice<const T> slice_to(USize) const && = delete;
@@ -505,6 +534,7 @@ public:
 
     /**
      * @brief Get the current number of elements in the array.
+     *
      * @return Current size.
      */
     USize size() const noexcept {
@@ -513,6 +543,7 @@ public:
 
     /**
      * @brief Get the total number of elements that can be held without reallocation.
+     *
      * @return Current capacity.
      */
     USize capacity() const noexcept {
@@ -521,6 +552,7 @@ public:
 
     /**
      * @brief Check if the array contains no elements.
+     *
      * @return True if size is 0.
      */
     bool is_empty() const noexcept {
@@ -529,6 +561,7 @@ public:
 
     /**
      * @brief Check if the array size has reached its capacity.
+     *
      * @return True if size equals capacity.
      */
     bool is_full() const noexcept {
@@ -537,16 +570,18 @@ public:
 
     /**
      * @brief Get the allocator currently associated with this array.
+     *
      * @return Pointer to the allocator.
      */
-    Allocator *allocator() const noexcept {
-        return m_allocator;
+    Alloc *allocator() const noexcept {
+        return m_alloc;
     }
 
     /**
-     * @brief Ensure the array has space for at least @p new_capacity elements.
+     * @brief Ensure the array has space for at least new_capacity elements.
+     *
      * @param new_capacity The minimum desired capacity.
-     * @note If @p new_capacity is less than or equal to current capacity, no action is taken.
+     * @note If new_capacity is less than or equal to current capacity, no action is taken.
      */
     void reserve(USize new_capacity) noexcept {
         if (new_capacity > m_capacity) {
@@ -556,6 +591,7 @@ public:
 
     /**
      * @brief Reduce capacity to match current size.
+     *
      * @note If size is 0, storage may be freed completely.
      */
     void shrink_to_fit() noexcept {
@@ -576,9 +612,10 @@ public:
     // ---------------------------------------------------------
 
     /**
-     * @brief Append a copy of @p value to the end of the array.
+     * @brief Append a copy of value to the end of the array.
+     *
      * @param value The value to copy.
-     * @pre @p T must be nothrow copy constructible.
+     * @pre T must be nothrow copy constructible.
      * @note May trigger a reallocation if the array is full.
      */
     void push_back(const T &value) noexcept {
@@ -586,9 +623,10 @@ public:
     }
 
     /**
-     * @brief Append @p value to the end of the array by moving it.
+     * @brief Append value to the end of the array by moving it.
+     *
      * @param value The value to move.
-     * @pre @p T must be nothrow move constructible.
+     * @pre T must be nothrow move constructible.
      * @note May trigger a reallocation if the array is full.
      */
     void push_back(T &&value) noexcept {
@@ -597,16 +635,17 @@ public:
 
     /**
      * @brief Construct an element in-place at the end of the array.
+     *
      * @tparam Args Argument types for T's constructor.
      * @param args Arguments to pass to T's constructor.
      * @return Reference to the newly created element.
-     * @pre @p T must be nothrow constructible from @p Args.
+     * @pre T must be nothrow constructible from Args.
      * @note May trigger a reallocation if the array is full.
      */
     template <typename... Args>
     T &emplace_back(Args &&...args) noexcept {
         FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
-                         "T must be nothrow constructible from provided arguments");
+                         "T must be nothrow constructible");
 
         do_grow_if_full();
         T *ptr = std::construct_at(m_data + m_size, std::forward<Args>(args)...);
@@ -617,24 +656,26 @@ public:
 
     /**
      * @brief Remove the last element from the array.
+     *
      * @pre !is_empty().
      * @note The removed element is destroyed.
      */
     void pop_back() noexcept {
-        FR_ASSERT(!is_empty(), "Cannot pop from an empty array");
+        FR_ASSERT(!is_empty(), "empty array pop");
 
         --m_size;
         std::destroy_at(m_data + m_size);
     }
 
     /**
-     * @brief Remove an element at @p idx by swapping it with the last element.
+     * @brief Remove an element at idx by swapping it with the last element.
+     *
      * @param idx Index of the element to remove.
-     * @pre @p idx < size().
+     * @pre idx < size().
      * @note This is an O(1) operation but does NOT preserve the relative order of elements.
      */
     void remove_swap(USize idx) noexcept {
-        FR_ASSERT(idx < m_size, "Index out of bounds");
+        FR_ASSERT(idx < m_size, "index out of bounds");
 
         if (idx != m_size - 1) {
             m_data[idx] = std::move(m_data[m_size - 1]);
@@ -644,13 +685,14 @@ public:
     }
 
     /**
-     * @brief Remove an element at @p idx while preserving the order of remaining elements.
+     * @brief Remove an element at idx while preserving the order of remaining elements.
+     *
      * @param idx Index of the element to remove.
-     * @pre @p idx < size().
+     * @pre idx < size().
      * @note This is an O(n) operation as it shifts all subsequent elements to the left.
      */
     void remove_shift(USize idx) noexcept {
-        FR_ASSERT(idx < m_size, "Index out of bounds");
+        FR_ASSERT(idx < m_size, "index out of bounds");
 
         std::destroy_at(m_data + idx);
         mem::shift_range_left(m_data + idx, m_size - idx - 1, 1);
@@ -658,47 +700,50 @@ public:
     }
 
     /**
-     * @brief Insert a copy of @p value at the specified index.
+     * @brief Insert a copy of value at the specified index.
+     *
      * @param idx Index at which to insert.
      * @param value The value to copy.
-     * @pre @p idx <= size().
-     * @pre @p T must be nothrow copy constructible and move constructible.
-     * @note All elements from @p idx onwards are shifted to the right. O(n).
+     * @pre idx <= size().
+     * @pre T must be nothrow copy constructible and move constructible.
+     * @note All elements from idx onwards are shifted to the right. O(n).
      */
     void insert(USize idx, const T &value) noexcept {
         FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T>,
-                         "T must be nothrow copy constructible to insert");
+                         "T must be nothrow copy constructible");
         emplace(idx, value);
     }
 
     /**
-     * @brief Insert @p value at the specified index by moving it.
+     * @brief Insert value at the specified index by moving it.
+     *
      * @param idx Index at which to insert.
      * @param value The value to move.
-     * @pre @p idx <= size().
-     * @pre @p T must be nothrow move constructible.
-     * @note All elements from @p idx onwards are shifted to the right. O(n).
+     * @pre idx <= size().
+     * @pre T must be nothrow move constructible.
+     * @note All elements from idx onwards are shifted to the right. O(n).
      */
     void insert(USize idx, T &&value) noexcept {
         FR_STATIC_ASSERT(std::is_nothrow_move_constructible_v<T>,
-                         "T must be nothrow move constructible to insert");
+                         "T must be nothrow move constructible");
         emplace(idx, std::move(value));
     }
 
     /**
      * @brief Construct an element in-place at the specified index.
+     *
      * @tparam Args Argument types for T's constructor.
      * @param idx Index at which to insert.
      * @param args Arguments to pass to T's constructor.
-     * @pre @p idx <= size().
-     * @pre @p T must be nothrow constructible and move constructible.
-     * @note All elements from @p idx onwards are shifted to the right. O(n).
+     * @pre idx <= size().
+     * @pre T must be nothrow constructible and move constructible.
+     * @note All elements from idx onwards are shifted to the right. O(n).
      */
     template <typename... Args>
     void emplace(USize idx, Args &&...args) noexcept {
         FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
-                         "T must be nothrow constructible to emplace");
-        FR_ASSERT(idx <= m_size, "Index out of bounds");
+                         "T must be nothrow constructible");
+        FR_ASSERT(idx <= m_size, "index out of bounds");
 
         do_grow_if_full();
         mem::shift_range_right(m_data + idx, m_size - idx, 1);
@@ -709,6 +754,7 @@ public:
 
     /**
      * @brief Destroy all elements in the array, setting size to 0.
+     *
      * @note Capacity remains unchanged.
      */
     void clear() noexcept {
@@ -718,13 +764,14 @@ public:
 
     /**
      * @brief Shrink the array to a new size by destroying trailing elements.
+     *
      * @param new_size The new size of the array.
-     * @pre @p new_size <= size().
+     * @pre new_size <= size().
      * @note Trailing elements are destroyed, but capacity remains unchanged.
      */
     void shrink(USize new_size) noexcept {
         FR_STATIC_ASSERT(std::is_nothrow_destructible_v<T>, "T must be nothrow destructible");
-        FR_ASSERT(new_size <= m_size, "New size cannot be larger than current size");
+        FR_ASSERT(new_size <= m_size, "shrink size overflow");
 
         mem::destroy_range(m_data + new_size, m_size - new_size);
         m_size = new_size;
@@ -732,9 +779,10 @@ public:
 
     /**
      * @brief Grow the array to a new size by default-initializing new elements.
+     *
      * @param new_size The target size.
-     * @pre @p T must be nothrow default constructible.
-     * @note If @p new_size > size(), new elements are default-constructed. Reallocates if needed.
+     * @pre T must be nothrow default constructible.
+     * @note If new_size > size(), new elements are default-constructed. Reallocates if needed.
      */
     void grow_default(USize new_size) noexcept {
         do_grow_if_needed(new_size);
@@ -744,11 +792,12 @@ public:
     }
 
     /**
-     * @brief Grow the array to a new size by filling new elements with @p fill.
+     * @brief Grow the array to a new size by filling new elements with fill.
+     *
      * @param new_size The target size.
      * @param fill The value to copy into new elements.
-     * @pre @p T must be nothrow copy constructible.
-     * @note If @p new_size > size(), new elements are copy-constructed from @p fill.
+     * @pre T must be nothrow copy constructible.
+     * @note If new_size > size(), new elements are copy-constructed from fill.
      */
     void grow_with(USize new_size, const T &fill) noexcept {
         do_grow_if_needed(new_size);
@@ -767,6 +816,7 @@ private:
 
     /**
      * @brief Calculate the next capacity based on a growth factor.
+     *
      * @param current The current capacity.
      * @return The suggested next capacity.
      */
@@ -778,14 +828,15 @@ private:
 
     /**
      * @brief Perform an initial allocation or a reallocation to expand capacity.
+     *
      * @param new_capacity The new capacity to reserve.
-     * @pre @p new_capacity > m_capacity.
+     * @pre new_capacity > m_capacity.
      */
     void do_reserve(USize new_capacity) noexcept {
-        FR_ASSERT(new_capacity > m_capacity, "New capacity must be larger than current");
+        FR_ASSERT(new_capacity > m_capacity, "capacity must grow");
 
         if (!m_data) {
-            m_data = static_cast<T *>(m_allocator->allocate(new_capacity * sizeof(T), alignof(T)));
+            m_data = static_cast<T *>(m_alloc->allocate(new_capacity * sizeof(T), alignof(T)));
             m_capacity = new_capacity;
             return;
         }
@@ -795,22 +846,22 @@ private:
 
     /**
      * @brief Reallocate the buffer to a new capacity.
+     *
      * @param new_capacity The target capacity.
-     * @pre @p new_capacity >= size().
+     * @pre new_capacity >= size().
      * @note Uses trivial relocation if T is trivially copyable.
      */
     void do_reallocate(USize new_capacity) noexcept {
-        FR_ASSERT(new_capacity >= m_size, "New capacity cannot be smaller than size");
+        FR_ASSERT(new_capacity >= m_size, "capacity too small");
 
         // @todo Implement is_trivially_relocatble
         if constexpr (std::is_trivially_copyable<T>::value) {
-            m_data = static_cast<T *>(m_allocator->reallocate(
-                m_data, m_capacity * sizeof(T), new_capacity * sizeof(T), alignof(T)));
+            m_data = static_cast<T *>(m_alloc->reallocate(m_data, m_capacity * sizeof(T),
+                                                          new_capacity * sizeof(T), alignof(T)));
         } else {
-            T *new_data =
-                static_cast<T *>(m_allocator->allocate(new_capacity * sizeof(T), alignof(T)));
+            T *new_data = static_cast<T *>(m_alloc->allocate(new_capacity * sizeof(T), alignof(T)));
             mem::transfer_init_range(m_data, m_size, new_data);
-            m_allocator->deallocate(m_data, m_capacity * sizeof(T), alignof(T));
+            m_alloc->deallocate(m_data, m_capacity * sizeof(T), alignof(T));
             m_data = new_data;
         }
 
@@ -827,7 +878,8 @@ private:
     }
 
     /**
-     * @brief Grows the array if @p required_size exceeds current capacity.
+     * @brief Grows the array if required_size exceeds current capacity.
+     *
      * @param required_size The minimum capacity needed.
      */
     void do_grow_if_needed(USize required_size) noexcept {
@@ -850,19 +902,20 @@ private:
         if (!m_data)
             return;
 
-        m_allocator->deallocate(m_data, m_capacity * sizeof(T), alignof(T));
+        m_alloc->deallocate(m_data, m_capacity * sizeof(T), alignof(T));
         m_data = nullptr;
         m_capacity = 0;
     }
 
     /**
      * @brief Helper for deep copying from another array during construction.
+     *
      * @param other Source array.
      */
     void do_copy_from(const DynamicArray &other) noexcept {
         FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T>, "T must be nothrow copyable");
 
-        m_allocator = other.m_allocator;
+        m_alloc = other.m_alloc;
         if (other.m_size == 0)
             return;
 
@@ -874,12 +927,13 @@ private:
 
     /**
      * @brief Helper for deep copying from another array during assignment.
+     *
      * @param other Source array.
      */
     void do_assign_copy(const DynamicArray &other) noexcept {
         FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T> &&
                              std::is_nothrow_copy_assignable_v<T>,
-                         "T must be nothrow copy constructible and assignable");
+                         "T must be nothrow copyable");
 
         const USize overlap = std::min(m_size, other.m_size);
 
@@ -895,15 +949,15 @@ private:
         }
 
         m_size = other.m_size;
-        // @note Allocator is not propagated on copy assign, only on copy construction.
     }
 
     /**
      * @brief Helper for moving storage from another array.
+     *
      * @param other Source array.
      */
     void do_move_from(DynamicArray &&other) noexcept {
-        m_allocator = other.m_allocator;
+        m_alloc = other.m_alloc;
         m_data = other.m_data;
         m_size = other.m_size;
         m_capacity = other.m_capacity;
@@ -911,7 +965,7 @@ private:
         other.m_data = nullptr;
         other.m_size = 0;
         other.m_capacity = 0;
-        other.m_allocator = globals::get_default_allocator();
+        other.m_alloc = globals::get_default_allocator();
     }
 };
 

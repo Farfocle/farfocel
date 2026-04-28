@@ -10,51 +10,77 @@
 #include <cstdio>
 #include <cstring>
 
-#include "fr/core/allocator.hpp"
+#include "fr/core/alloc.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
 
-/// @brief Non-owning, non-growing arena allocator. This allocator can only exist in a valid,
-/// non-null state.
-class ArenaAllocator final : public Allocator {
+/**
+ * @brief Non-owning, non-growing arena allocator.
+ *
+ * This allocator can only exist in a valid, non-null state.
+ */
+class ArenaAlloc final : public Alloc {
 public:
-    ArenaAllocator(void *buffer, USize buffer_sz, const char *tag = "@noname") noexcept
+    /**
+     * @brief Construct an arena allocator.
+     *
+     * @param buffer Memory buffer to use.
+     * @param buffer_sz Size of the buffer in bytes.
+     * @param tag Custom tag for debugging.
+     */
+    ArenaAlloc(void *buffer, USize buffer_sz, const char *tag = "@noname") noexcept
         : m_buffer(static_cast<Byte *>(buffer)),
           m_buffer_size(buffer_sz),
           m_custom_tag(tag) {
 
-        FR_ASSERT(
-            buffer,
-            "fr::ArenaAllocator(void *buffer, USize buffer_sz, const char *tag = \"@noname\"): "
-            "Buffer must be non-null");
-
-        FR_ASSERT(
-            buffer_sz > 0,
-            "fr::ArenaAllocator(void *buffer, USize buffer_sz, const char *tag = \"@noname\"): "
-            "Buffer size must be non-zero");
+        FR_ASSERT(buffer, "buffer must be non-null");
+        FR_ASSERT(buffer_sz > 0, "size must be non-zero");
 
         std::snprintf(m_full_tag, sizeof(m_full_tag), "ArenaAllocator: %s", m_custom_tag);
     }
 
-    /// @brief Reset the arena to its initial empty state.
+    /**
+     * @brief Reset the arena to its initial empty state.
+     */
     void reset() noexcept {
         m_offset = 0;
     }
 
+    /**
+     * @brief Returns the total capacity of the arena.
+     *
+     * @return Capacity in bytes.
+     */
     [[nodiscard]] USize capacity() const noexcept {
         return m_buffer_size;
     }
 
+    /**
+     * @brief Returns the number of bytes used in the arena.
+     *
+     * @return Used bytes.
+     */
     [[nodiscard]] USize used() const noexcept {
         return m_offset;
     }
 
+    /**
+     * @brief Returns the number of bytes remaining in the arena.
+     *
+     * @return Remaining bytes.
+     */
     [[nodiscard]] USize remaining() const noexcept {
         return m_buffer_size - m_offset;
     }
 
+    /**
+     * @brief Checks if a pointer is owned by this arena.
+     *
+     * @param ptr Pointer to check.
+     * @return Ownership result.
+     */
     OwnershipResult owns(void *ptr) const noexcept override {
         Byte *byte_ptr = static_cast<Byte *>(ptr);
         return (byte_ptr >= m_buffer && byte_ptr < (m_buffer + m_buffer_size))
@@ -62,11 +88,23 @@ public:
                    : OwnershipResult::DoesNotOwn;
     }
 
+    /**
+     * @brief Returns the allocator tag.
+     *
+     * @return Tag string.
+     */
     const char *tag() const noexcept override {
         return m_full_tag;
     }
 
 protected:
+    /**
+     * @brief Internal allocation logic for arena.
+     *
+     * @param sz Size in bytes.
+     * @param alignment Alignment in bytes.
+     * @return Pointer to allocated memory or nullptr.
+     */
     void *do_try_allocate(USize sz, USize alignment) noexcept override {
         alignment = mem::normalize_alignment(alignment);
         USize padding = mem::align_forward_padding(m_buffer + m_offset, alignment);
@@ -82,6 +120,15 @@ protected:
         return result;
     }
 
+    /**
+     * @brief Internal reallocation logic for arena.
+     *
+     * @param ptr Pointer to existing allocation.
+     * @param old_sz Old size in bytes.
+     * @param new_sz New size in bytes.
+     * @param alignment Alignment in bytes.
+     * @return Pointer to reallocated memory or nullptr.
+     */
     void *do_try_reallocate(void *ptr, USize old_sz, USize new_sz,
                             USize alignment) noexcept override {
         alignment = mem::normalize_alignment(alignment);
@@ -128,7 +175,14 @@ protected:
         return new_ptr;
     }
 
-    /// @note Arena allocations are reclaimed via reset(), not individual frees.
+    /**
+     * @brief Internal deallocation logic (no-op for arena).
+     *
+     * @param ptr Pointer to free.
+     * @param sz Size in bytes.
+     * @param alignment Alignment in bytes.
+     * @note Arena allocations are reclaimed via reset(), not individual frees.
+     */
     void do_deallocate(void * /*ptr*/, USize /*sz*/, USize /*alignment*/) noexcept override {
     }
 

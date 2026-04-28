@@ -1,6 +1,6 @@
 #include <print>
 
-#include "fr/core/allocator.hpp"
+#include "fr/core/alloc.hpp"
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/globals.hpp"
 #include "fr/core/tuple.hpp"

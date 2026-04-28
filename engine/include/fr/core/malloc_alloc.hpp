@@ -9,7 +9,7 @@
 
 #include <cstdlib>
 
-#include "fr/core/allocator.hpp"
+#include "fr/core/alloc.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
 
@@ -26,7 +26,7 @@ namespace fr {
  * Supports aligned allocations using platform-specific functions
  * (_aligned_malloc on Windows, posix_memalign on others).
  */
-class MallocAllocator final : public Allocator {
+class MallocAlloc final : public Alloc {
 protected:
     void *do_try_allocate(USize sz, USize alignment) noexcept override {
         if (!mem::is_overaligned(alignment)) [[likely]] {
@@ -57,7 +57,7 @@ protected:
 #if defined(_WIN32)
         return _aligned_realloc(ptr, new_sz, alignment);
 #else
-        return Allocator::do_try_reallocate(ptr, old_sz, new_sz, alignment);
+        return Alloc::do_try_reallocate(ptr, old_sz, new_sz, alignment);
 #endif
     }
 
@@ -74,10 +74,21 @@ protected:
 #endif
     }
 
+    /**
+     * @brief Ownership information is not available for MallocAllocator.
+     *
+     * @param ptr Pointer to check.
+     * @return OwnershipResult::Unknown.
+     */
     OwnershipResult owns(void * /*ptr*/) const noexcept override {
         return OwnershipResult::Unknown;
     }
 
+    /**
+     * @brief Returns the allocator tag.
+     *
+     * @return Tag string.
+     */
     const char *tag() const noexcept override {
         return "MallocAllocator";
     }

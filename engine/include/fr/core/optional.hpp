@@ -279,27 +279,43 @@ public:
         return m_storage.is_nil();
     }
 
-    /// @brief Unwraps the value. Asserts in debug if empty.
+    /**
+     * @brief Unwraps the value. Asserts in debug if empty.
+     *
+     * @return Reference to the value.
+     */
     [[nodiscard]] T &unwrap() noexcept {
-        FR_ASSERT(!is_nil(), "Optional::unwrap() called on empty Optional");
+        FR_ASSERT(!is_nil(), "unwrap on nil");
         return m_storage.get();
     }
 
-    /// @brief Unwraps the value. Asserts in debug if empty.
+    /**
+     * @brief Unwraps the value. Asserts in debug if empty.
+     *
+     * @return Constant reference to the value.
+     */
     [[nodiscard]] const T &unwrap() const noexcept {
-        FR_ASSERT(!is_nil(), "Optional::unwrap() called on empty Optional");
+        FR_ASSERT(!is_nil(), "unwrap on nil");
         return m_storage.get();
     }
 
-    /// @brief Arrow operator — asserted.
+    /**
+     * @brief Arrow operator — asserted.
+     *
+     * @return Pointer to the value.
+     */
     [[nodiscard]] T *operator->() noexcept {
-        FR_ASSERT(!is_nil(), "Optional::operator->() called on empty Optional");
+        FR_ASSERT(!is_nil(), "arrow on nil");
         return &m_storage.get();
     }
 
-    /// @brief Arrow operator — asserted.
+    /**
+     * @brief Arrow operator — asserted.
+     *
+     * @return Constant pointer to the value.
+     */
     [[nodiscard]] const T *operator->() const noexcept {
-        FR_ASSERT(!is_nil(), "Optional::operator->() called on empty Optional");
+        FR_ASSERT(!is_nil(), "arrow on nil");
         return &m_storage.get();
     }
 

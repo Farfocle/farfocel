@@ -7,16 +7,21 @@
 
 #pragma once
 
-/// @brief Macro to detect if the build is in debug mode.
+/**
+ * @brief Macro to detect if the build is in debug mode.
+ */
 #if !defined(NDEBUG)
 #define FR_IS_DEBUG 1
 #else
 #define FR_IS_DEBUG 0
 #endif
 
-/// @brief Runtime assertion macro with a custom message.
-/// @param cond The condition to evaluate.
-/// @param msg A string literal explaining the assertion failure.
+/**
+ * @brief Runtime assertion macro with a custom message.
+ *
+ * @param cond The condition to evaluate.
+ * @param msg A string literal explaining the assertion failure.
+ */
 #if FR_IS_DEBUG
 #include <cassert>
 #define FR_ASSERT(cond, msg) assert((cond) && (msg))
@@ -24,16 +29,24 @@
 #define FR_ASSERT(cond, msg) ((void)0)
 #endif
 
-/// @brief Runtime panic implented as macro with false condition.
-/// @param msg A stirng literal represetning why panic happened.
+/**
+ * @brief Runtime panic implented as macro with false condition.
+ *
+ * @param msg A stirng literal represetning why panic happened.
+ */
 #define FR_PANIC(msg) FR_ASSERT(false, msg)
 
-/// @brief Compile-time assertion macro with a custom message.
-/// @param cond The condition to evaluate at compile-time.
-/// @param msg A string literal explaining the assertion failure.
+/**
+ * @brief Compile-time assertion macro with a custom message.
+ *
+ * @param cond The condition to evaluate at compile-time.
+ * @param msg A string literal explaining the assertion failure.
+ */
 #define FR_STATIC_ASSERT(cond, msg) static_assert((cond), msg)
 
-/// @brief Symbol visibility macros for DLL boundaries and static builds.
+/**
+ * @brief Symbol visibility macros for DLL boundaries and static builds.
+ */
 #if defined(FR_STL_STATIC)
 // Static build: symbols are part of the object files.
 #define FR_API

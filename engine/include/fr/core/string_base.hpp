@@ -24,7 +24,7 @@
 #include <bit>
 #include <cstddef>
 
-#include "fr/core/allocator.hpp"
+#include "fr/core/alloc.hpp"
 #include "fr/core/globals.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
@@ -50,35 +50,34 @@ public:
 
     /**
      * @brief Default constructor
-     * @param allocator Pointer to the allocator to be used in the string when it's a long string
+     * 
+     * @param alloc Pointer to the allocator.
      * @note This sets the type to short string
      */
-    explicit StringBase(fr::Allocator *allocator = fr::globals::get_default_allocator()) noexcept
-        : m_allocator(allocator) {
+    explicit StringBase(fr::Alloc *alloc = fr::globals::get_default_allocator()) noexcept
+        : m_alloc(alloc) {
         m_data.short_string.text[0] = '\0';
         m_data.short_string.space_left = max_short_string_size;
     }
 
-    // Preallocating constructor (useful for loading from file)
-
     /**
      * @brief Preallocating constructor
-     * @param capacity_to_allocate The number or text characters to preallocate space for.
-     * @param allocator Pointer to the allocator to be used in the string when it's a long string.
-     * @note If capacity_to_allocate <= 23 stack allocated short string is used
+     * 
+     * @param capacity_to_allocate Characters to preallocate.
+     * @param alloc Pointer to the allocator.
      */
     explicit StringBase(USize capacity_to_allocate,
-                        fr::Allocator *allocator = fr::globals::get_default_allocator())
-        : m_allocator(allocator) {
+                        fr::Alloc *alloc = fr::globals::get_default_allocator())
+        : m_alloc(alloc) {
         // Short string
         if (capacity_to_allocate <= 23) {
             m_data.short_string.text[0] = '\0';
             m_data.short_string.space_left = max_short_string_size;
         } else { // Long string
-            m_allocator = allocator;
+            m_alloc = alloc;
             // +1 ensures the space for '\0'
             m_data.long_string.ptr =
-                static_cast<char *>(m_allocator->allocate(capacity_to_allocate + 1, alignof(char)));
+                static_cast<char *>(m_alloc->allocate(capacity_to_allocate + 1, alignof(char)));
             // capacity is stored without null terminator
             m_data.long_string.capacity = capacity_to_allocate;
             m_data.long_string.size = 0;
@@ -89,32 +88,19 @@ public:
     }
 
     /**
-     * @brief Acquiring constructor (acquired full ownership of an existing allocated memory of a
-     * string)
-     * @param ptr Pointer to the allocated string memory.
-     * @param size Length of the text without null-terminator.
-     * @param allocated_capacity Size of the allocated memory with null-terminator
-     * @param acquire_memory_t Tag to invoke this constructor
-     * @param allocator The allocator that was used to allocate the string memory
-     * @pre allocated_capacity >= size + 1
-     * @pre ptr[size] == '\0'
+     * @brief Acquiring constructor
+     * 
+     * @param ptr Allocated string memory.
+     * @param size Length without null-terminator.
+     * @param allocated_capacity Memory size with null-terminator.
+     * @param alloc The allocator used.
      */
     StringBase(char *ptr, USize size, USize allocated_capacity, acquire_memory_t,
-               fr::Allocator *allocator = fr::globals::get_default_allocator())
-        : m_allocator(allocator) {
-        FR_ASSERT(size > 0,
-                  "fr_stl_str::StringBase(char *data, USize size, USize allocated_capacity, "
-                  "acquire_memory_t): given size parameter must be greater than 0.");
-
-        FR_ASSERT(
-            allocated_capacity >= size + 1,
-            "fr_stl_str::StringBase(char *data, USize size, USize allocated_capacity, "
-            "acquire_memory_t): allocated_capacity parameter must be greater than the size + 1");
-
-        FR_ASSERT(ptr[size] == '\0',
-                  "fr_stl_str::StringBase(char *data, USize size, USize allocated_capacity, "
-                  "acquire_memory_t): given string data must contain a null terminator character "
-                  "at the end");
+               fr::Alloc *alloc = fr::globals::get_default_allocator())
+        : m_alloc(alloc) {
+        FR_ASSERT(size > 0, "size must be non-zero");
+        FR_ASSERT(allocated_capacity >= size + 1, "capacity too small");
+        FR_ASSERT(ptr[size] == '\0', "missing null terminator");
 
         m_data.long_string.ptr = ptr;
         m_data.long_string.size = size;
@@ -125,10 +111,11 @@ public:
 
     /**
      * @brief Copy constructor
-     * @param other Copied string
+     * 
+     * @param other Copied string.
      */
     StringBase(const StringBase &other)
-        : m_allocator(other.m_allocator) {
+        : m_alloc(other.m_alloc) {
         if (other.is_short_string()) {
             // using long_string is faster than short_string, as we just care about copying the
             // 24-bytes of the union and not the details
@@ -136,7 +123,7 @@ public:
             set_flag_to_short_string();
         } else {
             const auto alloc_size = (other.m_data.long_string.size + 1) * sizeof(char);
-            char *new_ptr = static_cast<char *>(m_allocator->allocate(alloc_size, alignof(char)));
+            char *new_ptr = static_cast<char *>(m_alloc->allocate(alloc_size, alignof(char)));
 
             fr::mem::copy_init_range(other.m_data.long_string.ptr, alloc_size, new_ptr);
 
@@ -150,11 +137,11 @@ public:
 
     /**
      * @brief Move constructor
-     * @param other Moved string
-     * @note Moved string is emptied but still valid afterwards.
+     * 
+     * @param other Moved string.
      */
     StringBase(StringBase &&other) noexcept
-        : m_allocator(other.m_allocator) {
+        : m_alloc(other.m_alloc) {
         m_data.long_string = other.m_data.long_string;
 
         other.m_data.short_string.text[0] = '\0';
@@ -168,7 +155,7 @@ public:
         if (!is_short_string()) {
             // retrieve long_string's capacity from the two last bits
             USize capacity = m_data.long_string.capacity & extract_capacity_mask;
-            m_allocator->deallocate(m_data.long_string.ptr, capacity + 1, alignof(char));
+            m_alloc->deallocate(m_data.long_string.ptr, capacity + 1, alignof(char));
         }
     }
 
@@ -183,22 +170,22 @@ public:
     ////////
 
     /**
-     * @brief Swaps this string with the other string - its contents and allocators
-     * @param other Swapped string
+     * @brief Swaps this string with the other string.
+     * 
+     * @param other Swapped string.
      */
     void swap(StringBase &other) noexcept {
         auto const t = m_data.long_string;
         m_data.long_string = other.m_data.long_string;
         other.m_data.long_string = t;
 
-        std::swap(m_allocator, other.m_allocator);
+        std::swap(m_alloc, other.m_alloc);
     }
 
     /**
      * @brief Gets the current text size
-     * @return Number of characters in the string without null-terminator
-     * @note It uses a very cool trick I found in folly to avoid conditional branches via the use of
-     * CMOV instruction
+     * 
+     * @return Number of characters without null-terminator.
      */
     [[nodiscard]] USize size() const noexcept {
         // if string is short, final_size constains garbage
@@ -223,8 +210,9 @@ public:
     }
 
     /**
-     * @brief Gets the maximum amount of characters the string can hold without null-terminator
-     * @return The capacity of characters left in the string
+     * @brief Gets the maximum characters without null-terminator.
+     * 
+     * @return Capacity in characters.
      */
     [[nodiscard]] USize capacity() const noexcept {
         if (is_short_string()) [[likely]]
@@ -235,8 +223,9 @@ public:
     }
 
     /**
-     * @brief Gets a pointer to the raw string data
-     * @return Pointer to the character array WITH null-terminator
+     * @brief Gets a pointer to the raw string data.
+     * 
+     * @return Pointer with null-terminator.
      */
     [[nodiscard]] char *data() noexcept {
         if (is_short_string()) [[likely]]
@@ -246,8 +235,9 @@ public:
     }
 
     /**
-     * @brief Gets a read-only pointer to the raw string data
-     * @return Pointer to the character array WITH null-terminator
+     * @brief Gets a read-only pointer to the raw string data.
+     * 
+     * @return Constant pointer with null-terminator.
      */
     [[nodiscard]] const char *data() const noexcept {
         if (is_short_string()) [[likely]]
@@ -257,22 +247,18 @@ public:
     }
 
     /**
-     * @brief Gets a read-only C-style string
-     * @return Pointer to the character array WITH null-terminator
+     * @brief Gets a read-only C-style string.
+     * 
+     * @return Constant C-string.
      */
     [[nodiscard]] const char *c_str() const noexcept {
         return data();
     }
 
-    // Check the last two bits of the string object (the flag) and deduce if the string is short
-    // (<=23 characters long) or long
-
     /**
-     * @brief Checks if its a short string and is utilizing the fast stack buffer (SSO).
-     * @return True if stack allocated, false if on the heap
-     * @note The maximum amount of characters without null-terminator that can fit onto the SSO
-     * buffer is 23. The check is done by checking the last two bits of the most significant byte of
-     * the object. If they are 00, then that means the string is using SSO.
+     * @brief Checks if its a short string (SSO).
+     * 
+     * @return True if using stack buffer.
      */
     [[nodiscard]] bool is_short_string() const noexcept {
         const U8 *bytes = reinterpret_cast<const U8 *>(&m_data);
@@ -284,8 +270,9 @@ public:
     }
 
     /**
-     * @brief Reserves space for the specified amount of characters without null-terminator
-     * @param new_capacity The requested capacity
+     * @brief Reserves space for characters.
+     * 
+     * @param new_capacity Requested capacity.
      */
     void reserve(USize new_capacity) {
         if (new_capacity <= capacity())
@@ -295,7 +282,7 @@ public:
 
         // STACK -> HEAP
         if (is_short_string()) {
-            char *new_ptr = static_cast<char *>(m_allocator->allocate(alloc_size, alignof(char)));
+            char *new_ptr = static_cast<char *>(m_alloc->allocate(alloc_size, alignof(char)));
 
             USize current_size = get_short_string_size();
 
@@ -310,7 +297,7 @@ public:
         } else { // HEAP -> BIGGER HEAP
             USize old_alloc_size = capacity() + 1;
 
-            m_data.long_string.ptr = static_cast<char *>(m_allocator->reallocate(
+            m_data.long_string.ptr = static_cast<char *>(m_alloc->reallocate(
                 m_data.long_string.ptr, old_alloc_size, alloc_size, alignof(char)));
             m_data.long_string.capacity = new_capacity;
 
@@ -320,10 +307,6 @@ public:
 
     /**
      * @brief Frees unused allocated capacity.
-     * @details If the string is stored on the heap (long string) but its size is <= 23 (without
-     * null-terminator), it will be deallocated and moved onto the SSO stack buffer and it will
-     * become a short string.
-     *
      */
     void shrink_to_fit() {
         if (is_short_string()) {
@@ -339,7 +322,7 @@ public:
             char buf[max_short_string_size + 1];
             fr::mem::copy_raw_range(old_ptr, current_size + 1, buf);
 
-            m_allocator->deallocate(old_ptr, current_capacity + 1, alignof(char));
+            m_alloc->deallocate(old_ptr, current_capacity + 1, alignof(char));
 
             fr::mem::copy_raw_range(buf, current_size + 1, reinterpret_cast<char *>(&m_data));
             m_data.short_string.space_left = static_cast<U8>(max_short_string_size - current_size);
@@ -350,7 +333,7 @@ public:
             USize alloc_size = current_size + 1;
             USize old_alloc_size = current_capacity + 1;
 
-            char *new_ptr = static_cast<char *>(m_allocator->reallocate(
+            char *new_ptr = static_cast<char *>(m_alloc->reallocate(
                 m_data.long_string.ptr, old_alloc_size, alloc_size, alignof(char)));
 
             m_data.long_string.ptr = new_ptr;
@@ -360,35 +343,34 @@ public:
     }
 
     /**
-     * @brief Retrieves the size of short string directly
-     * @pre is_short_string() must be true, otherwise it will assert
+     * @brief Retrieves the size of short string directly.
+     * 
+     * @return Size in characters.
      */
     [[nodiscard]] USize get_short_string_size() const noexcept {
-        FR_ASSERT(is_short_string(),
-                  "fr_stl_str::StringBase get_small_string_size(): must be short string");
+        FR_ASSERT(is_short_string(), "not a short string");
 
         return max_short_string_size - m_data.short_string.space_left;
     }
 
     /**
-     * @brief Retrieves the size of long string directly
-     * @pre is_short_string() must be false, otherwise it will assert
+     * @brief Retrieves the size of long string directly.
+     * 
+     * @return Size in characters.
      */
     [[nodiscard]] USize get_long_string_size() const noexcept {
-        FR_ASSERT(!is_short_string(),
-                  "fr_stl_str::StringBase get_long_string_size(): must be long string");
+        FR_ASSERT(!is_short_string(), "not a long string");
         return m_data.long_string.size;
     }
 
 protected:
     /**
-     * @brief Updates the size of the string
-     * @param new_size New characteer count without null-terminator
-     * @pre new_size <= capacity(), otherwise asssert
+     * @brief Updates the size of the string.
+     * 
+     * @param new_size New characteer count.
      */
     void set_size(USize new_size) noexcept {
-        FR_ASSERT(new_size <= capacity(), "fr_stl_str::StringBase void set_size(USize new_size) "
-                                          "new size cannot be bigger than current capacity");
+        FR_ASSERT(new_size <= capacity(), "size overflow");
 
         if (is_short_string()) {
             if (new_size < max_short_string_size)
@@ -405,8 +387,7 @@ protected:
 
 private:
     /**
-     * @brief Sets the string flag to short string
-     * @details Clears the two most significant bits of the last byte to 00
+     * @brief Sets the string flag to short string.
      */
     void set_flag_to_short_string() noexcept {
         // Get the bytes of the union
@@ -416,8 +397,7 @@ private:
     }
 
     /**
-     * @brief Sets the string flag to long string
-     * @details Clears the two most significant bits of the last byte to 10
+     * @brief Sets the string flag to long string.
      */
     void set_flag_to_long_string() noexcept {
         U8 *bytes = reinterpret_cast<U8 *>(&m_data);
@@ -428,7 +408,7 @@ private:
 
     FR_STATIC_ASSERT(
         std::endian::native == std::endian::little,
-        "fr_stl_str::StringBase assumes Little-Endian architecture for SSO bitmasking");
+        "SSO bitmasking requires little-endian architecture");
 
     static constexpr USize max_short_string_size = 23;
 
@@ -436,7 +416,7 @@ private:
     static const USize extract_capacity_mask =
         ~(USize(extract_flag_mask) << (8 * (sizeof(USize) - 1)));
 
-    fr::Allocator *m_allocator;
+    fr::Alloc *m_alloc;
     union {
         struct {
             char text[max_short_string_size];

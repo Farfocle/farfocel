@@ -200,60 +200,70 @@ public:
     ////////
 
     /**
-     * @brief Character accessor
-     * @param pos Position of the character
-     * @return Character at specified position
+     * @brief Character accessor.
+     *
+     * @param pos Position of the character.
+     * @return Character at position.
+     * @pre pos < size().
      */
     char &operator[](USize pos) {
-        FR_ASSERT(pos < size(),
-                  "fr::String operator[](USize pos): pos must be <= than string size");
+        FR_ASSERT(pos < size(), "index out of bounds");
         return data()[pos];
     }
 
     /**
-     * @brief Read-only character accessor
-     * @param pos Position of the character
-     * @return Constant reference to the character at specified position
+     * @brief Read-only character accessor.
+     *
+     * @param pos Position of the character.
+     * @return Constant reference to character.
+     * @pre pos <= size().
      */
     const char &operator[](USize pos) const {
-        FR_ASSERT(pos <= size(),
-                  "fr::String operator[](USize pos): pos must be <= than string size");
+        FR_ASSERT(pos <= size(), "index out of bounds");
         return data()[pos];
     }
 
     /**
-     * @brief Returns the first character
-     * @return First character
+     * @brief Returns the first character.
+     *
+     * @return First character.
+     * @pre !is_empty().
      */
     char &front() {
-        FR_ASSERT(size() > 0, "fr::String front(): string must not be empty");
+        FR_ASSERT(size() > 0, "empty string access");
         return data()[0];
     }
 
     /**
-     * @brief Returns the read-only first character
-     * @return Constant reference to the first character
+     * @brief Returns the read-only first character.
+     *
+     * @return Constant first character.
+     * @pre !is_empty().
      */
     const char &front() const {
-        FR_ASSERT(size() > 0, "fr::String front(): string must not be empty");
+        FR_ASSERT(size() > 0, "empty string access");
         return data()[0];
     }
 
     /**
-     * @brief Returns the last character
-     * @return Last character
+     * @brief Returns the last character.
+     *
+     * @return Last character.
+     * @pre !is_empty().
      */
     char &back() {
-        FR_ASSERT(size() > 0, "fr::String back(): string must not be empty");
+        FR_ASSERT(size() > 0, "empty string access");
         return data()[size() - 1];
     }
 
     /**
-     * @brief Returns the read-only last character
-     * @return Constant reference to the last character
+     * @brief Returns the read-only last character.
+     *
+     * @return Constant last character.
+     * @pre !is_empty().
      */
     const char &back() const {
-        FR_ASSERT(size() > 0, "fr::String back(): string must not be empty");
+        FR_ASSERT(size() > 0, "empty string access");
         return data()[size() - 1];
     }
 
@@ -303,9 +313,11 @@ public:
         set_size(size() + 1);
     }
 
-    /// @brief Removes a single character from the end of the string
+    /**
+     * @brief Removes a single character from the end.
+     */
     void pop_back() {
-        FR_ASSERT(size() > 0, "fr::String pop_back(): string must not be empty");
+        FR_ASSERT(size() > 0, "empty string access");
 
         data()[size() - 1] = '\0';
         set_size(size() - 1);
@@ -359,10 +371,11 @@ public:
     ////////
 
     /**
-     * @brief Inserts a string view at a specified position
-     * @param pos The position at which to insert
-     * @param str The inserted view
-     * @return Modified string
+     * @brief Inserts a string view at a position.
+     *
+     * @param pos Position to insert.
+     * @param str View to insert.
+     * @return Reference to modified string.
      */
     String &insert(USize pos, StringView str) {
         USize add_count = str.size();
@@ -374,7 +387,7 @@ public:
             return insert(pos, temp.view());
         }
 
-        FR_ASSERT(pos <= size(), "fr::String insert(): pos is out of bounds");
+        FR_ASSERT(pos <= size(), "index out of bounds");
         USize current_size = size();
 
         prepare_append(add_count);
@@ -388,21 +401,19 @@ public:
     }
 
     /**
-     * @brief Inserts repeated characters at a specified position
-     * @param pos The position at which to insert
-     * @param count The amount of characters to add
-     * @param c The added character
-     * @return Modified string
+     * @brief Inserts repeated characters.
+     *
+     * @param pos Position to insert.
+     * @param count Number of characters.
+     * @param c Character to repeat.
+     * @return Reference to modified string.
      */
     String &insert(USize pos, USize count, char c) {
         if (count == 0)
             return *this;
 
-        FR_ASSERT(pos <= size(),
-                  "fr::String insert(USize pos, USize count, char c): pos is out of bounds");
-        FR_ASSERT(
-            c != '\0',
-            "fr::String insert(USize pos, USize count, char c): c must not be null-terminator");
+        FR_ASSERT(pos <= size(), "index out of bounds");
+        FR_ASSERT(c != '\0', "invalid character");
         USize add_count = count;
         USize current_size = size();
 
@@ -417,17 +428,16 @@ public:
     }
 
     /**
-     * @brief Erases characters starting at a specified position
-     * @param pos The position at which to start erasing
-     * @param count The amount of characters to erase
-     * @return Modified string
+     * @brief Erases characters.
+     *
+     * @param pos Start position.
+     * @param count Number of characters.
+     * @return Reference to modified string.
      */
     String &erase(USize pos = 0, USize count = npos) {
         USize current_size = size();
 
-        FR_ASSERT(pos <= current_size,
-                  "fr::String erase(USize pos = 0, USize count = npos): pos cannot "
-                  "be greater than string's size");
+        FR_ASSERT(pos <= current_size, "index out of bounds");
 
         if (count == npos || pos + count > current_size) {
             count = current_size - pos;
@@ -446,12 +456,12 @@ public:
     }
 
     /**
-     * @brief Replaces the specified portion of the string
-     * @param pos Position at which to replace the string
-     * @param str The new string view to replace with
-     * @param count The amount of characters to replace
-     * @return Modified string
-     * @details If count = npos then everything to the right of pos is replaces
+     * @brief Replaces a portion of the string.
+     *
+     * @param pos Position to replace.
+     * @param str View to replace with.
+     * @param count Number of characters to replace.
+     * @return Reference to modified string.
      */
     String &replace(USize pos, StringView str, USize count = npos) {
         if (is_aliased(str)) {
@@ -461,9 +471,7 @@ public:
 
         USize current_size = size();
 
-        FR_ASSERT(pos <= current_size,
-                  "fr::String replace(USize pos, StringView str, USize count): pos cannot "
-                  "be greater than string's size");
+        FR_ASSERT(pos <= current_size, "index out of bounds");
 
         if (count == npos || pos + count > current_size) {
             count = current_size - pos;
@@ -777,8 +785,9 @@ public:
     }
 
     /**
-     * @brief returns Non-owning view of the string's current data
-     * @return StringView object pointing to the internal buffer
+     * @brief returns Non-owning view of the string's current data.
+     *
+     * @return StringView object pointing to the internal buffer.
      */
     StringView view() const noexcept {
         return StringView(data(), size());
@@ -786,6 +795,8 @@ public:
 
     /**
      * @brief Returns a hash of the string.
+     *
+     * @return Hash object.
      */
     Hash hash() const noexcept {
         return view().hash();
@@ -793,8 +804,10 @@ public:
 
 private:
     /**
-     * @brief Checks if the view is made of this particular string
-     * @return True if string_view is made of this string, false if not
+     * @brief Checks if the view is made of this particular string.
+     *
+     * @param str View to check.
+     * @return True if string_view is made of this string.
      */
     bool is_aliased(StringView str) const noexcept {
         const char *d = data();
@@ -802,9 +815,10 @@ private:
     }
 
     /**
-     * @brief Prepares string for an influx of new characters
-     * @param additional_count Amount of new characters
-     * @return The address at which to add new characters
+     * @brief Prepares string for an influx of new characters.
+     *
+     * @param additional_count Amount of new characters.
+     * @return Address to add new characters.
      */
     char *prepare_append(USize additional_count) {
         USize cap = capacity();

@@ -1,4 +1,5 @@
 #include <doctest.h>
+
 #include "fr/core/hash_map.hpp"
 #include "fr/core/string.hpp"
 
@@ -78,7 +79,7 @@ TEST_CASE("HashMap - Iteration and Structured Bindings") {
     USize count = 0;
 
     for (auto pair : map) {
-        auto& [k, v] = pair;
+        auto &[k, v] = pair;
         key_sum += k;
         val_sum += v;
         count++;
@@ -87,13 +88,13 @@ TEST_CASE("HashMap - Iteration and Structured Bindings") {
     CHECK(count == 3);
     CHECK(key_sum == 6);
     CHECK(val_sum == 60);
-    
+
     // Mutable iteration
     for (auto pair : map) {
-        auto& [k, v] = pair;
+        auto &[k, v] = pair;
         v += 1;
     }
-    
+
     CHECK(*map.find(1).unwrap() == 11);
 }
 
