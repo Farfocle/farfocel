@@ -4,10 +4,11 @@
  *
  * @brief This is a window into the characters of a string that does not hold its own memory.
  * This must be used instead of referenced fr::string
- *
  */
+
 #pragma once
 
+#include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
 
@@ -165,6 +166,13 @@ public:
         USize a_count = (count > max_count) ? max_count : count;
 
         return StringView(m_data + pos, a_count);
+    }
+
+    /**
+     * @brief Returns a hash of the current view.
+     */
+    [[nodiscard]] constexpr Hash hash() const noexcept {
+        return hash_bytes(m_data, m_size);
     }
 
     /**

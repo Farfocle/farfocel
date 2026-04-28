@@ -19,7 +19,6 @@
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/slice.hpp"
-#include "fr/core/storage.hpp"
 
 namespace fr {
 
@@ -31,12 +30,18 @@ namespace fr {
  * slice views, fast push/pop, and both ordered and unordered removal.
  * @note All operations assume that T is nothrow constructible/destructible.
  */
+
 template <typename T>
 class DynamicArray {
 private:
-    mem::Storage<T> m_storage{mem::Storage<T>::empty()};
+    Allocator *m_allocator{globals::get_default_allocator()};
+    T *m_data{nullptr};
+    USize m_size{0};
+    USize m_capacity{0};
 
 public:
+    static constexpr USize growth_multiplier_percent = 150;
+
     using iterator = T *;
     using const_iterator = const T *;
     using value_type = T;
@@ -99,12 +104,7 @@ public:
      * @note Public constructor to allow explicitly setting the allocator.
      */
     explicit DynamicArray(Allocator *allocator) noexcept
-        : m_storage{
-              .allocator = allocator,
-              .data = nullptr,
-              .size = 0,
-              .capacity = 0,
-          } {
+        : m_allocator(allocator) {
     }
 
     /**
@@ -215,8 +215,8 @@ public:
         DynamicArray arr(allocator);
         arr.do_reserve(size);
 
-        mem::default_init_range(arr.m_storage.data, size);
-        arr.m_storage.size = size;
+        mem::default_init_range(arr.m_data, size);
+        arr.m_size = size;
 
         return arr;
     }
@@ -251,10 +251,10 @@ public:
         arr.do_reserve(size);
 
         for (USize i = 0; i < size; ++i) {
-            std::construct_at(arr.m_storage.data + i, fill);
+            std::construct_at(arr.m_data + i, fill);
         }
 
-        arr.m_storage.size = size;
+        arr.m_size = size;
 
         return arr;
     }
@@ -268,7 +268,7 @@ public:
      * @return Pointer to the first element.
      */
     T *begin() noexcept {
-        return m_storage.data;
+        return m_data;
     }
 
     /**
@@ -276,7 +276,7 @@ public:
      * @return Pointer past the last element.
      */
     T *end() noexcept {
-        return m_storage.data + m_storage.size;
+        return m_data + m_size;
     }
 
     /**
@@ -284,7 +284,7 @@ public:
      * @return Constant pointer to the first element.
      */
     const T *begin() const noexcept {
-        return m_storage.data;
+        return m_data;
     }
 
     /**
@@ -292,7 +292,7 @@ public:
      * @return Constant pointer past the last element.
      */
     const T *end() const noexcept {
-        return m_storage.data + m_storage.size;
+        return m_data + m_size;
     }
 
     /**
@@ -300,7 +300,7 @@ public:
      * @return Constant pointer to the first element.
      */
     const T *cbegin() const noexcept {
-        return m_storage.data;
+        return m_data;
     }
 
     /**
@@ -308,7 +308,7 @@ public:
      * @return Constant pointer past the last element.
      */
     const T *cend() const noexcept {
-        return m_storage.data + m_storage.size;
+        return m_data + m_size;
     }
 
     // ---------------------------------------------------------
@@ -322,8 +322,8 @@ public:
      * @pre @p idx < size().
      */
     T &operator[](USize idx) noexcept {
-        FR_ASSERT(idx < m_storage.size, "Index out of bounds");
-        return m_storage.data[idx];
+        FR_ASSERT(idx < m_size, "Index out of bounds");
+        return m_data[idx];
     }
 
     /**
@@ -333,8 +333,8 @@ public:
      * @pre @p idx < size().
      */
     const T &operator[](USize idx) const noexcept {
-        FR_ASSERT(idx < m_storage.size, "Index out of bounds");
-        return m_storage.data[idx];
+        FR_ASSERT(idx < m_size, "Index out of bounds");
+        return m_data[idx];
     }
 
     /**
@@ -344,7 +344,7 @@ public:
      */
     T &front() noexcept {
         FR_ASSERT(!is_empty(), "Cannot access front of an empty array");
-        return m_storage.data[0];
+        return m_data[0];
     }
 
     /**
@@ -354,7 +354,7 @@ public:
      */
     const T &front() const noexcept {
         FR_ASSERT(!is_empty(), "Cannot access front of an empty array");
-        return m_storage.data[0];
+        return m_data[0];
     }
 
     /**
@@ -364,7 +364,7 @@ public:
      */
     T &back() noexcept {
         FR_ASSERT(!is_empty(), "Cannot access back of an empty array");
-        return m_storage.data[m_storage.size - 1];
+        return m_data[m_size - 1];
     }
 
     /**
@@ -374,7 +374,7 @@ public:
      */
     const T &back() const noexcept {
         FR_ASSERT(!is_empty(), "Cannot access back of an empty array");
-        return m_storage.data[m_storage.size - 1];
+        return m_data[m_size - 1];
     }
 
     /**
@@ -382,7 +382,7 @@ public:
      * @return Pointer to the beginning of the internal buffer.
      */
     T *data() noexcept {
-        return m_storage.data;
+        return m_data;
     }
 
     /**
@@ -390,7 +390,7 @@ public:
      * @return Constant pointer to the beginning of the internal buffer.
      */
     const T *data() const noexcept {
-        return m_storage.data;
+        return m_data;
     }
 
     // ---------------------------------------------------------
@@ -402,7 +402,7 @@ public:
      * @return A Slice covering [0, size()).
      */
     Slice<const T> slice() const & noexcept {
-        return Slice<const T>(m_storage.data, m_storage.size);
+        return Slice<const T>(m_data, m_size);
     }
 
     /**
@@ -413,7 +413,7 @@ public:
     Slice<T> slice_mut() & noexcept
         requires(!std::is_const_v<T>)
     {
-        return Slice<T>(m_storage.data, m_storage.size);
+        return Slice<T>(m_data, m_size);
     }
 
     Slice<const T> slice() const && noexcept = delete;
@@ -508,7 +508,7 @@ public:
      * @return Current size.
      */
     USize size() const noexcept {
-        return m_storage.size;
+        return m_size;
     }
 
     /**
@@ -516,7 +516,7 @@ public:
      * @return Current capacity.
      */
     USize capacity() const noexcept {
-        return m_storage.capacity;
+        return m_capacity;
     }
 
     /**
@@ -524,7 +524,7 @@ public:
      * @return True if size is 0.
      */
     bool is_empty() const noexcept {
-        return m_storage.size == 0;
+        return m_size == 0;
     }
 
     /**
@@ -532,7 +532,7 @@ public:
      * @return True if size equals capacity.
      */
     bool is_full() const noexcept {
-        return m_storage.size == m_storage.capacity;
+        return m_size == m_capacity;
     }
 
     /**
@@ -540,7 +540,7 @@ public:
      * @return Pointer to the allocator.
      */
     Allocator *allocator() const noexcept {
-        return m_storage.allocator;
+        return m_allocator;
     }
 
     /**
@@ -549,7 +549,7 @@ public:
      * @note If @p new_capacity is less than or equal to current capacity, no action is taken.
      */
     void reserve(USize new_capacity) noexcept {
-        if (new_capacity > m_storage.capacity) {
+        if (new_capacity > m_capacity) {
             do_reserve(new_capacity);
         }
     }
@@ -559,16 +559,16 @@ public:
      * @note If size is 0, storage may be freed completely.
      */
     void shrink_to_fit() noexcept {
-        if (m_storage.size == m_storage.capacity) {
+        if (m_size == m_capacity) {
             return;
         }
 
-        if (m_storage.size == 0) {
+        if (m_size == 0) {
             do_free_storage();
             return;
         }
 
-        do_reallocate(m_storage.size);
+        do_reallocate(m_size);
     }
 
     // ---------------------------------------------------------
@@ -609,8 +609,8 @@ public:
                          "T must be nothrow constructible from provided arguments");
 
         do_grow_if_full();
-        T *ptr = std::construct_at(m_storage.data + m_storage.size, std::forward<Args>(args)...);
-        ++m_storage.size;
+        T *ptr = std::construct_at(m_data + m_size, std::forward<Args>(args)...);
+        ++m_size;
 
         return *ptr;
     }
@@ -623,8 +623,8 @@ public:
     void pop_back() noexcept {
         FR_ASSERT(!is_empty(), "Cannot pop from an empty array");
 
-        --m_storage.size;
-        std::destroy_at(m_storage.data + m_storage.size);
+        --m_size;
+        std::destroy_at(m_data + m_size);
     }
 
     /**
@@ -634,10 +634,10 @@ public:
      * @note This is an O(1) operation but does NOT preserve the relative order of elements.
      */
     void remove_swap(USize idx) noexcept {
-        FR_ASSERT(idx < m_storage.size, "Index out of bounds");
+        FR_ASSERT(idx < m_size, "Index out of bounds");
 
-        if (idx != m_storage.size - 1) {
-            m_storage.data[idx] = std::move(m_storage.data[m_storage.size - 1]);
+        if (idx != m_size - 1) {
+            m_data[idx] = std::move(m_data[m_size - 1]);
         }
 
         pop_back();
@@ -650,11 +650,11 @@ public:
      * @note This is an O(n) operation as it shifts all subsequent elements to the left.
      */
     void remove_shift(USize idx) noexcept {
-        FR_ASSERT(idx < m_storage.size, "Index out of bounds");
+        FR_ASSERT(idx < m_size, "Index out of bounds");
 
-        std::destroy_at(m_storage.data + idx);
-        mem::shift_range_left(m_storage.data + idx, m_storage.size - idx - 1, 1);
-        --m_storage.size;
+        std::destroy_at(m_data + idx);
+        mem::shift_range_left(m_data + idx, m_size - idx - 1, 1);
+        --m_size;
     }
 
     /**
@@ -698,13 +698,13 @@ public:
     void emplace(USize idx, Args &&...args) noexcept {
         FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
                          "T must be nothrow constructible to emplace");
-        FR_ASSERT(idx <= m_storage.size, "Index out of bounds");
+        FR_ASSERT(idx <= m_size, "Index out of bounds");
 
         do_grow_if_full();
-        mem::shift_range_right(m_storage.data + idx, m_storage.size - idx, 1);
-        std::construct_at(m_storage.data + idx, std::forward<Args>(args)...);
+        mem::shift_range_right(m_data + idx, m_size - idx, 1);
+        std::construct_at(m_data + idx, std::forward<Args>(args)...);
 
-        ++m_storage.size;
+        ++m_size;
     }
 
     /**
@@ -713,7 +713,7 @@ public:
      */
     void clear() noexcept {
         do_destroy_all();
-        m_storage.size = 0;
+        m_size = 0;
     }
 
     /**
@@ -724,10 +724,10 @@ public:
      */
     void shrink(USize new_size) noexcept {
         FR_STATIC_ASSERT(std::is_nothrow_destructible_v<T>, "T must be nothrow destructible");
-        FR_ASSERT(new_size <= m_storage.size, "New size cannot be larger than current size");
+        FR_ASSERT(new_size <= m_size, "New size cannot be larger than current size");
 
-        mem::destroy_range(m_storage.data + new_size, m_storage.size - new_size);
-        m_storage.size = new_size;
+        mem::destroy_range(m_data + new_size, m_size - new_size);
+        m_size = new_size;
     }
 
     /**
@@ -738,9 +738,9 @@ public:
      */
     void grow_default(USize new_size) noexcept {
         do_grow_if_needed(new_size);
-        mem::default_init_range(m_storage.data + m_storage.size, new_size - m_storage.size);
+        mem::default_init_range(m_data + m_size, new_size - m_size);
 
-        m_storage.size = new_size;
+        m_size = new_size;
     }
 
     /**
@@ -753,11 +753,11 @@ public:
     void grow_with(USize new_size, const T &fill) noexcept {
         do_grow_if_needed(new_size);
 
-        for (USize i = m_storage.size; i < new_size; ++i) {
-            std::construct_at(m_storage.data + i, fill);
+        for (USize i = m_size; i < new_size; ++i) {
+            std::construct_at(m_data + i, fill);
         }
 
-        m_storage.size = new_size;
+        m_size = new_size;
     }
 
 private:
@@ -766,28 +766,27 @@ private:
     // ---------------------------------------------------------
 
     /**
-     * @brief Calculate the next capacity based on a growth factor (1.5x).
+     * @brief Calculate the next capacity based on a growth factor.
      * @param current The current capacity.
      * @return The suggested next capacity.
      */
     USize do_next_capacity(USize current) const noexcept {
         if (current == 0)
             return 8;
-        return current + current / 2; // 1.5x growth
+        return (current * growth_multiplier_percent) / 100;
     }
 
     /**
      * @brief Perform an initial allocation or a reallocation to expand capacity.
      * @param new_capacity The new capacity to reserve.
-     * @pre @p new_capacity > m_storage.capacity.
+     * @pre @p new_capacity > m_capacity.
      */
     void do_reserve(USize new_capacity) noexcept {
-        FR_ASSERT(new_capacity > m_storage.capacity, "New capacity must be larger than current");
+        FR_ASSERT(new_capacity > m_capacity, "New capacity must be larger than current");
 
-        if (!m_storage.data) {
-            m_storage.data = static_cast<T *>(
-                m_storage.allocator->allocate(new_capacity * sizeof(T), alignof(T)));
-            m_storage.capacity = new_capacity;
+        if (!m_data) {
+            m_data = static_cast<T *>(m_allocator->allocate(new_capacity * sizeof(T), alignof(T)));
+            m_capacity = new_capacity;
             return;
         }
 
@@ -801,23 +800,21 @@ private:
      * @note Uses trivial relocation if T is trivially copyable.
      */
     void do_reallocate(USize new_capacity) noexcept {
-        FR_ASSERT(new_capacity >= m_storage.size, "New capacity cannot be smaller than size");
+        FR_ASSERT(new_capacity >= m_size, "New capacity cannot be smaller than size");
 
         // @todo Implement is_trivially_relocatble
         if constexpr (std::is_trivially_copyable<T>::value) {
-            m_storage.data = static_cast<T *>(
-                m_storage.allocator->reallocate(m_storage.data, m_storage.capacity * sizeof(T),
-                                                new_capacity * sizeof(T), alignof(T)));
+            m_data = static_cast<T *>(m_allocator->reallocate(
+                m_data, m_capacity * sizeof(T), new_capacity * sizeof(T), alignof(T)));
         } else {
-            T *new_data = static_cast<T *>(
-                m_storage.allocator->allocate(new_capacity * sizeof(T), alignof(T)));
-            mem::transfer_init_range(m_storage.data, m_storage.size, new_data);
-            m_storage.allocator->deallocate(m_storage.data, m_storage.capacity * sizeof(T),
-                                            alignof(T));
-            m_storage.data = new_data;
+            T *new_data =
+                static_cast<T *>(m_allocator->allocate(new_capacity * sizeof(T), alignof(T)));
+            mem::transfer_init_range(m_data, m_size, new_data);
+            m_allocator->deallocate(m_data, m_capacity * sizeof(T), alignof(T));
+            m_data = new_data;
         }
 
-        m_storage.capacity = new_capacity;
+        m_capacity = new_capacity;
     }
 
     /**
@@ -825,7 +822,7 @@ private:
      */
     void do_grow_if_full() noexcept {
         if (is_full()) {
-            do_reserve(do_next_capacity(m_storage.capacity));
+            do_reserve(do_next_capacity(m_capacity));
         }
     }
 
@@ -834,8 +831,8 @@ private:
      * @param required_size The minimum capacity needed.
      */
     void do_grow_if_needed(USize required_size) noexcept {
-        if (required_size > m_storage.capacity) {
-            do_reserve(std::max(do_next_capacity(m_storage.capacity), required_size));
+        if (required_size > m_capacity) {
+            do_reserve(std::max(do_next_capacity(m_capacity), required_size));
         }
     }
 
@@ -843,19 +840,19 @@ private:
      * @brief Destroys all elements in the current buffer.
      */
     void do_destroy_all() noexcept {
-        mem::destroy_range(m_storage.data, m_storage.size);
+        mem::destroy_range(m_data, m_size);
     }
 
     /**
      * @brief Frees the internal storage buffer.
      */
     void do_free_storage() noexcept {
-        if (!m_storage.data)
+        if (!m_data)
             return;
 
-        m_storage.allocator->deallocate(m_storage.data, m_storage.capacity * sizeof(T), alignof(T));
-        m_storage.data = nullptr;
-        m_storage.capacity = 0;
+        m_allocator->deallocate(m_data, m_capacity * sizeof(T), alignof(T));
+        m_data = nullptr;
+        m_capacity = 0;
     }
 
     /**
@@ -865,14 +862,14 @@ private:
     void do_copy_from(const DynamicArray &other) noexcept {
         FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T>, "T must be nothrow copyable");
 
-        m_storage.allocator = other.m_storage.allocator;
-        if (other.m_storage.size == 0)
+        m_allocator = other.m_allocator;
+        if (other.m_size == 0)
             return;
 
-        do_reserve(other.m_storage.size);
-        mem::copy_init_range(other.m_storage.data, other.m_storage.size, m_storage.data);
+        do_reserve(other.m_size);
+        mem::copy_init_range(other.m_data, other.m_size, m_data);
 
-        m_storage.size = other.m_storage.size;
+        m_size = other.m_size;
     }
 
     /**
@@ -884,22 +881,20 @@ private:
                              std::is_nothrow_copy_assignable_v<T>,
                          "T must be nothrow copy constructible and assignable");
 
-        const USize overlap = std::min(m_storage.size, other.m_storage.size);
+        const USize overlap = std::min(m_size, other.m_size);
 
         if (overlap > 0) {
-            mem::copy_assign_range(other.m_storage.data, overlap, m_storage.data);
+            mem::copy_assign_range(other.m_data, overlap, m_data);
         }
 
-        if (other.m_storage.size > m_storage.size) {
-            do_grow_if_needed(other.m_storage.size);
-            mem::copy_init_range(other.m_storage.data + overlap, other.m_storage.size - overlap,
-                                 m_storage.data + overlap);
-        } else if (other.m_storage.size < m_storage.size) {
-            mem::destroy_range(m_storage.data + other.m_storage.size,
-                               m_storage.size - other.m_storage.size);
+        if (other.m_size > m_size) {
+            do_grow_if_needed(other.m_size);
+            mem::copy_init_range(other.m_data + overlap, other.m_size - overlap, m_data + overlap);
+        } else if (other.m_size < m_size) {
+            mem::destroy_range(m_data + other.m_size, m_size - other.m_size);
         }
 
-        m_storage.size = other.m_storage.size;
+        m_size = other.m_size;
         // @note Allocator is not propagated on copy assign, only on copy construction.
     }
 
@@ -908,8 +903,15 @@ private:
      * @param other Source array.
      */
     void do_move_from(DynamicArray &&other) noexcept {
-        m_storage = other.m_storage;
-        other.m_storage = mem::Storage<T>::empty();
+        m_allocator = other.m_allocator;
+        m_data = other.m_data;
+        m_size = other.m_size;
+        m_capacity = other.m_capacity;
+
+        other.m_data = nullptr;
+        other.m_size = 0;
+        other.m_capacity = 0;
+        other.m_allocator = globals::get_default_allocator();
     }
 };
 

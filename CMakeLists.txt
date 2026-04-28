@@ -13,7 +13,6 @@ add_library(farfocel_compiler_options INTERFACE)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
-
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/lib")
@@ -98,9 +97,9 @@ if(ENABLE_TSAN)
     target_link_options(farfocel_compiler_options INTERFACE -fsanitize=thread)
 endif()
 
+add_subdirectory(3rdparty)
 add_subdirectory(engine)
-
-    #add_subdirectory(editor)
-    add_subdirectory(sandbox)
+add_subdirectory(sandbox)
 add_subdirectory(tests)
+add_subdirectory(benchmarks)
 add_subdirectory(docs)

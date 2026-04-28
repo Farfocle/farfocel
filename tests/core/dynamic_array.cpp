@@ -1,8 +1,8 @@
+#include <doctest.h>
+
 #include "fr/core/dynamic_array.hpp"
-#include "doctest.h"
 
 namespace fr {
-
 static S32 alive_count = 0;
 
 struct Lifecycle {

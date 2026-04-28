@@ -12,8 +12,8 @@
 #include <type_traits>
 #include <utility>
 
-#include "fr/core/impl.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/core/math.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr::mem {
@@ -24,7 +24,7 @@ namespace fr::mem {
  * @return True if @p alignment is a power of two.
  */
 inline bool is_valid_alignment(USize alignment) noexcept {
-    return impl::is_pow2(alignment);
+    return math::is_pow2(alignment);
 }
 
 /**
@@ -43,7 +43,7 @@ inline bool is_overaligned(USize alignment) noexcept {
  * @pre @p alignment is a power of two.
  */
 inline USize normalize_alignment(USize alignment) noexcept {
-    FR_ASSERT(impl::is_pow2(alignment),
+    FR_ASSERT(math::is_pow2(alignment),
               "fr::mem::normalize_alignment(USize alignment): Alignment must be a power of two");
 
     return std::max(alignof(void *), alignment);
@@ -96,6 +96,38 @@ inline void copy_raw_range(const T *src, USize sz, T *dst) noexcept {
     FR_ASSERT(dst >= src + sz || src >= dst + sz, "Source and destination ranges must not overlap");
 
     std::memcpy(static_cast<void *>(dst), static_cast<const void *>(src), sz * sizeof(T));
+}
+
+/**
+ * @brief Set a trivially copyable range to a specific byte value.
+ * @tparam T Element type.
+ * @param ptr Range start.
+ * @param value Byte value to set.
+ * @param sz Number of elements.
+ * @pre @p T is trivially copyable.
+ * @pre If @p sz > 0, @p ptr points to valid storage for @p sz elements.
+ */
+template <typename T>
+inline void set_raw_range(T *ptr, int value, USize sz) noexcept {
+    FR_STATIC_ASSERT(std::is_trivially_copyable_v<T>,
+                     "T must be trivially copyable for set_raw_range");
+    FR_ASSERT(sz == 0 || ptr != nullptr, "Pointer must be non-null for non-zero size");
+
+    std::memset(static_cast<void *>(ptr), value, sz * sizeof(T));
+}
+
+template <typename T>
+inline void destroy_item(T *ptr) noexcept {
+    FR_STATIC_ASSERT(std::is_nothrow_destructible_v<T>,
+                     "T must be nothrow destructible for destroy_item");
+
+    if (!ptr) {
+        return;
+    }
+
+    if constexpr (!std::is_trivially_destructible_v<T>) {
+        std::destroy_at(ptr);
+    }
 }
 
 /**
@@ -277,7 +309,7 @@ inline void default_init_range(T *ptr, USize sz) noexcept {
 }
 
 /**
- * @brief Value-initialize a range.
+ * @brief Zero-initialize a range.
  * @tparam T Element type.
  * @param ptr Range start.
  * @param sz Number of elements.
@@ -286,7 +318,7 @@ inline void default_init_range(T *ptr, USize sz) noexcept {
  * @pre If @p T is non-trivial, it is nothrow default constructible.
  */
 template <typename T>
-inline void value_init_range(T *ptr, USize sz) noexcept {
+inline void zero_init_range(T *ptr, USize sz) noexcept {
     FR_ASSERT(sz == 0 || ptr != nullptr, "Pointer must be non-null for non-zero size");
 
     if constexpr (std::is_trivially_default_constructible_v<T>) {
@@ -296,6 +328,28 @@ inline void value_init_range(T *ptr, USize sz) noexcept {
                          "T must be nothrow default constructible for value_init_range");
         for (USize i = 0; i < sz; ++i)
             std::construct_at(ptr + i);
+    }
+}
+
+/**
+ * @brief Value-initialize a range.
+ * @tparam T Element type.
+ * @param ptr Range start.
+ * @param sz Number of elements.
+ * @param value Fill value.
+ * @pre @p ptr is non-null.
+ * @pre @p ptr points to uninitialized storage for @p sz objects.
+ * @pre If @p T is non-trivial, it is nothrow default constructible.
+ */
+template <typename T>
+inline void value_init_range(T *ptr, USize sz, const T &value) noexcept {
+    FR_ASSERT(sz == 0 || ptr != nullptr, "Pointer must be non-null for non-zero size");
+
+    FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, const T &>),
+                     "T must be nothtow constructible with const T &");
+
+    for (USize i = 0; i < sz; ++i) {
+        std::construct_at(ptr + i, value);
     }
 }
 

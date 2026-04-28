@@ -1,5 +1,6 @@
+#include <doctest.h>
+
 #include "fr/core/tuple.hpp"
-#include "doctest.h"
 
 namespace fr {
 

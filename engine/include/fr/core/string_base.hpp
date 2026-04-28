@@ -29,6 +29,7 @@
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
+
 namespace fr_stl_str {
 
 /**

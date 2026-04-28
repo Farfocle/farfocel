@@ -6,7 +6,7 @@
  * AllocationStack.
  */
 
-#include "doctest.h"
+#include <doctest.h>
 
 #include "fr/core/allocation_stack.hpp"
 #include "fr/core/allocator.hpp"
@@ -166,7 +166,7 @@ TEST_CASE("ArenaAllocator - Reallocate Fails") {
 
     // Try to reallocate non-last block to a smaller size (should succeed now due to optimization)
     CHECK(arena.try_reallocate(ptr, 32, 17, 8) == ptr);
-    
+
     // Try to reallocate non-last block to a larger size when no space left (should fail)
     CHECK(arena.try_reallocate(ptr, 32, 33, 8) == nullptr);
 }

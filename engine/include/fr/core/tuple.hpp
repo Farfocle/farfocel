@@ -82,7 +82,8 @@ template <USize I, typename... Ts>
 using pick_t = typename pick<I, Ts...>::type;
 } // namespace impl
 
-/** @brief Heterogeneous container with tuple protocol support.
+/**
+ * @brief Heterogeneous container with tuple protocol support.
  * @note Inherits privately from `TupleBase` and exposes a typed API through `at`, `each`, and
  * `map`.
  */

@@ -1,6 +1,7 @@
-#include "fr/core/slice.hpp"
-#include "doctest.h"
 #include <array>
+#include <doctest.h>
+
+#include "fr/core/slice.hpp"
 
 namespace fr {
 

@@ -12,13 +12,14 @@
 
 #pragma once
 
+#include <algorithm>
+#include <ostream>
+
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/string_base.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/typedefs.hpp"
-#include <algorithm>
-#include <ostream>
 
 namespace fr {
 
@@ -438,7 +439,7 @@ public:
         USize delta_count = current_size - (pos + count);
 
         if (delta_count > 0)
-            fr::mem::shift_range_left(data() + pos + count, delta_count, count);
+            fr::mem::shift_range_left(data() + pos, delta_count, count);
 
         set_size(current_size - count);
         return *this;
@@ -479,7 +480,7 @@ public:
             if (str_size > count)
                 fr::mem::shift_range_right(data() + pos + count, tail_length, str_size - count);
             else if (str_size < count)
-                fr::mem::shift_range_left(data() + pos + count, tail_length, count - str_size);
+                fr::mem::shift_range_left(data() + pos + str_size, tail_length, count - str_size);
         }
 
         if (str_size > 0)
@@ -747,7 +748,7 @@ public:
 
         if (start > 0 || end < current_size) {
             if (end > start && start > 0) {
-                fr::mem::shift_range_left(data() + start, end - start, start);
+                fr::mem::shift_range_left(data(), end - start, start);
             }
             set_size(end - start);
         }
@@ -781,6 +782,13 @@ public:
      */
     StringView view() const noexcept {
         return StringView(data(), size());
+    }
+
+    /**
+     * @brief Returns a hash of the string.
+     */
+    Hash hash() const noexcept {
+        return view().hash();
     }
 
 private:
