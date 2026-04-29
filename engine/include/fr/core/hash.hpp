@@ -66,7 +66,7 @@ struct Hash32 {
     }
 };
 
-namespace impl_hash {
+namespace impl {
 /**
  * @brief splitmix64 is a fast bijective mixer.
  * @param v Input value.
@@ -81,48 +81,48 @@ inline U64 splitmix64(U64 v) noexcept {
     v ^= v >> 31;
     return v;
 }
-} // namespace impl_hash
+} // namespace impl
 
 /**
  * @brief Hash a 32-bit unsigned integer.
  */
 inline Hash hash(U32 v) noexcept {
-    return Hash::from_raw(impl_hash::splitmix64(v));
+    return Hash::from_raw(impl::splitmix64(v));
 }
 
 /**
  * @brief Hash a 64-bit unsigned integer.
  */
 inline Hash hash(U64 v) noexcept {
-    return Hash::from_raw(impl_hash::splitmix64(v));
+    return Hash::from_raw(impl::splitmix64(v));
 }
 
 /**
  * @brief Hash a 32-bit signed integer.
  */
 inline Hash hash(S32 v) noexcept {
-    return Hash::from_raw(impl_hash::splitmix64(static_cast<U64>(v)));
+    return Hash::from_raw(impl::splitmix64(static_cast<U64>(v)));
 }
 
 /**
  * @brief Hash a 64-bit signed integer.
  */
 inline Hash hash(S64 v) noexcept {
-    return Hash::from_raw(impl_hash::splitmix64(static_cast<U64>(v)));
+    return Hash::from_raw(impl::splitmix64(static_cast<U64>(v)));
 }
 
 /**
  * @brief Hash a 32-bit floating-point number.
  */
 inline Hash hash(F32 v) noexcept {
-    return Hash::from_raw(impl_hash::splitmix64(std::bit_cast<U32>(v)));
+    return Hash::from_raw(impl::splitmix64(std::bit_cast<U32>(v)));
 }
 
 /**
  * @brief Hash a 64-bit floating-point number.
  */
 inline Hash hash(F64 v) noexcept {
-    return Hash::from_raw(impl_hash::splitmix64(std::bit_cast<U64>(v)));
+    return Hash::from_raw(impl::splitmix64(std::bit_cast<U64>(v)));
 }
 
 /**
@@ -181,7 +181,7 @@ inline Hash hash_bytes(const void *ptr, USize len) noexcept {
     return Hash::from_raw(h);
 }
 
-namespace impl_hash {
+namespace impl {
 /**
  * @brief Concept for types that have a .hash() member function.
  */
@@ -213,13 +213,13 @@ template <typename T>
 concept HasADLHash32 = requires(const T &v) {
     { hash32(v) } noexcept -> std::same_as<Hash>;
 };
-} // namespace impl_hash
+} // namespace impl
 
 /**
  * @brief Concept for types that can be hashed using the fr::Hash protocol.
  */
 template <typename T>
-concept IsHashable = impl_hash::HasMemberHash<T> || impl_hash::HasADLHash<T>;
+concept IsHashable = impl::HasMemberHash<T> || impl::HasADLHash<T>;
 
 /**
  * @brief Invokes the appropriate hash function for the given value.
@@ -230,9 +230,9 @@ concept IsHashable = impl_hash::HasMemberHash<T> || impl_hash::HasADLHash<T>;
  */
 template <typename T>
 inline Hash call_hash(const T &value) noexcept {
-    if constexpr (impl_hash::HasMemberHash<T>) {
+    if constexpr (impl::HasMemberHash<T>) {
         return value.hash();
-    } else if constexpr (impl_hash::HasADLHash<T>) {
+    } else if constexpr (impl::HasADLHash<T>) {
         return hash(value);
     } else {
         FR_STATIC_ASSERT(false, "value is not hashable: provide either a .hash() member function "
