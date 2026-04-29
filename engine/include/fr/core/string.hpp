@@ -23,20 +23,20 @@
 
 namespace fr {
 
-class String : public fr_stl_str::StringBase {
+class String : public impl::StringBase {
 public:
     static constexpr USize npos = static_cast<USize>(-1);
 
     inline static USize growth_multiplier_percent = 200;
 
-    using fr_stl_str::StringBase::StringBase;
+    using impl::StringBase::StringBase;
 
     ////////
     /// CONSTRUCTORS, ASSIGNERS, DESTRUCTORS
     ////////
 
     String()
-        : fr_stl_str::StringBase() {
+        : impl::StringBase() {
     }
 
     /**
@@ -44,7 +44,7 @@ public:
      * @param str View of a string to copy
      */
     String(StringView str)
-        : fr_stl_str::StringBase(str.size()) {
+        : impl::StringBase(str.size()) {
         append(str);
     }
 
@@ -54,7 +54,7 @@ public:
      * @details It looks over characters until it finds null-terminator
      */
     String(const char *str)
-        : fr_stl_str::StringBase(str ? StringView(str).size() : 0) {
+        : impl::StringBase(str ? StringView(str).size() : 0) {
         if (str) {
             append(StringView(str));
         }
@@ -66,7 +66,7 @@ public:
      * @param count The amount of characters to copy
      */
     String(const char *str, USize count)
-        : fr_stl_str::StringBase(count) {
+        : impl::StringBase(count) {
         if (str && count > 0)
             append(StringView(str, count));
     }
@@ -77,7 +77,7 @@ public:
      * @param c Character to repeat
      */
     String(USize count, char c)
-        : fr_stl_str::StringBase(count) {
+        : impl::StringBase(count) {
         append(count, c);
     }
 
@@ -86,7 +86,7 @@ public:
      * @param other String to copy
      */
     String(const String &other)
-        : fr_stl_str::StringBase(other) {
+        : impl::StringBase(other) {
     }
 
     /**
@@ -94,7 +94,7 @@ public:
      * @param other String to move
      */
     String(String &&other) noexcept
-        : fr_stl_str::StringBase(std::move(other)) {
+        : impl::StringBase(std::move(other)) {
     }
 
     /**

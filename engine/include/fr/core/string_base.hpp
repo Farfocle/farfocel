@@ -30,7 +30,7 @@
 #include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
 
-namespace fr_stl_str {
+namespace fr::impl {
 
 /**
  * @brief Tag struct used to indicate the transfer of the ownership of an existing memory of
@@ -50,7 +50,7 @@ public:
 
     /**
      * @brief Default constructor
-     * 
+     *
      * @param alloc Pointer to the allocator.
      * @note This sets the type to short string
      */
@@ -62,7 +62,7 @@ public:
 
     /**
      * @brief Preallocating constructor
-     * 
+     *
      * @param capacity_to_allocate Characters to preallocate.
      * @param alloc Pointer to the allocator.
      */
@@ -89,7 +89,7 @@ public:
 
     /**
      * @brief Acquiring constructor
-     * 
+     *
      * @param ptr Allocated string memory.
      * @param size Length without null-terminator.
      * @param allocated_capacity Memory size with null-terminator.
@@ -111,7 +111,7 @@ public:
 
     /**
      * @brief Copy constructor
-     * 
+     *
      * @param other Copied string.
      */
     StringBase(const StringBase &other)
@@ -137,7 +137,7 @@ public:
 
     /**
      * @brief Move constructor
-     * 
+     *
      * @param other Moved string.
      */
     StringBase(StringBase &&other) noexcept
@@ -171,7 +171,7 @@ public:
 
     /**
      * @brief Swaps this string with the other string.
-     * 
+     *
      * @param other Swapped string.
      */
     void swap(StringBase &other) noexcept {
@@ -184,7 +184,7 @@ public:
 
     /**
      * @brief Gets the current text size
-     * 
+     *
      * @return Number of characters without null-terminator.
      */
     [[nodiscard]] USize size() const noexcept {
@@ -211,7 +211,7 @@ public:
 
     /**
      * @brief Gets the maximum characters without null-terminator.
-     * 
+     *
      * @return Capacity in characters.
      */
     [[nodiscard]] USize capacity() const noexcept {
@@ -224,7 +224,7 @@ public:
 
     /**
      * @brief Gets a pointer to the raw string data.
-     * 
+     *
      * @return Pointer with null-terminator.
      */
     [[nodiscard]] char *data() noexcept {
@@ -236,7 +236,7 @@ public:
 
     /**
      * @brief Gets a read-only pointer to the raw string data.
-     * 
+     *
      * @return Constant pointer with null-terminator.
      */
     [[nodiscard]] const char *data() const noexcept {
@@ -248,7 +248,7 @@ public:
 
     /**
      * @brief Gets a read-only C-style string.
-     * 
+     *
      * @return Constant C-string.
      */
     [[nodiscard]] const char *c_str() const noexcept {
@@ -257,7 +257,7 @@ public:
 
     /**
      * @brief Checks if its a short string (SSO).
-     * 
+     *
      * @return True if using stack buffer.
      */
     [[nodiscard]] bool is_short_string() const noexcept {
@@ -271,7 +271,7 @@ public:
 
     /**
      * @brief Reserves space for characters.
-     * 
+     *
      * @param new_capacity Requested capacity.
      */
     void reserve(USize new_capacity) {
@@ -344,7 +344,7 @@ public:
 
     /**
      * @brief Retrieves the size of short string directly.
-     * 
+     *
      * @return Size in characters.
      */
     [[nodiscard]] USize get_short_string_size() const noexcept {
@@ -355,7 +355,7 @@ public:
 
     /**
      * @brief Retrieves the size of long string directly.
-     * 
+     *
      * @return Size in characters.
      */
     [[nodiscard]] USize get_long_string_size() const noexcept {
@@ -366,7 +366,7 @@ public:
 protected:
     /**
      * @brief Updates the size of the string.
-     * 
+     *
      * @param new_size New characteer count.
      */
     void set_size(USize new_size) noexcept {
@@ -406,9 +406,8 @@ private:
         bytes[sizeof(m_data) - 1] |= (U8(2) << 6);
     }
 
-    FR_STATIC_ASSERT(
-        std::endian::native == std::endian::little,
-        "SSO bitmasking requires little-endian architecture");
+    FR_STATIC_ASSERT(std::endian::native == std::endian::little,
+                     "SSO bitmasking requires little-endian architecture");
 
     static constexpr USize max_short_string_size = 23;
 
@@ -432,4 +431,4 @@ private:
     } m_data;
 };
 
-} // namespace fr_stl_str
+} // namespace fr::impl
