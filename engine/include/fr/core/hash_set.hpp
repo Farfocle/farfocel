@@ -21,21 +21,21 @@
 
 namespace fr {
 
-namespace impl_hash_set {
+namespace impl {
 /**
  * @brief Internal tag for default hash function.
  */
-struct DeafultHashFnTag {};
+struct HashSetDeafultHashFnTag {};
 /**
  * @brief Internal tag for default comparison function.
  */
-struct DeafultCmpFnTag {};
+struct HashSetDeafultEqFnTag {};
 
 /**
  * @brief Default hash function utilizing the call_hash protocol.
  */
 template <typename Key>
-struct DefaultHash {
+struct HashSetDefaultHash {
     inline Hash operator()(const Key &key) const noexcept {
         return call_hash(key);
     }
@@ -45,13 +45,13 @@ struct DefaultHash {
  * @brief Default equality comparison utilizing operator==.
  */
 template <typename Key>
-struct DefaultCmp {
+struct HashSetDeafultEq {
     inline bool operator()(const Key &lhs, const Key &rhs) const noexcept {
         return lhs == rhs;
     }
 };
 
-} // namespace impl_hash_set
+} // namespace impl
 
 /**
  * @brief Swiss-table inspired hash set.
@@ -62,13 +62,14 @@ struct DefaultCmp {
  * This implementation uses a flat memory layout with control bytes (Swiss Table)
  * to speed up lookups and minimize cache misses.
  */
-template <typename Key, typename HashFn = impl_hash_set::DeafultHashFnTag,
-          typename CmpFn = impl_hash_set::DeafultCmpFnTag>
+template <typename Key, typename HashFn = impl::HashSetDeafultHashFnTag,
+          typename EqFn = impl::HashSetDeafultEqFnTag>
 class HashSet {
-    using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl_hash_set::DeafultHashFnTag>,
-                                            impl_hash_set::DefaultHash<Key>, HashFn>;
-    using ActualCmpFn = std::conditional_t<std::is_same_v<CmpFn, impl_hash_set::DeafultCmpFnTag>,
-                                           impl_hash_set::DefaultCmp<Key>, CmpFn>;
+    using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl::HashSetDeafultHashFnTag>,
+                                            impl::HashSetDefaultHash<Key>, HashFn>;
+
+    using ActualEqFn = std::conditional_t<std::is_same_v<EqFn, impl::HashSetDeafultEqFnTag>,
+                                          impl::HashSetDeafultEq<Key>, EqFn>;
 
 private:
     struct Slot {
@@ -446,7 +447,7 @@ private:
             }
 
             if (c.value == h2) {
-                if (ActualCmpFn{}(m_slots[curr].key, key)) {
+                if (ActualEqFn{}(m_slots[curr].key, key)) {
                     return static_cast<std::ptrdiff_t>(curr);
                 }
             }
@@ -473,7 +474,7 @@ private:
             Ctrl c = m_ctrls[curr];
 
             if (c.value == h2) {
-                if (ActualCmpFn{}(m_slots[curr].key, key)) {
+                if (ActualEqFn{}(m_slots[curr].key, key)) {
                     return false;
                 }
             }

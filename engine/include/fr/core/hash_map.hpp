@@ -27,17 +27,17 @@ namespace impl {
 /**
  * @brief Internal tag for default hash function.
  */
-struct DeafultHashFnTag {};
+struct HashMapDeafultHashFnTag {};
 /**
  * @brief Internal tag for default comparison function.
  */
-struct DeafultCmpFnTag {};
+struct HashMapDeafultEqFnTag {};
 
 /**
  * @brief Default hash function utilizing the call_hash protocol.
  */
 template <typename Key>
-struct DefaultHash {
+struct HashMapDeafultHash {
     inline Hash operator()(const Key &key) const noexcept {
         return call_hash(key);
     }
@@ -47,7 +47,7 @@ struct DefaultHash {
  * @brief Default equality comparison utilizing operator==.
  */
 template <typename Key>
-struct DefaultCmp {
+struct HashMapDeafultEq {
     inline bool operator()(const Key &lhs, const Key &rhs) const noexcept {
         return lhs == rhs;
     }
@@ -64,14 +64,15 @@ struct DefaultCmp {
  * HashMap provides O(1) average-time complexity for insertions, lookups, and removals.
  * It uses a Swiss Table-like architecture to achieve high cache efficiency.
  */
-template <typename Key, typename Value, typename HashFn = impl::DeafultHashFnTag,
-          typename CmpFn = impl::DeafultCmpFnTag>
+template <typename Key, typename Value, typename HashFn = impl::HashMapDeafultHashFnTag,
+          typename CmpFn = impl::HashMapDeafultEqFnTag>
 class HashMap {
 
-    using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl::DeafultHashFnTag>,
-                                            impl::DefaultHash<Key>, HashFn>;
-    using ActualCmpFn = std::conditional_t<std::is_same_v<CmpFn, impl::DeafultCmpFnTag>,
-                                           impl::DefaultCmp<Key>, CmpFn>;
+    using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl::HashMapDeafultHashFnTag>,
+                                            impl::HashMapDeafultHash<Key>, HashFn>;
+
+    using ActualCmpFn = std::conditional_t<std::is_same_v<CmpFn, impl::HashMapDeafultEqFnTag>,
+                                           impl::HashMapDeafultEq<Key>, CmpFn>;
 
     struct Slot {
         Hash hash;
