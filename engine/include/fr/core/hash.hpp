@@ -48,6 +48,11 @@ struct Hash {
     constexpr U8 l7() const noexcept {
         return static_cast<U8>(value & 0x7F);
     }
+
+    template <typename A>
+    void shape(A &archive) {
+        archive.prop("value", value);
+    }
 };
 
 /**
@@ -63,6 +68,10 @@ struct Hash32 {
      */
     static constexpr Hash32 from_raw(U32 v) noexcept {
         return Hash32{.value = v};
+    }
+    template <typename A>
+    void shape(A &archive) {
+        archive.prop("value", value);
     }
 };
 

@@ -509,6 +509,22 @@ public:
         return m_slots[target].value;
     }
 
+    template <typename A>
+    void shape(A &archive) {
+        archive.prop("load", m_load);
+        archive.prop("capacity", m_capacity);
+        archive.list("items", [&](A &list_archive) {
+            for (auto pair : *this) {
+                auto &key = pair.first();
+                auto &val = pair.second();
+                list_archive.dict("", [&](A &entry_archive) {
+                    entry_archive.prop("@key", key);
+                    entry_archive.prop("@value", val);
+                });
+            }
+        });
+    }
+
 private:
     std::ptrdiff_t do_find_idx(const Key &key) const noexcept {
         if (m_capacity == 0)

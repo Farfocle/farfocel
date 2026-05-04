@@ -96,6 +96,12 @@ public:
         return combine_hashes(call_hash(m_first), call_hash(m_second));
     }
 
+    template <typename A>
+    void shape(A &archive) {
+        archive.prop("first", m_first);
+        archive.prop("second", m_second);
+    }
+
     /// @brief Structured binding protocol.
     template <USize I>
     friend constexpr auto &&get(Pair &self) noexcept {

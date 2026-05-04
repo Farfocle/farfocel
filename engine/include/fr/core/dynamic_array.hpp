@@ -809,6 +809,17 @@ public:
         m_size = new_size;
     }
 
+    template <typename A>
+    void shape(A &archive) {
+        archive.prop("size", m_size);
+        archive.prop("capacity", m_capacity);
+        archive.list("items", [&](A &list_archive) {
+            for (T &item : *this) {
+                list_archive.prop("", item);
+            }
+        });
+    }
+
 private:
     // ---------------------------------------------------------
     // Helpers / Implementation

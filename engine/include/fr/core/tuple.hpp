@@ -80,6 +80,11 @@ struct pick<I, T, Us...> : pick<I - 1, Us...> {};
 
 template <USize I, typename... Ts>
 using pick_t = typename pick<I, Ts...>::type;
+
+template <typename A, typename TupleT, USize... Is>
+void shape_tuple_items(A &archive, TupleT &value, std::index_sequence<Is...>) noexcept {
+    (archive.prop("", value.template at<Is>()), ...);
+}
 } // namespace impl
 
 /**
@@ -183,6 +188,16 @@ public:
     constexpr auto &&last(this auto &&self) noexcept {
         FR_STATIC_ASSERT(sizeof...(Ts) > 0, "empty tuple");
         return std::forward_like<decltype(self)>(self).template at<sizeof...(Ts) - 1>();
+    }
+
+    template <typename A>
+    void shape(A &archive) {
+        USize sz = size();
+
+        archive.prop("size", sz);
+        archive.list("items", [&](A &list_archive) {
+            impl::shape_tuple_items(list_archive, *this, std::index_sequence_for<Ts...>{});
+        });
     }
 
     /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing

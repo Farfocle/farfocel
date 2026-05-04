@@ -397,6 +397,15 @@ public:
     [[nodiscard]] bool operator!=(NilTag) const noexcept {
         return !is_nil();
     }
+
+    template <typename A>
+    void shape(A &archive) {
+        bool has_value = is_some();
+        archive.prop("has_value", has_value);
+        if (has_value) {
+            archive.prop("value", unwrap());
+        }
+    }
 };
 
 /// @brief Factory function for engaged Optional.

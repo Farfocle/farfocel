@@ -427,6 +427,17 @@ public:
         m_load = 0;
     }
 
+    template <typename A>
+    void shape(A &archive) {
+        archive.prop("load", m_load);
+        archive.prop("capacity", m_capacity);
+        archive.list("items", [&](A &list_archive) {
+            for (const Key &item : *this) {
+                list_archive.prop("", item);
+            }
+        });
+    }
+
 private:
     std::ptrdiff_t do_find_idx(const Key &key) const noexcept {
         if (m_capacity == 0) {

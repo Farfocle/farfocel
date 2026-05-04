@@ -41,6 +41,7 @@ add_library(engine ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
 set_target_properties(engine PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(engine PRIVATE farfocel_compiler_options)
+target_link_libraries(engine PUBLIC yyjson)
 
 target_include_directories(engine
     PUBLIC "include"
