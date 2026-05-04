@@ -82,4 +82,14 @@ TEST_CASE("Pair - Hashing") {
     CHECK(p4.hash().value != 0);
 }
 
+TEST_CASE("Pair - constexpr usage") {
+    constexpr Pair p(U32(3), U32(7));
+    static_assert(p.first() == 3);
+    static_assert(p.second() == 7);
+    static_assert(p.at<0>() == 3);
+    static_assert(p.at<1>() == 7);
+    static_assert(get<0>(p) == 3);
+    static_assert(get<1>(p) == 7);
+}
+
 } // namespace fr

@@ -29,7 +29,7 @@ struct Hash {
      * @param v Raw hash value.
      * @return Hash object.
      */
-    static Hash from_raw(U64 v) noexcept {
+    static constexpr Hash from_raw(U64 v) noexcept {
         return Hash{.value = v};
     }
 
@@ -37,7 +37,7 @@ struct Hash {
      * @brief Returns the high 57 bits of the hash.
      * @note Used for primary bucket indexing (H1).
      */
-    U64 h57() const noexcept {
+    constexpr U64 h57() const noexcept {
         return value >> 7;
     }
 
@@ -45,7 +45,7 @@ struct Hash {
      * @brief Returns the low 7 bits of the hash.
      * @note Used for intra-bucket filtering (H2).
      */
-    U8 l7() const noexcept {
+    constexpr U8 l7() const noexcept {
         return static_cast<U8>(value & 0x7F);
     }
 };
@@ -61,7 +61,7 @@ struct Hash32 {
      * @param v Raw hash value.
      * @return Hash32 object.
      */
-    static Hash32 from_raw(U32 v) noexcept {
+    static constexpr Hash32 from_raw(U32 v) noexcept {
         return Hash32{.value = v};
     }
 };
@@ -73,7 +73,7 @@ namespace impl {
  * @return Mixed 64-bit value.
  * @note Excellent for hashing primitive types.
  */
-inline U64 splitmix64(U64 v) noexcept {
+inline constexpr U64 splitmix64(U64 v) noexcept {
     v ^= v >> 30;
     v *= 0xbf58476d1ce4e5b9ULL;
     v ^= v >> 27;
@@ -86,49 +86,49 @@ inline U64 splitmix64(U64 v) noexcept {
 /**
  * @brief Hash a 32-bit unsigned integer.
  */
-inline Hash hash(U32 v) noexcept {
+inline constexpr Hash hash(U32 v) noexcept {
     return Hash::from_raw(impl::splitmix64(v));
 }
 
 /**
  * @brief Hash a 64-bit unsigned integer.
  */
-inline Hash hash(U64 v) noexcept {
+inline constexpr Hash hash(U64 v) noexcept {
     return Hash::from_raw(impl::splitmix64(v));
 }
 
 /**
  * @brief Hash a 32-bit signed integer.
  */
-inline Hash hash(S32 v) noexcept {
+inline constexpr Hash hash(S32 v) noexcept {
     return Hash::from_raw(impl::splitmix64(static_cast<U64>(v)));
 }
 
 /**
  * @brief Hash a 64-bit signed integer.
  */
-inline Hash hash(S64 v) noexcept {
+inline constexpr Hash hash(S64 v) noexcept {
     return Hash::from_raw(impl::splitmix64(static_cast<U64>(v)));
 }
 
 /**
  * @brief Hash a 32-bit floating-point number.
  */
-inline Hash hash(F32 v) noexcept {
+inline constexpr Hash hash(F32 v) noexcept {
     return Hash::from_raw(impl::splitmix64(std::bit_cast<U32>(v)));
 }
 
 /**
  * @brief Hash a 64-bit floating-point number.
  */
-inline Hash hash(F64 v) noexcept {
+inline constexpr Hash hash(F64 v) noexcept {
     return Hash::from_raw(impl::splitmix64(std::bit_cast<U64>(v)));
 }
 
 /**
  * @brief Hash a boolean value.
  */
-inline Hash hash(bool v) noexcept {
+inline constexpr Hash hash(bool v) noexcept {
     return Hash::from_raw(v ? 1 : 0);
 }
 
@@ -138,7 +138,7 @@ inline Hash hash(bool v) noexcept {
  * @param b Second component.
  * @return Mixed 64-bit value.
  */
-inline U64 wyhash64(U64 a, U64 b) noexcept {
+inline constexpr U64 wyhash64(U64 a, U64 b) noexcept {
     __uint128_t r = static_cast<__uint128_t>(a ^ 0x9e3779b97f4a7c15ULL) *
                     static_cast<__uint128_t>(b ^ 0xe7037ed1a0b428dbULL);
 
@@ -151,7 +151,7 @@ inline U64 wyhash64(U64 a, U64 b) noexcept {
  * @param b Second hash.
  * @return Combined hash.
  */
-inline Hash combine_hashes(Hash a, Hash b) noexcept {
+inline constexpr Hash combine_hashes(Hash a, Hash b) noexcept {
     return Hash::from_raw(a.value ^
                           (b.value + 0x9e3779b97f4a7c15ULL + (a.value << 6) + (a.value >> 2)));
 }
@@ -168,7 +168,7 @@ inline constexpr U64 HASH_SEED = 0xa0761d6478bd642f;
  * @return Computed hash.
  * @pre @p ptr must be non-null if @p len > 0.
  */
-inline Hash hash_bytes(const void *ptr, USize len) noexcept {
+inline constexpr Hash hash_bytes(const void *ptr, USize len) noexcept {
     FR_ASSERT(len == 0 || ptr != nullptr, "pointer must be non-null if size is non-zero");
 
     U64 h = HASH_SEED;
@@ -229,7 +229,7 @@ concept IsHashable = impl::HasMemberHash<T> || impl::HasADLHash<T>;
  * @pre @p T must satisfy IsHashable.
  */
 template <typename T>
-inline Hash call_hash(const T &value) noexcept {
+inline constexpr Hash call_hash(const T &value) noexcept {
     if constexpr (impl::HasMemberHash<T>) {
         return value.hash();
     } else if constexpr (impl::HasADLHash<T>) {

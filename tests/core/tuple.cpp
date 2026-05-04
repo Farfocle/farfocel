@@ -82,4 +82,18 @@ TEST_CASE("Tuple - first, second, last") {
     CHECK(tuple.at<2>() == 30u);
 }
 
+TEST_CASE("Tuple - constexpr usage") {
+    constexpr Tuple tuple(U32(5), U32(8), bool(true));
+    static_assert(tuple.size() == 3);
+    static_assert(tuple.at<0>() == 5);
+    static_assert(tuple.at<1>() == 8);
+    static_assert(tuple.at<2>());
+    static_assert(tuple.first() == 5);
+    static_assert(tuple.second() == 8);
+    static_assert(tuple.last());
+    static_assert(get<0>(tuple) == 5);
+    static_assert(get<1>(tuple) == 8);
+    static_assert(get<2>(tuple));
+}
+
 } // namespace fr

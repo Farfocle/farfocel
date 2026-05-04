@@ -66,8 +66,7 @@ public:
      * @param capacity_to_allocate Characters to preallocate.
      * @param alloc Pointer to the allocator.
      */
-    explicit StringBase(USize capacity_to_allocate,
-                        fr::Alloc *alloc = fr::get_ambient_ctx().alloc)
+    explicit StringBase(USize capacity_to_allocate, fr::Alloc *alloc = fr::get_ambient_ctx().alloc)
         : m_alloc(alloc) {
         // Short string
         if (capacity_to_allocate <= 23) {

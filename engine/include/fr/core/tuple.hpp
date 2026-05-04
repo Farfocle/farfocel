@@ -118,7 +118,11 @@ public:
         using ItemType = impl::pick_t<I, Ts...>;
         using LeafType = impl::TupleLeaf<I, ItemType>;
 
-        return std::forward_like<decltype(self)>(static_cast<LeafType &>(self).value);
+        if constexpr (std::is_const_v<std::remove_reference_t<decltype(self)>>) {
+            return std::forward_like<decltype(self)>(static_cast<const LeafType &>(self).value);
+        } else {
+            return std::forward_like<decltype(self)>(static_cast<LeafType &>(self).value);
+        }
     }
 
     /**
@@ -159,7 +163,7 @@ public:
         }(std::index_sequence_for<Ts...>{});
     }
 
-    USize size() const noexcept {
+    constexpr USize size() const noexcept {
         return sizeof...(Ts);
     }
 
