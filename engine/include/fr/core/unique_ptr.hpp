@@ -14,7 +14,7 @@
 #include <utility>
 
 #include "fr/core/alloc.hpp"
-#include "fr/core/globals.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
@@ -47,12 +47,12 @@ template <typename T>
 template <typename T>
     requires(!std::is_array_v<T>)
 [[nodiscard]] inline UniquePtr<T> adopt_unique(T *raw_ptr,
-                                               Alloc *alloc = globals::get_default_allocator());
+                                               Alloc *alloc = get_ambient_ctx().alloc);
 
 template <typename T>
     requires(std::is_array_v<T> && std::extent_v<T> == 0)
 [[nodiscard]] inline UniquePtr<T> adopt_unique(std::remove_extent_t<T> *raw_ptr, USize size,
-                                               Alloc *alloc = globals::get_default_allocator());
+                                               Alloc *alloc = get_ambient_ctx().alloc);
 
 // ---------------------------------------------------------
 // UniquePtr <T> (single object)
@@ -419,7 +419,7 @@ inline UniquePtr<T> make_unique_in(Alloc *alloc, Args &&...args) {
 template <typename T, typename... Args>
     requires(!std::is_array_v<T>)
 inline UniquePtr<T> make_unique(Args &&...args) {
-    return make_unique_in<T>(globals::get_default_allocator(), std::forward<Args>(args)...);
+    return make_unique_in<T>(get_ambient_ctx().alloc, std::forward<Args>(args)...);
 }
 
 /**
@@ -445,7 +445,7 @@ inline UniquePtr<T> make_unique_in(Alloc *alloc, USize size) {
 template <typename T>
     requires(std::is_array_v<T> && std::extent_v<T> == 0)
 inline UniquePtr<T> make_unique(USize size) {
-    return make_unique_in<T>(globals::get_default_allocator(), size);
+    return make_unique_in<T>(get_ambient_ctx().alloc, size);
 }
 
 /**

@@ -12,8 +12,10 @@
 
 #include "fr/core/hash_map.hpp"
 #include "fr/core/string.hpp"
+#include "fr/core/ctx.hpp"
 
 S32 main() {
+    fr::init_core_ctx();
     ankerl::nanobench::Bench bench;
     bench.title("HashMap Comparison").unit("operation").relative(true);
 
@@ -188,5 +190,6 @@ S32 main() {
         ankerl::nanobench::doNotOptimizeAway(total_len);
     });
 
+    fr::shutdown_core_ctx();
     return 0;
 }

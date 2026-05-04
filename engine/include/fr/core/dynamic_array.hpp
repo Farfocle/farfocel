@@ -15,7 +15,7 @@
 #include <utility>
 
 #include "fr/core/alloc.hpp"
-#include "fr/core/globals.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/slice.hpp"
@@ -33,7 +33,7 @@ namespace fr {
 template <typename T>
 class DynamicArray {
 private:
-    Alloc *m_alloc{globals::get_default_allocator()};
+    Alloc *m_alloc{get_ambient_ctx().alloc};
     T *m_data{nullptr};
     USize m_size{0};
     USize m_capacity{0};
@@ -179,7 +179,7 @@ public:
      * @return A new empty DynamicArray instance.
      */
     [[nodiscard]] static DynamicArray with_capacity(USize capacity) noexcept {
-        return with_capacity(capacity, globals::get_default_allocator());
+        return with_capacity(capacity, get_ambient_ctx().alloc);
     }
 
     /**
@@ -205,7 +205,7 @@ public:
      * @pre T must be nothrow default constructible.
      */
     [[nodiscard]] static DynamicArray with_size(USize size) noexcept {
-        return with_size(size, globals::get_default_allocator());
+        return with_size(size, get_ambient_ctx().alloc);
     }
 
     /**
@@ -236,7 +236,7 @@ public:
      * @pre T must be nothrow copy constructible.
      */
     [[nodiscard]] static DynamicArray filled_with(USize size, const T &fill) noexcept {
-        return filled_with(size, fill, globals::get_default_allocator());
+        return filled_with(size, fill, get_ambient_ctx().alloc);
     }
 
     /**
@@ -965,7 +965,7 @@ private:
         other.m_data = nullptr;
         other.m_size = 0;
         other.m_capacity = 0;
-        other.m_alloc = globals::get_default_allocator();
+        other.m_alloc = get_ambient_ctx().alloc;
     }
 };
 

@@ -9,5 +9,5 @@
 
 namespace fr {
 /// @brief General purpose heap allocator.
-using HeapAllocator = MallocAlloc;
+using HeapAlloc = MallocAlloc;
 } // namespace fr

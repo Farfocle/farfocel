@@ -13,7 +13,7 @@
 #include <utility>
 
 #include "fr/core/alloc.hpp"
-#include "fr/core/globals.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/math.hpp"
@@ -585,7 +585,7 @@ private:
         return sizeof(Slot) * capacity;
     }
 
-    Alloc *m_alloc{globals::get_default_allocator()};
+    Alloc *m_alloc{get_ambient_ctx().alloc};
 
     USize m_capacity{0};
     USize m_load{0};

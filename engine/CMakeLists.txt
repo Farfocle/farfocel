@@ -9,7 +9,6 @@ set(ENGINE_HEADERS
     "include/fr/core/arena_alloc.hpp"
     "include/fr/core/block_alloc.hpp"
     "include/fr/core/dynamic_array.hpp"
-    "include/fr/core/globals.hpp"
     "include/fr/core/hash.hpp"
     "include/fr/core/hash_map.hpp"
     "include/fr/core/hash_set.hpp"
@@ -34,7 +33,7 @@ set(ENGINE_HEADERS
 
 set(ENGINE_SOURCES
 #### core
-    "src/core/globals.cpp"
+    "src/core/ctx.cpp"
 )
 
 

@@ -1,12 +1,13 @@
 #include <print>
 
 #include "fr/core/alloc.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
-#include "fr/core/globals.hpp"
 #include "fr/core/tuple.hpp"
 #include "fr/core/typedefs.hpp"
 
 int main() {
+    fr::init_core_ctx();
     {
         auto numbers = fr::DynamicArray<U32>::filled_with(10, 4);
 
@@ -35,7 +36,7 @@ int main() {
     });
 
     std::println("----");
-    for (const auto &frame : fr::globals::get_allocation_stack()->frames()) {
+    for (const auto &frame : fr::get_ambient_ctx().alloc_tracer->frames()) {
         std::println("frame ts={} action={} prev={:p} next={:p} prev_size={} next_size={} align={} "
                      "tag={} success={} attempt={}",
                      frame.timestamp, static_cast<U32>(frame.action), frame.prev_pointer,
@@ -43,5 +44,6 @@ int main() {
                      frame.tag, frame.success, frame.attempt);
     }
 
+    fr::shutdown_core_ctx();
     return 0;
 }

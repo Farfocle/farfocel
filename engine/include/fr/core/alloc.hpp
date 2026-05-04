@@ -10,8 +10,9 @@
 #include <algorithm>
 #include <cstring>
 
+#include "fr/core/alloc_tracer.hpp"
 #include "fr/core/alloc_typedefs.hpp"
-#include "fr/core/globals.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/time.hpp"
@@ -80,12 +81,14 @@ public:
         FR_ASSERT(sz != 0, "size must be non-zero");
         FR_ASSERT(mem::is_valid_alignment(alignment), "alignment must be power of two");
 
-        U8 max_retries = globals::get_oom_retries();
+        const Ctx &ctx = get_ambient_ctx();
+
+        U8 max_retries = ctx.oom_retries;
         for (U8 attempt = 0;; ++attempt) {
             void *result = do_try_allocate(sz, alignment);
 
 #ifdef FR_IS_DEBUG
-            globals::get_allocation_stack()->record(AllocFrame{
+            ctx.alloc_tracer->record(AllocFrame{
                 .timestamp = time::get_steady_now_ns(),
                 .action = AllocAction::Allocate,
                 .prev_pointer = nullptr,
@@ -107,8 +110,7 @@ public:
                 return nullptr;
             }
 
-            OOMHandler oom_handler = globals::get_oom_handler();
-
+            OOMHandler oom_handler = ctx.oom_handler;
             if (oom_handler == nullptr) {
                 return nullptr;
             }
@@ -139,13 +141,14 @@ public:
         FR_ASSERT(new_sz != 0, "new size must be non-zero");
         FR_ASSERT(mem::is_valid_alignment(alignment), "alignment must be power of two");
 
-        U8 max_retries = globals::get_oom_retries();
+        const Ctx &ctx = get_ambient_ctx();
+        U8 max_retries = ctx.oom_retries;
 
         for (U8 attempt = 0;; ++attempt) {
             void *result = do_try_reallocate(ptr, old_sz, new_sz, alignment);
 
 #ifdef FR_IS_DEBUG
-            globals::get_allocation_stack()->record(AllocFrame{
+            ctx.alloc_tracer->record(AllocFrame{
                 .timestamp = time::get_steady_now_ns(),
                 .action = AllocAction::Reallocate,
                 .prev_pointer = ptr,
@@ -167,7 +170,7 @@ public:
                 return nullptr;
             }
 
-            OOMHandler oom_handler = globals::get_oom_handler();
+            OOMHandler oom_handler = ctx.oom_handler;
 
             if (oom_handler == nullptr) {
                 return nullptr;
@@ -197,7 +200,7 @@ public:
         FR_ASSERT(mem::is_valid_alignment(alignment), "alignment must be power of two");
 
 #ifdef FR_IS_DEBUG
-        globals::get_allocation_stack()->record(AllocFrame{
+        get_ambient_ctx().alloc_tracer->record(AllocFrame{
             .timestamp = time::get_steady_now_ns(),
             .action = AllocAction::Deallocate,
             .prev_pointer = ptr,

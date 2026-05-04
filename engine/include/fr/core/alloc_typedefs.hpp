@@ -70,5 +70,4 @@ struct AllocFrame {
     bool success{false};
     U8 attempt{0};
 };
-
 } // namespace fr

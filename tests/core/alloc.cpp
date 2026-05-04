@@ -12,13 +12,15 @@
 #include "fr/core/alloc_tracer.hpp"
 #include "fr/core/arena_alloc.hpp"
 #include "fr/core/block_alloc.hpp"
-#include "fr/core/globals.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/malloc_alloc.hpp"
+#include "fr/core/new_delete_alloc.hpp"
 
 namespace fr {
 
 TEST_CASE("NewDeleteAllocator - Basic") {
-    Alloc *alloc = globals::get_new_delete_allocator();
+    NewDeleteAlloc alloc_inst;
+    Alloc *alloc = &alloc_inst;
     CHECK(alloc != nullptr);
 
     // Test basic allocation
@@ -34,7 +36,8 @@ TEST_CASE("NewDeleteAllocator - Basic") {
 }
 
 TEST_CASE("MallocAllocator - Basic") {
-    Alloc *alloc = globals::get_malloc_allocator();
+    MallocAlloc alloc_inst;
+    Alloc *alloc = &alloc_inst;
     CHECK(alloc != nullptr);
 
     // Test basic allocation
@@ -50,7 +53,8 @@ TEST_CASE("MallocAllocator - Basic") {
 }
 
 TEST_CASE("MallocAllocator - Reallocate") {
-    Alloc *alloc = globals::get_malloc_allocator();
+    MallocAlloc alloc_inst;
+    Alloc *alloc = &alloc_inst;
 
     void *ptr = alloc->allocate(1024, 8);
     std::memset(ptr, 0xAA, 1024);
@@ -322,8 +326,8 @@ TEST_CASE("OOM Handler Layer") {
     g_oom_call_count = 0;
 
     // Test default retry behavior
-    globals::set_oom_handler(oom_retry_handler);
-    globals::set_oom_retries(2);
+    get_ambient_ctx_mut().oom_handler = oom_retry_handler;
+    get_ambient_ctx_mut().oom_retries = 2;
 
     void *ptr = fail_alloc.try_allocate(100, 16);
     CHECK(ptr == nullptr);
@@ -335,7 +339,7 @@ TEST_CASE("OOM Handler Layer") {
     // Test fail action
     g_oom_call_count = 0;
     fail_alloc.call_count = 0;
-    globals::set_oom_handler(oom_fail_handler);
+    get_ambient_ctx_mut().oom_handler = oom_fail_handler;
 
     ptr = fail_alloc.try_allocate(100, 16);
     CHECK(ptr == nullptr);
@@ -343,36 +347,35 @@ TEST_CASE("OOM Handler Layer") {
     CHECK(g_oom_call_count == 1);
 
     // Test no handler
-    globals::set_oom_handler(nullptr);
+    get_ambient_ctx_mut().oom_handler = nullptr;
     fail_alloc.call_count = 0;
     ptr = fail_alloc.try_allocate(100, 16);
     CHECK(ptr == nullptr);
     CHECK(fail_alloc.call_count == 1);
 
     // Restore default state
-    globals::set_oom_retries(2);
+    get_ambient_ctx_mut().oom_retries = 2;
 }
 
-TEST_CASE("Default Allocator Management") {
-    Alloc *original = globals::get_default_allocator();
+TEST_CASE("Ambient Allocator Management") {
+    Alloc *original = get_ambient_ctx().alloc;
     MallocAlloc my_alloc;
 
-    globals::set_default_allocator(&my_alloc);
-    CHECK(globals::get_default_allocator() == &my_alloc);
+    get_ambient_ctx_mut().alloc = &my_alloc;
+    CHECK(get_ambient_ctx().alloc == &my_alloc);
 
-    globals::set_default_allocator(original);
-    CHECK(globals::get_default_allocator() == original);
+    get_ambient_ctx_mut().alloc = original;
+    CHECK(get_ambient_ctx().alloc == original);
 }
 
-TEST_CASE("Allocation Debug Stack Management") {
-    AllocTracer stack(16);
-    AllocTracer *original = globals::get_allocation_stack();
+TEST_CASE("Allocation Tracer Management") {
+    AllocTracer tracer(16);
+    AllocTracer *original = get_ambient_ctx().alloc_tracer;
 
-    AllocTracer *previous = globals::set_allocation_stack(&stack);
-    CHECK(previous == original);
-    CHECK(globals::get_allocation_stack() == &stack);
+    get_ambient_ctx_mut().alloc_tracer = &tracer;
+    CHECK(get_ambient_ctx().alloc_tracer == &tracer);
 
-    stack.record(AllocFrame{
+    tracer.record(AllocFrame{
         .timestamp = 1,
         .action = AllocAction::Allocate,
         .prev_pointer = nullptr,
@@ -385,11 +388,23 @@ TEST_CASE("Allocation Debug Stack Management") {
         .attempt = 0,
     });
 
-    CHECK(stack.count() == 1);
-    CHECK(stack.frames().size() == 1);
-    CHECK(stack.frames()[0].tag == "test");
+    CHECK(tracer.count() == 1);
+    CHECK(tracer.frames().size() == 1);
+    CHECK(tracer.frames()[0].tag == "test");
 
-    globals::set_allocation_stack(original);
+    get_ambient_ctx_mut().alloc_tracer = original;
+}
+
+TEST_CASE("CtxScope - RAII Context Switching") {
+    Ctx custom_ctx = get_ambient_ctx(); // Copy current
+    custom_ctx.tag = "custom";
+
+    const char *original_tag = get_ambient_ctx().tag;
+    {
+        CtxScope scope(&custom_ctx);
+        CHECK(std::strcmp(get_ambient_ctx().tag, "custom") == 0);
+    }
+    CHECK(std::strcmp(get_ambient_ctx().tag, original_tag) == 0);
 }
 
 } // namespace fr

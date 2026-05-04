@@ -25,7 +25,7 @@
 #include <cstddef>
 
 #include "fr/core/alloc.hpp"
-#include "fr/core/globals.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
@@ -54,7 +54,7 @@ public:
      * @param alloc Pointer to the allocator.
      * @note This sets the type to short string
      */
-    explicit StringBase(fr::Alloc *alloc = fr::globals::get_default_allocator()) noexcept
+    explicit StringBase(fr::Alloc *alloc = fr::get_ambient_ctx().alloc) noexcept
         : m_alloc(alloc) {
         m_data.short_string.text[0] = '\0';
         m_data.short_string.space_left = max_short_string_size;
@@ -67,7 +67,7 @@ public:
      * @param alloc Pointer to the allocator.
      */
     explicit StringBase(USize capacity_to_allocate,
-                        fr::Alloc *alloc = fr::globals::get_default_allocator())
+                        fr::Alloc *alloc = fr::get_ambient_ctx().alloc)
         : m_alloc(alloc) {
         // Short string
         if (capacity_to_allocate <= 23) {
@@ -96,7 +96,7 @@ public:
      * @param alloc The allocator used.
      */
     StringBase(char *ptr, USize size, USize allocated_capacity, acquire_memory_t,
-               fr::Alloc *alloc = fr::globals::get_default_allocator())
+               fr::Alloc *alloc = fr::get_ambient_ctx().alloc)
         : m_alloc(alloc) {
         FR_ASSERT(size > 0, "size must be non-zero");
         FR_ASSERT(allocated_capacity >= size + 1, "capacity too small");
