@@ -11,8 +11,10 @@
 
 namespace fr {
 
-/// @brief Sentinel type for anything that is empty or devoid of data, but not in a unkown, invalid
-/// state.
+/**
+ * @brief Sentinel type for anything that is empty or devoid of data, but not in a unkown, invalid
+ * state.
+ */
 struct NilTag {
     explicit constexpr NilTag() = default;
 };
@@ -46,13 +48,20 @@ concept HasADLNil = requires {
 
 } // namespace impl
 
-/// @brief Concept for types that have a defined nil value.
+/**
+ * @brief Concept for types that have a defined nil value.
+ */
 template <typename T>
 concept IsNillable =
     (sizeof(T)) != 0 && (std::is_pointer_v<T> || (impl::HasADLNil<T> && impl::HasADLIsNil<T>) ||
                          (impl::HasMemberNil<T> && impl::HasMemberIsNil<T>));
 
-/// @brief Returns the nil value for a nillable type.
+/**
+ * @brief Returns the nil value for a nillable type.
+ *
+ * @tparam T Nillable type.
+ * @return Nil value.
+ */
 template <IsNillable T>
 [[nodiscard]] constexpr T call_nil() noexcept {
     if constexpr (impl::HasMemberNil<T>) {
@@ -64,7 +73,13 @@ template <IsNillable T>
     }
 }
 
-/// @brief Checks if a value is nil.
+/**
+ * @brief Checks if a value is nil.
+ *
+ * @tparam T Nillable type.
+ * @param v Value to check.
+ * @return True if nil.
+ */
 template <IsNillable T>
 [[nodiscard]] constexpr bool call_is_nil(const T &v) noexcept {
     if constexpr (impl::HasMemberIsNil<T>) {

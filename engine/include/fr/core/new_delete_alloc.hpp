@@ -8,13 +8,15 @@
 
 #include <new>
 
-#include "fr/core/allocator.hpp"
+#include "fr/core/alloc.hpp"
 #include "fr/core/mem.hpp"
 
 namespace fr {
 
-/// @brief Allocator backed by global new/delete.
-class NewDeleteAllocator final : public Allocator {
+/**
+ * @brief Allocator backed by global new/delete.
+ */
+class NewDeleteAlloc final : public Alloc {
 
 protected:
     void *do_try_allocate(USize sz, USize alignment) noexcept override {
@@ -33,11 +35,21 @@ protected:
         }
     }
 
-    /// @brief Ownership information is not available for NewDeleteAllocator.
+    /**
+     * @brief Ownership information is not available for NewDeleteAllocator.
+     *
+     * @param ptr Pointer to check.
+     * @return OwnershipResult::Unknown.
+     */
     OwnershipResult owns(void * /*ptr*/) const noexcept override {
         return OwnershipResult::Unknown;
     }
 
+    /**
+     * @brief Returns the allocator tag.
+     *
+     * @return Tag string.
+     */
     const char *tag() const noexcept override {
         return "NewDeleteAllocator";
     }

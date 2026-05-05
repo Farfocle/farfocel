@@ -1,47 +1,52 @@
-#include <print>
-
-#include "fr/core/allocator.hpp"
 #include "fr/core/dynamic_array.hpp"
-#include "fr/core/globals.hpp"
-#include "fr/core/tuple.hpp"
+#include <iostream>
+
+#include "fr/core/ctx.hpp"
+#include "fr/core/json.hpp"
+#include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
 
-int main() {
+struct Pos {
+    F32 x{0.0};
+    F32 y{0.0};
+
+    template <typename A>
+    void shape(A &a) {
+        a.prop("x", x);
+        a.prop("y", y);
+    }
+};
+
+struct World {
+    fr::DynamicArray<Pos> positions{};
+
+    template <typename A>
+    void shape(A &a) {
+        a.prop("positions", positions);
+    }
+};
+
+S32 main() {
+    fr::init_core_ctx();
+
     {
-        auto numbers = fr::DynamicArray<U32>::filled_with(10, 4);
+        World world{.positions = {{1.0, 2.0}, {3.0, 4.0}}};
 
-        numbers.push_back(67);
+        fr::JsonSerializer serializer({.types = false, .pretty = true});
 
-        auto part = numbers.slice(0, 3);
+        world.shape(serializer);
 
-        for (U32 n : part) {
-            std::println("{}", n);
-        }
+        fr::String serialized_json = serializer.consume();
+        std::cout << serialized_json << "\n";
+        std::cout << "---\n";
+
+        fr::JsonDeserializer deserializer(serialized_json);
+        World deserialized_world;
+        deserialized_world.shape(deserializer);
+
+        std::cout << (world.positions[0].x == deserialized_world.positions[0].x) << "\n";
     }
 
-    std::println("----");
-    auto t = fr::Tuple(42, 0.42f, true);
-    auto [a, b, c] = t;
-
-    std::println("size -> {}", t.size());
-    std::println("a -> {}", a);
-    std::println("b -> {}", b);
-    std::println("c -> {}", c);
-
-    t.each([](const auto &item) { std::println("each -> {}", item); });
-
-    t.map([](const auto &item) { return sizeof(item); }).each([](const auto &item) {
-        std::println("each -> sizeof -> {}", item);
-    });
-
-    std::println("----");
-    for (const auto &frame : fr::globals::get_allocation_stack()->frames()) {
-        std::println("frame ts={} action={} prev={:p} next={:p} prev_size={} next_size={} align={} "
-                     "tag={} success={} attempt={}",
-                     frame.timestamp, static_cast<U32>(frame.action), frame.prev_pointer,
-                     frame.next_pointer, frame.prev_size, frame.next_size, frame.alignment,
-                     frame.tag, frame.success, frame.attempt);
-    }
-
+    fr::shutdown_core_ctx();
     return 0;
 }

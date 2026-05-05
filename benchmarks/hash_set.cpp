@@ -11,8 +11,10 @@
 
 #include "fr/core/hash_set.hpp"
 #include "fr/core/string.hpp"
+#include "fr/core/ctx.hpp"
 
 S32 main() {
+    fr::init_core_ctx();
     ankerl::nanobench::Bench bench;
     bench.title("HashSet Comparison").unit("operation").relative(true);
 
@@ -137,5 +139,6 @@ S32 main() {
         ankerl::nanobench::doNotOptimizeAway(found);
     });
 
+    fr::shutdown_core_ctx();
     return 0;
 }

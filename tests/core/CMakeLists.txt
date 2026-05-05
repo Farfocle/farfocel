@@ -2,7 +2,7 @@
 
 set(TEST_CORE_SOURCES
     "main.cpp"
-    "allocator.cpp"
+    "alloc.cpp"
     "dynamic_array.cpp"
     "optional.cpp"
     "pair.cpp"
@@ -11,6 +11,7 @@ set(TEST_CORE_SOURCES
     "string.cpp"
     "hash_set.cpp"
     "hash_map.cpp"
+    "serialization.cpp"
 )
 
 add_executable(farfocel_test_core ${TEST_CORE_SOURCES})

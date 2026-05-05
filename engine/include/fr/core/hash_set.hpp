@@ -12,30 +12,31 @@
 #include <type_traits>
 #include <utility>
 
-#include "fr/core/allocator.hpp"
-#include "fr/core/globals.hpp"
+#include "fr/core/alloc.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/math.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
 
-namespace impl_hash_set {
+namespace impl {
 /**
  * @brief Internal tag for default hash function.
  */
-struct DeafultHashFnTag {};
+struct HashSetDeafultHashFnTag {};
 /**
  * @brief Internal tag for default comparison function.
  */
-struct DeafultCmpFnTag {};
+struct HashSetDeafultEqFnTag {};
 
 /**
  * @brief Default hash function utilizing the call_hash protocol.
  */
 template <typename Key>
-struct DefaultHash {
+struct HashSetDefaultHash {
     inline Hash operator()(const Key &key) const noexcept {
         return call_hash(key);
     }
@@ -45,13 +46,13 @@ struct DefaultHash {
  * @brief Default equality comparison utilizing operator==.
  */
 template <typename Key>
-struct DefaultCmp {
+struct HashSetDeafultEq {
     inline bool operator()(const Key &lhs, const Key &rhs) const noexcept {
         return lhs == rhs;
     }
 };
 
-} // namespace impl_hash_set
+} // namespace impl
 
 /**
  * @brief Swiss-table inspired hash set.
@@ -62,13 +63,14 @@ struct DefaultCmp {
  * This implementation uses a flat memory layout with control bytes (Swiss Table)
  * to speed up lookups and minimize cache misses.
  */
-template <typename Key, typename HashFn = impl_hash_set::DeafultHashFnTag,
-          typename CmpFn = impl_hash_set::DeafultCmpFnTag>
+template <typename Key, typename HashFn = impl::HashSetDeafultHashFnTag,
+          typename EqFn = impl::HashSetDeafultEqFnTag>
 class HashSet {
-    using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl_hash_set::DeafultHashFnTag>,
-                                            impl_hash_set::DefaultHash<Key>, HashFn>;
-    using ActualCmpFn = std::conditional_t<std::is_same_v<CmpFn, impl_hash_set::DeafultCmpFnTag>,
-                                           impl_hash_set::DefaultCmp<Key>, CmpFn>;
+    using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl::HashSetDeafultHashFnTag>,
+                                            impl::HashSetDefaultHash<Key>, HashFn>;
+
+    using ActualEqFn = std::conditional_t<std::is_same_v<EqFn, impl::HashSetDeafultEqFnTag>,
+                                          impl::HashSetDeafultEq<Key>, EqFn>;
 
 private:
     struct Slot {
@@ -188,7 +190,7 @@ public:
      * @brief Constructs an empty HashSet using a specific allocator.
      * @param alloc Pointer to the allocator to use.
      */
-    explicit HashSet(Allocator *alloc) noexcept
+    explicit HashSet(Alloc *alloc) noexcept
         : m_alloc(alloc) {
     }
 
@@ -278,12 +280,13 @@ public:
 
     /**
      * @brief Creates an empty HashSet with a specific allocator.
+     *
      * @param alloc Pointer to the allocator.
      * @return A new empty HashSet instance.
-     * @pre @p alloc must not be null.
+     * @pre alloc must not be null.
      */
-    static HashSet with_allocator(Allocator *alloc) noexcept {
-        FR_ASSERT(alloc, "Allocator must not be null");
+    static HashSet with_allocator(Alloc *alloc) noexcept {
+        FR_ASSERT(alloc, "allocator must be non-null");
         return HashSet(alloc);
     }
 
@@ -425,6 +428,40 @@ public:
         m_load = 0;
     }
 
+    template <typename A>
+    void shape(A &archive) {
+        if constexpr (A::kind == ArchiveKind::Serializer) {
+            USize l = m_load;
+            archive.prop("@load", l);
+
+            USize cap = m_capacity;
+            archive.prop("@capacity", cap);
+        } else {
+            USize l = 0;
+            archive.prop("@load", l);
+
+            USize cap = 0;
+            archive.prop("@capacity", cap);
+        }
+
+        archive.list("@items", [&](A &list_archive) {
+            if constexpr (A::kind == ArchiveKind::Serializer) {
+                for (const Key &item : *this) {
+                    list_archive.prop("", const_cast<Key &>(item));
+                }
+            } else {
+                this->clear();
+                USize count = list_archive.current_list_size();
+
+                for (USize i = 0; i < count; ++i) {
+                    Key item{};
+                    list_archive.prop("", item);
+                    this->insert(std::move(item));
+                }
+            }
+        });
+    }
+
 private:
     std::ptrdiff_t do_find_idx(const Key &key) const noexcept {
         if (m_capacity == 0) {
@@ -445,7 +482,7 @@ private:
             }
 
             if (c.value == h2) {
-                if (ActualCmpFn{}(m_slots[curr].key, key)) {
+                if (ActualEqFn{}(m_slots[curr].key, key)) {
                     return static_cast<std::ptrdiff_t>(curr);
                 }
             }
@@ -472,7 +509,7 @@ private:
             Ctrl c = m_ctrls[curr];
 
             if (c.value == h2) {
-                if (ActualCmpFn{}(m_slots[curr].key, key)) {
+                if (ActualEqFn{}(m_slots[curr].key, key)) {
                     return false;
                 }
             }
@@ -490,7 +527,7 @@ private:
             }
         }
 
-        FR_ASSERT(first_free != -1, "HashSet: Failed to find insertion slot");
+        FR_ASSERT(first_free != -1, "hash set overflow");
         USize target = static_cast<USize>(first_free);
 
         m_ctrls[target].value = h2;
@@ -502,8 +539,8 @@ private:
     }
 
     void do_grow(USize new_capacity) noexcept {
-        FR_ASSERT(new_capacity > m_capacity, "New capacity has to be greater than the old one");
-        FR_ASSERT(math::is_pow2(new_capacity), "Capacity must be a power of two");
+        FR_ASSERT(new_capacity > m_capacity, "capacity must grow");
+        FR_ASSERT(math::is_pow2(new_capacity), "capacity must be power of two");
 
         USize old_capacity = m_capacity;
         Slot *old_slots = m_slots;
@@ -583,7 +620,7 @@ private:
         return sizeof(Slot) * capacity;
     }
 
-    Allocator *m_alloc{globals::get_default_allocator()};
+    Alloc *m_alloc{get_ambient_ctx().alloc};
 
     USize m_capacity{0};
     USize m_load{0};

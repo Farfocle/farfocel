@@ -36,6 +36,18 @@ TEST_CASE("StringView - Basic Operations") {
     CHECK(sv == "En");
 }
 
+TEST_CASE("StringView - constexpr usage") {
+    constexpr StringView sv("constexpr");
+    static_assert(sv.size() == 9);
+    static_assert(!sv.is_empty());
+    static_assert(sv.front() == 'c');
+    static_assert(sv.back() == 'r');
+    static_assert(sv.starts_with("const"));
+    static_assert(sv.ends_with("expr"));
+    static_assert(sv.find('x') == 6);
+    static_assert(sv.find("expr") == 5);
+}
+
 TEST_CASE("String - SSO max") {
     String empty;
     CHECK(empty.size() == 0);

@@ -12,13 +12,14 @@
 #include <type_traits>
 #include <utility>
 
-#include "fr/core/allocator.hpp"
-#include "fr/core/globals.hpp"
+#include "fr/core/alloc.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/math.hpp"
 #include "fr/core/optional.hpp"
 #include "fr/core/pair.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
@@ -27,17 +28,17 @@ namespace impl {
 /**
  * @brief Internal tag for default hash function.
  */
-struct DeafultHashFnTag {};
+struct HashMapDeafultHashFnTag {};
 /**
  * @brief Internal tag for default comparison function.
  */
-struct DeafultCmpFnTag {};
+struct HashMapDeafultEqFnTag {};
 
 /**
  * @brief Default hash function utilizing the call_hash protocol.
  */
 template <typename Key>
-struct DefaultHash {
+struct HashMapDeafultHash {
     inline Hash operator()(const Key &key) const noexcept {
         return call_hash(key);
     }
@@ -47,7 +48,7 @@ struct DefaultHash {
  * @brief Default equality comparison utilizing operator==.
  */
 template <typename Key>
-struct DefaultCmp {
+struct HashMapDeafultEq {
     inline bool operator()(const Key &lhs, const Key &rhs) const noexcept {
         return lhs == rhs;
     }
@@ -64,14 +65,15 @@ struct DefaultCmp {
  * HashMap provides O(1) average-time complexity for insertions, lookups, and removals.
  * It uses a Swiss Table-like architecture to achieve high cache efficiency.
  */
-template <typename Key, typename Value, typename HashFn = impl::DeafultHashFnTag,
-          typename CmpFn = impl::DeafultCmpFnTag>
+template <typename Key, typename Value, typename HashFn = impl::HashMapDeafultHashFnTag,
+          typename CmpFn = impl::HashMapDeafultEqFnTag>
 class HashMap {
 
-    using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl::DeafultHashFnTag>,
-                                            impl::DefaultHash<Key>, HashFn>;
-    using ActualCmpFn = std::conditional_t<std::is_same_v<CmpFn, impl::DeafultCmpFnTag>,
-                                           impl::DefaultCmp<Key>, CmpFn>;
+    using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl::HashMapDeafultHashFnTag>,
+                                            impl::HashMapDeafultHash<Key>, HashFn>;
+
+    using ActualCmpFn = std::conditional_t<std::is_same_v<CmpFn, impl::HashMapDeafultEqFnTag>,
+                                           impl::HashMapDeafultEq<Key>, CmpFn>;
 
     struct Slot {
         Hash hash;
@@ -191,9 +193,10 @@ public:
 
     /**
      * @brief Constructs an empty HashMap using a specific allocator.
+     *
      * @param alloc Pointer to the allocator.
      */
-    explicit HashMap(Allocator *alloc) noexcept
+    explicit HashMap(Alloc *alloc) noexcept
         : m_alloc(alloc) {
     }
 
@@ -275,12 +278,13 @@ public:
 
     /**
      * @brief Creates an empty HashMap with a specific allocator.
+     *
      * @param alloc Pointer to the allocator.
      * @return A new empty HashMap instance.
-     * @pre @p alloc must not be null.
+     * @pre alloc must not be null.
      */
-    static HashMap with_allocator(Allocator *alloc) noexcept {
-        FR_ASSERT(alloc, "Allocator must not be null");
+    static HashMap with_allocator(Alloc *alloc) noexcept {
+        FR_ASSERT(alloc, "allocator must be non-null");
         return HashMap(alloc);
     }
 
@@ -494,7 +498,7 @@ public:
             }
         }
 
-        FR_ASSERT(target_idx != -1, "HashMap: Failed to find insertion slot for operator[]");
+        FR_ASSERT(target_idx != -1, "hash map overflow");
         USize target = static_cast<USize>(target_idx);
 
         m_ctrls[target].value = h2;
@@ -504,6 +508,50 @@ public:
         ++m_load;
 
         return m_slots[target].value;
+    }
+
+    template <typename A>
+    void shape(A &archive) {
+        if constexpr (A::kind == ArchiveKind::Serializer) {
+            USize l = m_load;
+            archive.prop("@load", l);
+
+            USize cap = m_capacity;
+            archive.prop("@capacity", cap);
+        } else {
+            USize l = 0;
+            archive.prop("@load", l);
+
+            USize cap = 0;
+            archive.prop("@capacity", cap);
+        }
+
+        archive.list("@items", [&](A &list_archive) {
+            if constexpr (A::kind == ArchiveKind::Serializer) {
+                for (auto pair : *this) {
+                    auto &key = pair.first();
+                    auto &val = pair.second();
+
+                    list_archive.dict("", [&](A &entry_archive) {
+                        entry_archive.prop("@key", const_cast<Key &>(key));
+                        entry_archive.prop("@value", val);
+                    });
+                }
+            } else {
+                this->clear();
+                USize count = list_archive.current_list_size();
+
+                for (USize i = 0; i < count; ++i) {
+                    list_archive.dict("", [&](A &entry_archive) {
+                        Key key{};
+                        Value val{};
+                        entry_archive.prop("@key", key);
+                        entry_archive.prop("@value", val);
+                        this->insert(std::move(key), std::move(val));
+                    });
+                }
+            }
+        });
     }
 
 private:
@@ -569,7 +617,7 @@ private:
             }
         }
 
-        FR_ASSERT(first_free != -1, "HashMap: Failed to find insertion slot");
+        FR_ASSERT(first_free != -1, "hash map overflow");
         USize target = static_cast<USize>(first_free);
 
         m_ctrls[target].value = h2;
@@ -582,8 +630,8 @@ private:
     }
 
     void do_grow(USize new_capacity) noexcept {
-        FR_ASSERT(new_capacity > m_capacity, "New capacity has to be greater than the old one");
-        FR_ASSERT(math::is_pow2(new_capacity), "Capacity must be a power of two");
+        FR_ASSERT(new_capacity > m_capacity, "capacity must grow");
+        FR_ASSERT(math::is_pow2(new_capacity), "capacity must be power of two");
 
         USize old_capacity = m_capacity;
         Slot *old_slots = m_slots;
@@ -598,6 +646,7 @@ private:
 
         Byte *buffer =
             reinterpret_cast<Byte *>(m_alloc->allocate(slots_size + ctrls_size, alignment));
+
         m_slots = reinterpret_cast<Slot *>(buffer);
         m_ctrls = reinterpret_cast<Ctrl *>(buffer + slots_size);
 
@@ -673,7 +722,7 @@ private:
         return sizeof(Slot) * capacity;
     }
 
-    Allocator *m_alloc{globals::get_default_allocator()};
+    Alloc *m_alloc{get_ambient_ctx().alloc};
     USize m_capacity{0};
     USize m_load{0};
     Slot *m_slots{nullptr};

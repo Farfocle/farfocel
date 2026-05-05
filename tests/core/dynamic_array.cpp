@@ -9,7 +9,7 @@ struct Lifecycle {
     S32 value;
     bool *moved_from = nullptr;
 
-    Lifecycle(int v = 0)
+    Lifecycle(S32 v = 0)
         : value(v) {
         alive_count++;
     }
@@ -85,7 +85,7 @@ TEST_CASE("DynamicArray - Construction") {
     }
 
     SUBCASE("Filled with") {
-        auto arr = DynamicArray<int>::filled_with(3, 42, globals::get_default_allocator());
+        auto arr = DynamicArray<int>::filled_with(3, 42, get_ambient_ctx().alloc);
         CHECK(arr.size() == 3);
         CHECK(arr[0] == 42);
         CHECK(arr[1] == 42);

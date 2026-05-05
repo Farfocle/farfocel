@@ -8,17 +8,19 @@
 
 #include <doctest.h>
 
-#include "fr/core/allocation_stack.hpp"
-#include "fr/core/allocator.hpp"
-#include "fr/core/arena_allocator.hpp"
-#include "fr/core/block_allocator.hpp"
-#include "fr/core/globals.hpp"
-#include "fr/core/malloc_allocator.hpp"
+#include "fr/core/alloc.hpp"
+#include "fr/core/alloc_tracer.hpp"
+#include "fr/core/arena_alloc.hpp"
+#include "fr/core/block_alloc.hpp"
+#include "fr/core/ctx.hpp"
+#include "fr/core/malloc_alloc.hpp"
+#include "fr/core/new_delete_alloc.hpp"
 
 namespace fr {
 
 TEST_CASE("NewDeleteAllocator - Basic") {
-    Allocator *alloc = globals::get_new_delete_allocator();
+    NewDeleteAlloc alloc_inst;
+    Alloc *alloc = &alloc_inst;
     CHECK(alloc != nullptr);
 
     // Test basic allocation
@@ -34,7 +36,8 @@ TEST_CASE("NewDeleteAllocator - Basic") {
 }
 
 TEST_CASE("MallocAllocator - Basic") {
-    Allocator *alloc = globals::get_malloc_allocator();
+    MallocAlloc alloc_inst;
+    Alloc *alloc = &alloc_inst;
     CHECK(alloc != nullptr);
 
     // Test basic allocation
@@ -50,7 +53,8 @@ TEST_CASE("MallocAllocator - Basic") {
 }
 
 TEST_CASE("MallocAllocator - Reallocate") {
-    Allocator *alloc = globals::get_malloc_allocator();
+    MallocAlloc alloc_inst;
+    Alloc *alloc = &alloc_inst;
 
     void *ptr = alloc->allocate(1024, 8);
     std::memset(ptr, 0xAA, 1024);
@@ -72,7 +76,7 @@ TEST_CASE("MallocAllocator - Reallocate") {
 
 TEST_CASE("ArenaAllocator - Basic") {
     U8 backing[128] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
 
     void *ptr = arena.allocate(16, 8);
     CHECK(ptr != nullptr);
@@ -83,13 +87,13 @@ TEST_CASE("ArenaAllocator - Basic") {
 
 TEST_CASE("ArenaAllocator - Custom Tag") {
     U8 backing[64] = {};
-    ArenaAllocator arena(backing, sizeof(backing), "MyArena");
+    ArenaAlloc arena(backing, sizeof(backing), "MyArena");
     CHECK(std::strcmp(arena.tag(), "ArenaAllocator: MyArena") == 0);
 }
 
 TEST_CASE("ArenaAllocator - Exhaustion And Reset") {
     U8 backing[64] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
 
     void *a = arena.allocate(24, 8);
     CHECK(a != nullptr);
@@ -106,7 +110,7 @@ TEST_CASE("ArenaAllocator - Exhaustion And Reset") {
 
 TEST_CASE("ArenaAllocator - Reallocate Last Block") {
     U8 backing[128] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
 
     void *ptr = arena.allocate(16, 8);
     REQUIRE(ptr != nullptr);
@@ -126,7 +130,7 @@ TEST_CASE("ArenaAllocator - Reallocate Last Block") {
 
 TEST_CASE("ArenaAllocator - Reallocate Non-Last Block") {
     U8 backing[128] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
 
     void *ptr1 = arena.allocate(16, 8);
     void *ptr2 = arena.allocate(16, 8);
@@ -153,7 +157,7 @@ TEST_CASE("ArenaAllocator - Reallocate Non-Last Block") {
 
 TEST_CASE("ArenaAllocator - Reallocate Fails") {
     U8 backing[64] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
 
     void *ptr = arena.allocate(32, 8);
     REQUIRE(ptr != nullptr);
@@ -173,7 +177,7 @@ TEST_CASE("ArenaAllocator - Reallocate Fails") {
 
 TEST_CASE("ArenaAllocator - Ownership and Tags") {
     U8 backing[64] = {};
-    ArenaAllocator arena(backing, sizeof(backing));
+    ArenaAlloc arena(backing, sizeof(backing));
     U8 other_buffer[64] = {};
 
     CHECK(arena.owns(nullptr) == OwnershipResult::DoesNotOwn);
@@ -195,7 +199,7 @@ TEST_CASE("ArenaAllocator - Alignment Handling") {
     USize aligned_addr = (addr + 63) & ~63;
     USize offset = aligned_addr - addr;
 
-    ArenaAllocator arena(backing + offset, 256 - offset);
+    ArenaAlloc arena(backing + offset, 256 - offset);
 
     void *p1 = arena.allocate(1, 1);
     CHECK(p1 != nullptr);
@@ -211,7 +215,7 @@ TEST_CASE("ArenaAllocator - Alignment Handling") {
 
 TEST_CASE("BlockAllocator - Basic") {
     U8 backing[128] = {};
-    BlockAllocator pool(backing, sizeof(backing), 32, "MyPool");
+    BlockAlloc pool(backing, sizeof(backing), 32, "MyPool");
 
     CHECK(pool.block_size() == 32);
     CHECK(pool.total_blocks() == 4);
@@ -237,7 +241,7 @@ TEST_CASE("BlockAllocator - Basic") {
 
 TEST_CASE("BlockAllocator - Exhaustion") {
     U8 backing[64] = {};
-    BlockAllocator pool(backing, sizeof(backing), 32);
+    BlockAlloc pool(backing, sizeof(backing), 32);
 
     void *p1 = pool.allocate(32, 8);
     void *p2 = pool.allocate(32, 8);
@@ -254,7 +258,7 @@ TEST_CASE("BlockAllocator - Exhaustion") {
 
 TEST_CASE("BlockAllocator - Reallocate") {
     U8 backing[64] = {};
-    BlockAllocator pool(backing, sizeof(backing), 32);
+    BlockAlloc pool(backing, sizeof(backing), 32);
 
     void *p1 = pool.allocate(16, 8);
     std::memset(p1, 0xDE, 16);
@@ -270,7 +274,7 @@ TEST_CASE("BlockAllocator - Reallocate") {
 
 TEST_CASE("BlockAllocator - Reset") {
     U8 backing[64] = {};
-    BlockAllocator pool(backing, sizeof(backing), 32);
+    BlockAlloc pool(backing, sizeof(backing), 32);
 
     void *p1 = pool.allocate(32, 8);
     void *p2 = pool.allocate(32, 8);
@@ -284,7 +288,7 @@ TEST_CASE("BlockAllocator - Reset") {
     CHECK(p3 != nullptr);
 }
 
-class FailAllocator final : public Allocator {
+class FailAllocator final : public Alloc {
 public:
     U32 call_count = 0;
 
@@ -322,8 +326,8 @@ TEST_CASE("OOM Handler Layer") {
     g_oom_call_count = 0;
 
     // Test default retry behavior
-    globals::set_oom_handler(oom_retry_handler);
-    globals::set_oom_retries(2);
+    get_ambient_ctx_mut().oom_handler = oom_retry_handler;
+    get_ambient_ctx_mut().oom_retries = 2;
 
     void *ptr = fail_alloc.try_allocate(100, 16);
     CHECK(ptr == nullptr);
@@ -335,7 +339,7 @@ TEST_CASE("OOM Handler Layer") {
     // Test fail action
     g_oom_call_count = 0;
     fail_alloc.call_count = 0;
-    globals::set_oom_handler(oom_fail_handler);
+    get_ambient_ctx_mut().oom_handler = oom_fail_handler;
 
     ptr = fail_alloc.try_allocate(100, 16);
     CHECK(ptr == nullptr);
@@ -343,38 +347,37 @@ TEST_CASE("OOM Handler Layer") {
     CHECK(g_oom_call_count == 1);
 
     // Test no handler
-    globals::set_oom_handler(nullptr);
+    get_ambient_ctx_mut().oom_handler = nullptr;
     fail_alloc.call_count = 0;
     ptr = fail_alloc.try_allocate(100, 16);
     CHECK(ptr == nullptr);
     CHECK(fail_alloc.call_count == 1);
 
     // Restore default state
-    globals::set_oom_retries(2);
+    get_ambient_ctx_mut().oom_retries = 2;
 }
 
-TEST_CASE("Default Allocator Management") {
-    Allocator *original = globals::get_default_allocator();
-    MallocAllocator my_alloc;
+TEST_CASE("Ambient Allocator Management") {
+    Alloc *original = get_ambient_ctx().alloc;
+    MallocAlloc my_alloc;
 
-    globals::set_default_allocator(&my_alloc);
-    CHECK(globals::get_default_allocator() == &my_alloc);
+    get_ambient_ctx_mut().alloc = &my_alloc;
+    CHECK(get_ambient_ctx().alloc == &my_alloc);
 
-    globals::set_default_allocator(original);
-    CHECK(globals::get_default_allocator() == original);
+    get_ambient_ctx_mut().alloc = original;
+    CHECK(get_ambient_ctx().alloc == original);
 }
 
-TEST_CASE("Allocation Debug Stack Management") {
-    AllocationStack stack(16);
-    AllocationStack *original = globals::get_allocation_stack();
+TEST_CASE("Allocation Tracer Management") {
+    AllocTracer tracer(16);
+    AllocTracer *original = get_ambient_ctx().alloc_tracer;
 
-    AllocationStack *previous = globals::set_allocation_stack(&stack);
-    CHECK(previous == original);
-    CHECK(globals::get_allocation_stack() == &stack);
+    get_ambient_ctx_mut().alloc_tracer = &tracer;
+    CHECK(get_ambient_ctx().alloc_tracer == &tracer);
 
-    stack.record(AllocationFrame{
+    tracer.record(AllocFrame{
         .timestamp = 1,
-        .action = AllocatorAction::Allocate,
+        .action = AllocAction::Allocate,
         .prev_pointer = nullptr,
         .next_pointer = reinterpret_cast<void *>(0x1),
         .prev_size = 0,
@@ -385,11 +388,23 @@ TEST_CASE("Allocation Debug Stack Management") {
         .attempt = 0,
     });
 
-    CHECK(stack.count() == 1);
-    CHECK(stack.frames().size() == 1);
-    CHECK(stack.frames()[0].tag == "test");
+    CHECK(tracer.count() == 1);
+    CHECK(tracer.frames().size() == 1);
+    CHECK(tracer.frames()[0].tag == "test");
 
-    globals::set_allocation_stack(original);
+    get_ambient_ctx_mut().alloc_tracer = original;
+}
+
+TEST_CASE("CtxScope - RAII Context Switching") {
+    Ctx custom_ctx = get_ambient_ctx(); // Copy current
+    custom_ctx.tag = "custom";
+
+    const char *original_tag = get_ambient_ctx().tag;
+    {
+        CtxScope scope(&custom_ctx);
+        CHECK(std::strcmp(get_ambient_ctx().tag, "custom") == 0);
+    }
+    CHECK(std::strcmp(get_ambient_ctx().tag, original_tag) == 0);
 }
 
 } // namespace fr

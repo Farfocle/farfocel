@@ -22,6 +22,7 @@
 
 #include "fr/core/macros.hpp"
 #include "fr/core/nil.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
@@ -279,27 +280,43 @@ public:
         return m_storage.is_nil();
     }
 
-    /// @brief Unwraps the value. Asserts in debug if empty.
+    /**
+     * @brief Unwraps the value. Asserts in debug if empty.
+     *
+     * @return Reference to the value.
+     */
     [[nodiscard]] T &unwrap() noexcept {
-        FR_ASSERT(!is_nil(), "Optional::unwrap() called on empty Optional");
+        FR_ASSERT(!is_nil(), "unwrap on nil");
         return m_storage.get();
     }
 
-    /// @brief Unwraps the value. Asserts in debug if empty.
+    /**
+     * @brief Unwraps the value. Asserts in debug if empty.
+     *
+     * @return Constant reference to the value.
+     */
     [[nodiscard]] const T &unwrap() const noexcept {
-        FR_ASSERT(!is_nil(), "Optional::unwrap() called on empty Optional");
+        FR_ASSERT(!is_nil(), "unwrap on nil");
         return m_storage.get();
     }
 
-    /// @brief Arrow operator — asserted.
+    /**
+     * @brief Arrow operator — asserted.
+     *
+     * @return Pointer to the value.
+     */
     [[nodiscard]] T *operator->() noexcept {
-        FR_ASSERT(!is_nil(), "Optional::operator->() called on empty Optional");
+        FR_ASSERT(!is_nil(), "arrow on nil");
         return &m_storage.get();
     }
 
-    /// @brief Arrow operator — asserted.
+    /**
+     * @brief Arrow operator — asserted.
+     *
+     * @return Constant pointer to the value.
+     */
     [[nodiscard]] const T *operator->() const noexcept {
-        FR_ASSERT(!is_nil(), "Optional::operator->() called on empty Optional");
+        FR_ASSERT(!is_nil(), "arrow on nil");
         return &m_storage.get();
     }
 
@@ -380,6 +397,25 @@ public:
 
     [[nodiscard]] bool operator!=(NilTag) const noexcept {
         return !is_nil();
+    }
+
+    template <typename A>
+    void shape(A &archive) {
+        bool has_value = is_some();
+        archive.prop("@has_value", has_value);
+        if constexpr (A::kind == ArchiveKind::Serializer) {
+            if (has_value) {
+                archive.prop("@value", unwrap());
+            }
+        } else {
+            if (has_value) {
+                T val{};
+                archive.prop("@value", val);
+                this->emplace(std::move(val));
+            } else {
+                this->reset();
+            }
+        }
     }
 };
 

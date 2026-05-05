@@ -23,144 +23,154 @@ public:
     }
 
     /**
-     * @brief Constructor from a pointer and a known length
-     * @param str Pointer to the character array
-     * @param len Length of the string without null-terminator
+     * @brief Constructor from a pointer and a known length.
+     *
+     * @param str Pointer to the character array.
+     * @param len Length of the string.
      */
     constexpr StringView(const char *str, USize len) noexcept
         : m_data(str),
           m_size(len) {
-        FR_ASSERT(str != nullptr || len == 0, "fr::StringView(const char *str, USize len): str "
-                                              "cannot be nullptr if len is greater than 0");
+        FR_ASSERT(str != nullptr || len == 0, "pointer must be non-null if size is non-zero");
     }
 
     /**
-     * @brief Constructor from a C-string
-     * @param str Pointer to the character array containing null-terminator
+     * @brief Constructor from a C-string.
+     *
+     * @param str Null-terminated character array.
      */
     constexpr StringView(const char *str) noexcept
         : m_data(str),
           m_size(0) {
 
-        FR_ASSERT(str != nullptr, "fr::StringView(const char *str): str must not be nullptr");
+        FR_ASSERT(str != nullptr, "pointer must be non-null");
         m_size = const_strlen(str);
     }
 
     /**
+     * @brief Copy constructor.
      *
-     * @brief Copy constructor
-     * @param other Copier view
+     * @param other View to copy.
      */
     constexpr StringView(const StringView &other) noexcept = default;
 
     /**
+     * @brief Copy assignment operator.
      *
-     * @brief Copy assignment opeator
-     * @apram other Assigned view
+     * @param other View to assign.
+     * @return Reference to this view.
      */
     constexpr StringView &operator=(const StringView &other) noexcept = default;
 
     /**
-     * @brief Gets the pointer to the beginning of the string
-     * @return Pointer to the character array
+     * @brief Gets the pointer to the beginning of the string.
+     *
+     * @return Constant pointer to the first character.
      */
     [[nodiscard]] constexpr const char *begin() const noexcept {
         return m_data;
     }
 
     /**
-     * @brief Gets the pointer to the end of the string
-     * @return Pointer to the character array right after the last character
+     * @brief Gets the pointer to the end of the string.
      *
+     * @return Constant pointer past the last character.
      */
     [[nodiscard]] constexpr const char *end() const noexcept {
         return m_data + m_size;
     }
 
     /**
-     * @brief Gets a read-only pointer to the raw string data
-     * @return Pointer to the character array
+     * @brief Gets a read-only pointer to the raw string data.
+     *
+     * @return Constant pointer to the character array.
      */
     [[nodiscard]] constexpr const char *data() const noexcept {
         return m_data;
     }
 
     /**
-     * @brief Gets the current text size
-     * @return Number of characters in the view
+     * @brief Gets the current text size.
+     *
+     * @return Number of characters in the view.
      */
     [[nodiscard]] constexpr USize size() const noexcept {
         return m_size;
     }
 
     /**
-     * @brief Checks if the view is empty
-     * @return True if size is 0, false otherwise
+     * @brief Checks if the view is empty.
+     *
+     * @return True if size is 0.
      */
     [[nodiscard]] constexpr bool is_empty() const noexcept {
         return m_size == 0;
     }
 
     /**
-     * @brief Reads a character at a given index
-     * @param pos Index of the character
-     * @return Character at the specified position
-     * @pre pos < m_size
+     * @brief Character accessor.
+     *
+     * @param pos Index of the character.
+     * @return Character at position.
+     * @pre pos < size().
      */
     constexpr char operator[](USize pos) const noexcept {
-        FR_ASSERT(m_size > pos,
-                  "fr::StringView operator[](USize pos): pos must be smaller than string's size");
+        FR_ASSERT(pos < m_size, "index out of bounds");
         return m_data[pos];
     }
 
     /**
-     * @brief Gets the first character of the view
-     * @return First character
+     * @brief Returns the first character.
+     *
+     * @return First character.
+     * @pre !is_empty().
      */
     constexpr char front() const noexcept {
-        FR_ASSERT(m_size > 0, "fr::StringView front(): m_size must > 0");
+        FR_ASSERT(m_size > 0, "empty view access");
         return m_data[0];
     }
 
     /**
-     * @brief Gets the last character of the view
-     * @return Last character
+     * @brief Returns the last character.
+     *
+     * @return Last character.
+     * @pre !is_empty().
      */
     constexpr char back() const noexcept {
-        FR_ASSERT(m_size > 0, "fr::StringView back(): m_size must > 0");
+        FR_ASSERT(m_size > 0, "empty view access");
         return m_data[m_size - 1];
     }
 
     /**
-     * @brief Removes characters from the front
-     * @param n Number of characters to remove
-     * @pre n <= m_size
+     * @brief Removes characters from the front.
+     *
+     * @param n Number of characters to remove.
      */
     constexpr void remove_prefix(USize n) noexcept {
-        FR_ASSERT(n <= m_size, "fr::StringView remove_prefix(USize n): n must be <= m_size");
+        FR_ASSERT(n <= m_size, "prefix size overflow");
         m_data += n;
         m_size -= n;
     }
 
     /**
-     * @brief Removes characters from the back
-     * @param n Number of characters to remove
-     * @pre n <= m_size
+     * @brief Removes characters from the back.
+     *
+     * @param n Number of characters to remove.
      */
     constexpr void remove_suffix(USize n) noexcept {
-        FR_ASSERT(n <= m_size, "fr::StringView remove_suffix(USize n): n must be <= m_size");
+        FR_ASSERT(n <= m_size, "suffix size overflow");
         m_size -= n;
     }
 
     /**
-     * @brief Cuts a smaller view out of the current one
-     * @param pos Starting position
-     * @param count Number of characters to include (default is npos)
-     * @return A new StringView representing the substring
-     * @pre pos <= m_size
+     * @brief Returns a substring view.
+     *
+     * @param pos Start position.
+     * @param count Number of characters.
+     * @return Substring view.
      */
     constexpr StringView substr(USize pos, USize count = npos) const noexcept {
-        FR_ASSERT(pos <= m_size, "fr::StringView substr(USize n): pos must be <= m_size");
+        FR_ASSERT(pos <= m_size, "index out of bounds");
 
         USize max_count = m_size - pos;
         USize a_count = (count > max_count) ? max_count : count;

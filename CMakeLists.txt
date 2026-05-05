@@ -100,6 +100,8 @@ endif()
 add_subdirectory(3rdparty)
 add_subdirectory(engine)
 add_subdirectory(sandbox)
+
+enable_testing()
 add_subdirectory(tests)
 add_subdirectory(benchmarks)
 add_subdirectory(docs)
