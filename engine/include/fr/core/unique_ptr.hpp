@@ -202,6 +202,26 @@ public:
         return m_alloc;
     }
 
+    template <typename A>
+    void shape(A &archive) {
+        bool has_value = (m_ptr != nullptr);
+        archive.prop("has_value", has_value);
+        if constexpr (A::kind == ArchiveKind::Serializer) {
+            if (has_value) {
+                archive.prop("value", *m_ptr);
+            }
+        } else {
+            if (has_value) {
+                if (!m_ptr) {
+                    *this = make_unique<T>();
+                }
+                archive.prop("value", *m_ptr);
+            } else {
+                this->clear();
+            }
+        }
+    }
+
 private:
     T *m_ptr = nullptr;
     Alloc *m_alloc = nullptr;
@@ -334,6 +354,25 @@ public:
         return m_alloc;
     }
 
+    template <typename A>
+    void shape(A &archive) {
+        USize sz = m_size;
+        archive.prop("size", sz);
+        if constexpr (A::kind == ArchiveKind::Deserializer) {
+            if (sz != m_size) {
+                this->clear();
+                if (sz > 0) {
+                    *this = make_unique<T>(sz);
+                }
+            }
+        }
+        archive.list("items", [&](A &list_archive) {
+            for (USize i = 0; i < m_size; ++i) {
+                list_archive.prop("", m_ptr[i]);
+            }
+        });
+    }
+
     /**
      * @brief Releases ownership of the managed array.
      * 
@@ -434,7 +473,7 @@ inline UniquePtr<T> make_unique_in(Alloc *alloc, USize size) {
     void *mem = alloc->allocate(size * sizeof(ElementType), alignof(ElementType));
     ElementType *arr = static_cast<ElementType *>(mem);
 
-    fr::mem::value_init_range(arr, size);
+    fr::mem::default_init_range(arr, size);
 
     return UniquePtr<T>(arr, alloc, size);
 }

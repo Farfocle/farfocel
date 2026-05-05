@@ -17,6 +17,7 @@
 #include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/math.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
@@ -429,11 +430,34 @@ public:
 
     template <typename A>
     void shape(A &archive) {
-        archive.prop("load", m_load);
-        archive.prop("capacity", m_capacity);
+        if constexpr (A::kind == ArchiveKind::Serializer) {
+            USize l = m_load;
+            archive.prop("load", l);
+
+            USize cap = m_capacity;
+            archive.prop("capacity", cap);
+        } else {
+            USize l = 0;
+            archive.prop("load", l);
+
+            USize cap = 0;
+            archive.prop("capacity", cap);
+        }
+
         archive.list("items", [&](A &list_archive) {
-            for (const Key &item : *this) {
-                list_archive.prop("", item);
+            if constexpr (A::kind == ArchiveKind::Serializer) {
+                for (const Key &item : *this) {
+                    list_archive.prop("@item", const_cast<Key &>(item));
+                }
+            } else {
+                this->clear();
+                USize count = list_archive.current_list_size();
+
+                for (USize i = 0; i < count; ++i) {
+                    Key item{};
+                    list_archive.prop("@item", item);
+                    this->insert(std::move(item));
+                }
             }
         });
     }

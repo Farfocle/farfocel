@@ -9,6 +9,7 @@
 #include <type_traits>
 
 #include "fr/core/macros.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
@@ -192,6 +193,22 @@ public:
      */
     bool is_empty() const noexcept {
         return m_size == 0;
+    }
+
+    template <typename A>
+    void shape(A &archive) {
+        USize sz = m_size;
+        archive.prop("size", sz);
+
+        if constexpr (A::kind == ArchiveKind::Deserializer) {
+            FR_ASSERT(sz <= m_size, "slice overflow during deserialization");
+        }
+
+        archive.list("items", [&](A &list_archive) {
+            for (USize i = 0; i < sz; ++i) {
+                list_archive.prop("", m_data[i]);
+            }
+        });
     }
 
     // ---------------------------------------------------------

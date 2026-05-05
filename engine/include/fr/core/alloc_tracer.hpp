@@ -9,7 +9,6 @@
 
 #pragma once
 
-#include <memory>
 #include <mutex>
 #include <new>
 #include <utility>
@@ -47,12 +46,12 @@ public:
     }
 
     /**
-     * @brief Returns the current size of the buffer.
+     * @brief Returns the current number of frames in the buffer.
      *
      * @return Buffer size.
      */
     USize size() const noexcept {
-        return m_size % m_capacity;
+        return (m_size < m_capacity) ? m_size : m_capacity;
     }
 
     /**
@@ -90,7 +89,7 @@ public:
      * @return True if buffer is full.
      */
     bool is_full() const noexcept {
-        return m_size == m_capacity;
+        return m_size >= m_capacity;
     }
 
     /**
@@ -99,7 +98,7 @@ public:
      * @return Slice of AllocFrame.
      */
     Slice<const AllocFrame> frames() const noexcept {
-        return Slice(m_frames, m_size);
+        return Slice(m_frames, size());
     }
 
     /**
@@ -110,9 +109,7 @@ public:
     void record(AllocFrame &&frame) noexcept {
         std::lock_guard<std::mutex> lock(m_mutex);
 
-        // @noexcept: AllocationFrame is a trivially constructible POD - std::construct_at will not
-        // throw.
-        std::construct_at(m_frames + m_size, std::move(frame));
+        m_frames[m_size % m_capacity] = std::move(frame);
         ++m_size;
     }
 

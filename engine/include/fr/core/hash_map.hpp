@@ -19,6 +19,7 @@
 #include "fr/core/math.hpp"
 #include "fr/core/optional.hpp"
 #include "fr/core/pair.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
@@ -511,16 +512,44 @@ public:
 
     template <typename A>
     void shape(A &archive) {
-        archive.prop("load", m_load);
-        archive.prop("capacity", m_capacity);
+        if constexpr (A::kind == ArchiveKind::Serializer) {
+            USize l = m_load;
+            archive.prop("load", l);
+
+            USize cap = m_capacity;
+            archive.prop("capacity", cap);
+        } else {
+            USize l = 0;
+            archive.prop("load", l);
+
+            USize cap = 0;
+            archive.prop("capacity", cap);
+        }
+
         archive.list("items", [&](A &list_archive) {
-            for (auto pair : *this) {
-                auto &key = pair.first();
-                auto &val = pair.second();
-                list_archive.dict("", [&](A &entry_archive) {
-                    entry_archive.prop("@key", key);
-                    entry_archive.prop("@value", val);
-                });
+            if constexpr (A::kind == ArchiveKind::Serializer) {
+                for (auto pair : *this) {
+                    auto &key = pair.first();
+                    auto &val = pair.second();
+
+                    list_archive.dict("", [&](A &entry_archive) {
+                        entry_archive.prop("@key", const_cast<Key &>(key));
+                        entry_archive.prop("@value", val);
+                    });
+                }
+            } else {
+                this->clear();
+                USize count = list_archive.current_list_size();
+
+                for (USize i = 0; i < count; ++i) {
+                    list_archive.dict("", [&](A &entry_archive) {
+                        Key key{};
+                        Value val{};
+                        entry_archive.prop("@key", key);
+                        entry_archive.prop("@value", val);
+                        this->insert(std::move(key), std::move(val));
+                    });
+                }
             }
         });
     }
@@ -617,6 +646,7 @@ private:
 
         Byte *buffer =
             reinterpret_cast<Byte *>(m_alloc->allocate(slots_size + ctrls_size, alignment));
+
         m_slots = reinterpret_cast<Slot *>(buffer);
         m_ctrls = reinterpret_cast<Ctrl *>(buffer + slots_size);
 

@@ -31,8 +31,6 @@ class Pair {
 public:
     /// @brief Default constructor. Value-initializes members to keep things sane.
     constexpr Pair() noexcept
-        requires(std::is_nothrow_default_constructible_v<First> &&
-                 std::is_nothrow_default_constructible_v<Second>)
         : m_first{},
           m_second{} {
     }

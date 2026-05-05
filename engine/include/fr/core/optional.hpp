@@ -22,6 +22,7 @@
 
 #include "fr/core/macros.hpp"
 #include "fr/core/nil.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
@@ -402,8 +403,18 @@ public:
     void shape(A &archive) {
         bool has_value = is_some();
         archive.prop("has_value", has_value);
-        if (has_value) {
-            archive.prop("value", unwrap());
+        if constexpr (A::kind == ArchiveKind::Serializer) {
+            if (has_value) {
+                archive.prop("value", unwrap());
+            }
+        } else {
+            if (has_value) {
+                T val{};
+                archive.prop("value", val);
+                this->emplace(std::move(val));
+            } else {
+                this->reset();
+            }
         }
     }
 };
