@@ -795,7 +795,7 @@ public:
 
     template <typename A>
     void shape(A &archive) {
-        archive.prop("value", view());
+        archive.prop("@value", view());
     }
 
     /**

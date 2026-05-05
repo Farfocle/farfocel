@@ -194,8 +194,8 @@ public:
     void shape(A &archive) {
         USize sz = size();
 
-        archive.prop("size", sz);
-        archive.list("items", [&](A &list_archive) {
+        archive.prop("@size", sz);
+        archive.list("@items", [&](A &list_archive) {
             impl::shape_tuple_items(list_archive, *this, std::index_sequence_for<Ts...>{});
         });
     }

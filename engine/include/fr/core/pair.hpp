@@ -96,8 +96,8 @@ public:
 
     template <typename A>
     void shape(A &archive) {
-        archive.prop("first", m_first);
-        archive.prop("second", m_second);
+        archive.prop("@first", m_first);
+        archive.prop("@second", m_second);
     }
 
     /// @brief Structured binding protocol.

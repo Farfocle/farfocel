@@ -51,7 +51,7 @@ struct Hash {
 
     template <typename A>
     void shape(A &archive) {
-        archive.prop("value", value);
+        archive.prop("@value", value);
     }
 };
 
@@ -71,7 +71,7 @@ struct Hash32 {
     }
     template <typename A>
     void shape(A &archive) {
-        archive.prop("value", value);
+        archive.prop("@value", value);
     }
 };
 

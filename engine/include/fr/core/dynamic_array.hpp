@@ -810,36 +810,34 @@ public:
         m_size = new_size;
     }
 
-    template <typename A>
-    void shape(A &archive) {
-        if constexpr (A::kind == ArchiveKind::Serializer) {
-            USize sz = m_size;
-            archive.prop("size", sz);
-
-            USize cap = m_capacity;
-            archive.prop("capacity", cap);
-        } else {
-            USize sz = 0;
-            archive.prop("size", sz);
-
-            if (sz != m_size) {
-                this->clear();
-                this->grow_default(sz);
+        template <typename A>
+        void shape(A &archive) {
+            if constexpr (A::kind == ArchiveKind::Serializer) {
+                USize sz = m_size;
+                archive.prop("@size", sz);
+                USize cap = m_capacity;
+                archive.prop("@capacity", cap);
+            } else {
+                USize sz = 0;
+                archive.prop("@size", sz);
+                if (sz != m_size) {
+                    this->clear();
+                    this->grow_default(sz);
+                }
+    
+                USize cap = 0;
+                archive.prop("@capacity", cap);
+                if (cap > m_capacity) {
+                    this->reserve(cap);
+                }
             }
-
-            USize cap = 0;
-            archive.prop("capacity", cap);
-            if (cap > m_capacity) {
-                this->reserve(cap);
-            }
+    
+            archive.list("@items", [&](A &list_archive) {
+                for (T &item : *this) {
+                    list_archive.prop("", item);
+                }
+            });
         }
-
-        archive.list("items", [&](A &list_archive) {
-            for (T &item : *this) {
-                list_archive.prop("", item);
-            }
-        });
-    }
 
 private:
     // ---------------------------------------------------------

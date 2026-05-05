@@ -432,22 +432,22 @@ public:
     void shape(A &archive) {
         if constexpr (A::kind == ArchiveKind::Serializer) {
             USize l = m_load;
-            archive.prop("load", l);
+            archive.prop("@load", l);
 
             USize cap = m_capacity;
-            archive.prop("capacity", cap);
+            archive.prop("@capacity", cap);
         } else {
             USize l = 0;
-            archive.prop("load", l);
+            archive.prop("@load", l);
 
             USize cap = 0;
-            archive.prop("capacity", cap);
+            archive.prop("@capacity", cap);
         }
 
-        archive.list("items", [&](A &list_archive) {
+        archive.list("@items", [&](A &list_archive) {
             if constexpr (A::kind == ArchiveKind::Serializer) {
                 for (const Key &item : *this) {
-                    list_archive.prop("@item", const_cast<Key &>(item));
+                    list_archive.prop("", const_cast<Key &>(item));
                 }
             } else {
                 this->clear();
@@ -455,7 +455,7 @@ public:
 
                 for (USize i = 0; i < count; ++i) {
                     Key item{};
-                    list_archive.prop("@item", item);
+                    list_archive.prop("", item);
                     this->insert(std::move(item));
                 }
             }

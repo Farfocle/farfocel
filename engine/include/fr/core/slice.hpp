@@ -198,13 +198,13 @@ public:
     template <typename A>
     void shape(A &archive) {
         USize sz = m_size;
-        archive.prop("size", sz);
+        archive.prop("@size", sz);
 
         if constexpr (A::kind == ArchiveKind::Deserializer) {
             FR_ASSERT(sz <= m_size, "slice overflow during deserialization");
         }
 
-        archive.list("items", [&](A &list_archive) {
+        archive.list("@items", [&](A &list_archive) {
             for (USize i = 0; i < sz; ++i) {
                 list_archive.prop("", m_data[i]);
             }

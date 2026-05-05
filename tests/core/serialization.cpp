@@ -41,8 +41,8 @@ TEST_CASE("Serialization - Pair") {
     writer.prop("pair", value);
     auto json = writer.consume();
 
-    CHECK(json.view().find("\"first\":7") != StringView::npos);
-    CHECK(json.view().find("\"second\":\"seven\"") != StringView::npos);
+    CHECK(json.view().find("\"@first\":7") != StringView::npos);
+    CHECK(json.view().find("\"@second\":\"seven\"") != StringView::npos);
 }
 
 TEST_CASE("Serialization - Tuple") {
@@ -52,9 +52,9 @@ TEST_CASE("Serialization - Tuple") {
     writer.prop("tuple", value);
     auto json = writer.consume();
 
-    CHECK(json.view().find("\"items\"") != StringView::npos);
+    CHECK(json.view().find("\"@items\"") != StringView::npos);
     CHECK(json.view().find("\"ok\"") != StringView::npos);
-    CHECK(json.view().find("\"size\"") != StringView::npos);
+    CHECK(json.view().find("\"@size\"") != StringView::npos);
 }
 
 TEST_CASE("Serialization - DynamicArray") {
@@ -64,8 +64,8 @@ TEST_CASE("Serialization - DynamicArray") {
     writer.prop("array", value);
     auto json = writer.consume();
 
-    CHECK(json.view().find("\"size\":3") != StringView::npos);
-    CHECK(json.view().find("\"items\":[1,2,3]") != StringView::npos);
+    CHECK(json.view().find("\"@size\":3") != StringView::npos);
+    CHECK(json.view().find("\"@items\":[1,2,3]") != StringView::npos);
 }
 
 TEST_CASE("Serialization - HashSet") {
@@ -77,8 +77,8 @@ TEST_CASE("Serialization - HashSet") {
     writer.prop("set", value);
     auto json = writer.consume();
 
-    CHECK(json.view().find("\"load\":2") != StringView::npos);
-    CHECK(json.view().find("\"items\":[") != StringView::npos);
+    CHECK(json.view().find("\"@load\":2") != StringView::npos);
+    CHECK(json.view().find("\"@items\":[") != StringView::npos);
     CHECK(json.view().find("10") != StringView::npos);
     CHECK(json.view().find("20") != StringView::npos);
 }
@@ -92,8 +92,8 @@ TEST_CASE("Serialization - HashMap") {
     writer.prop("map", value);
     auto json = writer.consume();
 
-    CHECK(json.view().find("\"load\":2") != StringView::npos);
-    CHECK(json.view().find("\"items\":[") != StringView::npos);
+    CHECK(json.view().find("\"@load\":2") != StringView::npos);
+    CHECK(json.view().find("\"@items\":[") != StringView::npos);
     CHECK(json.view().find("\"@key\":1") != StringView::npos);
     CHECK(json.view().find("\"@value\":\"one\"") != StringView::npos);
 }
@@ -105,8 +105,8 @@ TEST_CASE("Serialization - Optional") {
     writer.prop("opt", some_value);
     auto json = writer.consume();
 
-    CHECK(json.view().find("\"has_value\":true") != StringView::npos);
-    CHECK(json.view().find("\"value\":42") != StringView::npos);
+    CHECK(json.view().find("\"@has_value\":true") != StringView::npos);
+    CHECK(json.view().find("\"@value\":42") != StringView::npos);
 }
 
 TEST_CASE("Serialization - Allocator Types") {
@@ -131,8 +131,8 @@ TEST_CASE("Serialization - Allocator Types") {
     writer.prop("frame", frame);
     auto json = writer.consume();
 
-    CHECK(json.view().find("\"result\":{\"value\":\"owns\"}") != StringView::npos);
-    CHECK(json.view().find("\"action\":{\"value\":\"reallocate\"}") != StringView::npos);
+    CHECK(json.view().find("\"result\":{\"@value\":\"owns\"}") != StringView::npos);
+    CHECK(json.view().find("\"action\":{\"@value\":\"reallocate\"}") != StringView::npos);
     CHECK(json.view().find("\"timestamp\":1000") != StringView::npos);
     CHECK(json.view().find("\"tag\":\"TestTag\"") != StringView::npos);
     CHECK(json.view().find("\"next_pointer\":4660") != StringView::npos); // 0x1234 = 4660
@@ -146,8 +146,8 @@ TEST_CASE("Serialization - Slice") {
     writer.prop("slice", slice);
     auto json = writer.consume();
 
-    CHECK(json.view().find("\"size\":3") != StringView::npos);
-    CHECK(json.view().find("\"items\":[10,20,30]") != StringView::npos);
+    CHECK(json.view().find("\"@size\":3") != StringView::npos);
+    CHECK(json.view().find("\"@items\":[10,20,30]") != StringView::npos);
 }
 
 TEST_CASE("Serialization - UniquePtr") {
@@ -157,8 +157,8 @@ TEST_CASE("Serialization - UniquePtr") {
         writer.prop("ptr", ptr);
         auto json = writer.consume();
 
-        CHECK(json.view().find("\"has_value\":true") != StringView::npos);
-        CHECK(json.view().find("\"value\":123") != StringView::npos);
+        CHECK(json.view().find("\"@has_value\":true") != StringView::npos);
+        CHECK(json.view().find("\"@value\":123") != StringView::npos);
     }
 
     SUBCASE("Array") {
@@ -170,8 +170,8 @@ TEST_CASE("Serialization - UniquePtr") {
         writer.prop("ptr_arr", ptr);
         auto json = writer.consume();
 
-        CHECK(json.view().find("\"size\":2") != StringView::npos);
-        CHECK(json.view().find("\"items\":[1,2]") != StringView::npos);
+        CHECK(json.view().find("\"@size\":2") != StringView::npos);
+        CHECK(json.view().find("\"@items\":[1,2]") != StringView::npos);
     }
 }
 
@@ -186,8 +186,8 @@ TEST_CASE("Serialization - Hash and Hash32") {
 
     CHECK(json.view().find("\"h\"") != StringView::npos);
     CHECK(json.view().find("\"h32\"") != StringView::npos);
-    CHECK(json.view().find("\"value\":123") != StringView::npos);
-    CHECK(json.view().find("\"value\":77") != StringView::npos);
+    CHECK(json.view().find("\"@value\":123") != StringView::npos);
+    CHECK(json.view().find("\"@value\":77") != StringView::npos);
 }
 
 TEST_CASE("Deserialization - Basic Types") {

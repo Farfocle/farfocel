@@ -205,17 +205,17 @@ public:
     template <typename A>
     void shape(A &archive) {
         bool has_value = (m_ptr != nullptr);
-        archive.prop("has_value", has_value);
+        archive.prop("@has_value", has_value);
         if constexpr (A::kind == ArchiveKind::Serializer) {
             if (has_value) {
-                archive.prop("value", *m_ptr);
+                archive.prop("@value", *m_ptr);
             }
         } else {
             if (has_value) {
                 if (!m_ptr) {
                     *this = make_unique<T>();
                 }
-                archive.prop("value", *m_ptr);
+                archive.prop("@value", *m_ptr);
             } else {
                 this->clear();
             }
@@ -357,7 +357,7 @@ public:
     template <typename A>
     void shape(A &archive) {
         USize sz = m_size;
-        archive.prop("size", sz);
+        archive.prop("@size", sz);
         if constexpr (A::kind == ArchiveKind::Deserializer) {
             if (sz != m_size) {
                 this->clear();
@@ -366,7 +366,7 @@ public:
                 }
             }
         }
-        archive.list("items", [&](A &list_archive) {
+        archive.list("@items", [&](A &list_archive) {
             for (USize i = 0; i < m_size; ++i) {
                 list_archive.prop("", m_ptr[i]);
             }
