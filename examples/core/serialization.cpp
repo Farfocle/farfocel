@@ -1,7 +1,7 @@
-#include "fr/core/dynamic_array.hpp"
 #include <iostream>
 
 #include "fr/core/ctx.hpp"
+#include "fr/core/dynamic_array.hpp"
 #include "fr/core/json.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"

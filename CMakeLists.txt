@@ -99,7 +99,7 @@ endif()
 
 add_subdirectory(3rdparty)
 add_subdirectory(engine)
-add_subdirectory(sandbox)
+add_subdirectory(examples)
 
 enable_testing()
 add_subdirectory(tests)
