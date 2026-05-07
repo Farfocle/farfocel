@@ -59,7 +59,7 @@ consteval StringView get_typename() {
         return "@unknown";
     }
     USize start = start_at + 4;
-    return name.substr(start, end - start);
+    return name.view(start, end - 1);
 #elif defined(_MSC_VER)
     StringView name = __FUNCSIG__;
     USize start_at = name.find("get_typename<");
@@ -68,7 +68,7 @@ consteval StringView get_typename() {
         return "@unknown";
     }
     USize start = start_at + StringView("get_typename<").size();
-    return name.substr(start, end - start);
+    return name.view(start, end - 1);
 #else
     return "@unknown";
 #endif

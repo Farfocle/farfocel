@@ -291,6 +291,31 @@ public:
     }
 
     /**
+     * @brief Creates an empty HashSet with a specific capacity using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator.
+     * @param capacity Minimum capacity.
+     * @return A new empty HashSet instance.
+     */
+    static HashSet with_capacity(Alloc *alloc, USize capacity) noexcept {
+        HashSet set(alloc);
+        if (capacity > 0) {
+            set.do_grow(math::round_up_pow2(capacity));
+        }
+        return set;
+    }
+
+    /**
+     * @brief Creates an empty HashSet with a specific capacity.
+     *
+     * @param capacity Minimum capacity.
+     * @return A new empty HashSet instance.
+     */
+    static HashSet with_capacity(USize capacity) noexcept {
+        return with_capacity(get_ambient_ctx().alloc, capacity);
+    }
+
+    /**
      * @brief Returns the number of elements currently in the set.
      */
     USize load() const noexcept {

@@ -11,11 +11,12 @@
 #include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
+#include <limits>
 
 namespace fr {
 class StringView {
 public:
-    static constexpr USize npos = static_cast<USize>(-1);
+    static constexpr USize npos = std::numeric_limits<USize>::max();
 
     constexpr StringView() noexcept
         : m_data(nullptr),
@@ -163,19 +164,52 @@ public:
     }
 
     /**
+     * @brief Returns itself.
+     *
+     * @return This view.
+     */
+    constexpr StringView view() const noexcept {
+        return *this;
+    }
+
+    /**
      * @brief Returns a substring view.
      *
-     * @param pos Start position.
-     * @param count Number of characters.
+     * @param from Start position.
+     * @param to End position.
      * @return Substring view.
+     * @pre from <= to < size().
      */
-    constexpr StringView substr(USize pos, USize count = npos) const noexcept {
-        FR_ASSERT(pos <= m_size, "index out of bounds");
+    constexpr StringView view(USize from, USize to) const noexcept {
+        FR_ASSERT(from < m_size, "start index out of bounds");
+        FR_ASSERT(to < m_size, "end index out of bounds");
+        FR_ASSERT(from <= to, "invalid range");
 
-        USize max_count = m_size - pos;
-        USize a_count = (count > max_count) ? max_count : count;
+        return StringView(m_data + from, to - from + 1);
+    }
 
-        return StringView(m_data + pos, a_count);
+    /**
+     * @brief Returns a substring view starting from the given position.
+     *
+     * @param from Start position.
+     * @return Substring view.
+     * @pre from < size() or (from == 0 && size() == 0).
+     */
+    constexpr StringView view_from(USize from) const noexcept {
+        FR_ASSERT(from < m_size || (from == 0 && m_size == 0), "index out of bounds");
+        return StringView(m_data + from, m_size - from);
+    }
+
+    /**
+     * @brief Returns a substring view up to the given position.
+     *
+     * @param to End position.
+     * @return Substring view.
+     * @pre to < size().
+     */
+    constexpr StringView view_to(USize to) const noexcept {
+        FR_ASSERT(to < m_size, "index out of bounds");
+        return StringView(m_data, to + 1);
     }
 
     /**
@@ -190,7 +224,7 @@ public:
      * @param other The view to compare with
      * @return 0 if identical, < 0 if this is lexicographically before other, > 0 if after
      */
-    constexpr int compare(StringView other) const noexcept {
+    constexpr S32 compare(StringView other) const noexcept {
         USize len = (m_size < other.m_size) ? m_size : other.m_size;
         int cmp_res = const_strncmp(m_data, other.m_data, len);
 
@@ -258,6 +292,7 @@ public:
         for (USize i = pos; i <= m_size - str.m_size; ++i)
             if (const_strncmp(m_data + i, str.m_data, str.m_size) == 0)
                 return i;
+
         return npos;
     }
 
@@ -284,7 +319,7 @@ private:
      * @param n Maximum number of characters to compare
      * @return 0 if identical, < 0 if str1 is before str2, > 0 if str1 is after str2
      */
-    static constexpr int const_strncmp(const char *str1, const char *str2, USize n) noexcept {
+    static constexpr S32 const_strncmp(const char *str1, const char *str2, USize n) noexcept {
         for (USize i = 0; i < n; ++i) {
             unsigned char c1 = static_cast<unsigned char>(str1[i]);
             unsigned char c2 = static_cast<unsigned char>(str2[i]);
@@ -294,6 +329,7 @@ private:
             if (c1 < c2)
                 return -1;
         }
+
         return 0;
     }
 

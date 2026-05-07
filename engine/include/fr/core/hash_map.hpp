@@ -289,6 +289,31 @@ public:
     }
 
     /**
+     * @brief Creates an empty HashMap with a specific capacity using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator.
+     * @param capacity Minimum capacity.
+     * @return A new empty HashMap instance.
+     */
+    static HashMap with_capacity(Alloc *alloc, USize capacity) noexcept {
+        HashMap map(alloc);
+        if (capacity > 0) {
+            map.do_grow(math::round_up_pow2(capacity));
+        }
+        return map;
+    }
+
+    /**
+     * @brief Creates an empty HashMap with a specific capacity.
+     *
+     * @param capacity Minimum capacity.
+     * @return A new empty HashMap instance.
+     */
+    static HashMap with_capacity(USize capacity) noexcept {
+        return with_capacity(get_ambient_ctx().alloc, capacity);
+    }
+
+    /**
      * @brief Returns the number of elements in the map.
      */
     USize load() const noexcept {

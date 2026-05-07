@@ -63,15 +63,15 @@ inline void trim_float_string(String &s) {
 template <IsPrimitive T>
 String primitive_to_string(T value) noexcept {
     if constexpr (IsBool<T>) {
-        return value ? String("true") : String("false");
+        return value ? String::from_view("true") : String::from_view("false");
     } else if constexpr (IsChar<T>) {
-        return String(&value, 1);
+        return String::from_sized_chars(&value, 1);
     } else if constexpr (IsByte<T>) {
         char buffer[8];
         auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), static_cast<U8>(value));
         FR_ASSERT(ec == std::errc(), "failed to convert byte to string");
 
-        return String(buffer, static_cast<USize>(ptr - buffer));
+        return String::from_sized_chars(buffer, static_cast<USize>(ptr - buffer));
     } else {
         char buffer[64];
         auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value);
@@ -80,7 +80,7 @@ String primitive_to_string(T value) noexcept {
             return String();
         }
 
-        return String(buffer, static_cast<USize>(ptr - buffer));
+        return String::from_sized_chars(buffer, static_cast<USize>(ptr - buffer));
     }
 }
 
@@ -96,11 +96,11 @@ String to_string_dispatch(const T &val, const FormatOptions &opts) {
     if constexpr (std::is_same_v<RawT, String>) {
         return val;
     } else if constexpr (std::is_same_v<RawT, StringView>) {
-        return String(val);
+        return String::from_view(val);
     } else if constexpr (std::is_same_v<RawT, const char *> || std::is_same_v<RawT, char *> ||
                          (std::is_array_v<RawT> &&
                           std::is_same_v<std::remove_extent_t<RawT>, char>)) {
-        return String(val);
+        return String::from_chars(val);
     } else if constexpr (IsPrimitive<RawT>) {
         if constexpr (IsF<RawT>) {
             if (opts.float_precision >= 0) {
@@ -108,7 +108,7 @@ String to_string_dispatch(const T &val, const FormatOptions &opts) {
                 auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), val,
                                                std::chars_format::fixed, opts.float_precision);
                 if (ec == std::errc()) {
-                    return String(buffer, static_cast<USize>(ptr - buffer));
+                    return String::from_sized_chars(buffer, static_cast<USize>(ptr - buffer));
                 }
             }
         }
@@ -119,7 +119,7 @@ String to_string_dispatch(const T &val, const FormatOptions &opts) {
         return s;
     } else {
         if (!opts.serializer) {
-            return String("{Object}");
+            return String::from_view("{Object}");
         }
 
         JsonSerializer::Options jopts{.types = opts.types, .pretty = opts.pretty};
@@ -158,11 +158,14 @@ String format_with_options(const FormatOptions &opts, StringView fmt, Ts &&...ar
     while (pos < fmt_size) {
         USize next = fmt.find("{}", pos);
         if (next == StringView::npos) {
-            result.append(fmt.substr(pos));
+            result.append(fmt.view_from(pos));
             break;
         }
 
-        result.append(fmt.substr(pos, next - pos));
+        if (next > pos) {
+            result.append(fmt.view(pos, next - 1));
+        }
+
         if (arg_idx < sizeof...(Ts)) {
             result.append(arg_strings[arg_idx++].view());
         } else {

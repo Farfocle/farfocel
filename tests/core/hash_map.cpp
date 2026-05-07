@@ -35,11 +35,11 @@ TEST_CASE("HashMap - Basic Operations") {
     }
 
     SUBCASE("Operator[]") {
-        map[10] = String("Ten");
+        map[10] = String::from_view("Ten");
         CHECK(map.load() == 1);
         CHECK(map[10] == "Ten");
 
-        map[10] = String("Diez");
+        map[10] = String::from_view("Diez");
         CHECK(map[10] == "Diez");
         CHECK(map.load() == 1);
 

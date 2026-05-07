@@ -169,33 +169,46 @@ public:
      * @return A new empty DynamicArray instance.
      * @pre alloc must be non-null.
      */
-    [[nodiscard]] static DynamicArray with_allocator(Alloc *alloc) noexcept {
+    [[nodiscard]] static DynamicArray with_alloc(Alloc *alloc) noexcept {
         return DynamicArray(alloc);
-    }
-
-    /**
-     * @brief Create an empty array with an initial reserved capacity using the default allocator.
-     *
-     * @param capacity The number of elements to reserve space for.
-     * @return A new empty DynamicArray instance.
-     */
-    [[nodiscard]] static DynamicArray with_capacity(USize capacity) noexcept {
-        return with_capacity(capacity, get_ambient_ctx().alloc);
     }
 
     /**
      * @brief Create an empty array with an initial reserved capacity using a specific allocator.
      *
-     * @param capacity The number of elements to reserve space for.
      * @param alloc Pointer to the allocator to use.
+     * @param capacity The number of elements to reserve space for.
      * @return A new empty DynamicArray instance.
      * @pre alloc must be non-null.
      */
-    [[nodiscard]] static DynamicArray with_capacity(USize capacity, Alloc *alloc) noexcept {
+    [[nodiscard]] static DynamicArray with_capacity(Alloc *alloc, USize capacity) noexcept {
         DynamicArray darr(alloc);
         darr.do_reserve(capacity);
 
         return darr;
+    }
+
+    [[nodiscard]] static DynamicArray with_capacity(USize capacity) noexcept {
+        return with_capacity(get_ambient_ctx().alloc, capacity);
+    }
+
+    /**
+     * @brief Create an array of a specific size using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator to use.
+     * @param size Initial number of elements.
+     * @return A new DynamicArray instance of the requested size.
+     * @pre alloc must be non-null.
+     * @pre T must be nothrow default constructible.
+     */
+    [[nodiscard]] static DynamicArray with_size(Alloc *alloc, USize size) noexcept {
+        DynamicArray arr(alloc);
+        arr.do_reserve(size);
+
+        mem::default_init_range(arr.m_data, size);
+        arr.m_size = size;
+
+        return arr;
     }
 
     /**
@@ -206,23 +219,30 @@ public:
      * @pre T must be nothrow default constructible.
      */
     [[nodiscard]] static DynamicArray with_size(USize size) noexcept {
-        return with_size(size, get_ambient_ctx().alloc);
+        return with_size(get_ambient_ctx().alloc, size);
     }
 
     /**
-     * @brief Create an array of a specific size using a specific allocator.
+     * @brief Create an array filled with a specific value using a specific allocator.
      *
-     * @param size Initial number of elements.
      * @param alloc Pointer to the allocator to use.
-     * @return A new DynamicArray instance of the requested size.
+     * @param size Number of elements.
+     * @param value Value to copy into every element.
+     * @return A new DynamicArray instance filled with fill.
      * @pre alloc must be non-null.
-     * @pre T must be nothrow default constructible.
+     * @pre T must be nothrow copy constructible.
      */
-    [[nodiscard]] static DynamicArray with_size(USize size, Alloc *alloc) noexcept {
+    [[nodiscard]] static DynamicArray repeated(Alloc *alloc, USize size, const T &value) noexcept {
+        FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
+                         "T must be nothrow copy constructible");
+
         DynamicArray arr(alloc);
         arr.do_reserve(size);
 
-        mem::default_init_range(arr.m_data, size);
+        for (USize i = 0; i < size; ++i) {
+            std::construct_at(arr.m_data + i, value);
+        }
+
         arr.m_size = size;
 
         return arr;
@@ -237,34 +257,7 @@ public:
      * @pre T must be nothrow copy constructible.
      */
     [[nodiscard]] static DynamicArray filled_with(USize size, const T &fill) noexcept {
-        return filled_with(size, fill, get_ambient_ctx().alloc);
-    }
-
-    /**
-     * @brief Create an array filled with a specific value using a specific allocator.
-     *
-     * @param size Number of elements.
-     * @param fill Value to copy into every element.
-     * @param alloc Pointer to the allocator to use.
-     * @return A new DynamicArray instance filled with fill.
-     * @pre alloc must be non-null.
-     * @pre T must be nothrow copy constructible.
-     */
-    [[nodiscard]] static DynamicArray filled_with(USize size, const T &fill,
-                                                  Alloc *alloc) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
-                         "T must be nothrow copy constructible");
-
-        DynamicArray arr(alloc);
-        arr.do_reserve(size);
-
-        for (USize i = 0; i < size; ++i) {
-            std::construct_at(arr.m_data + i, fill);
-        }
-
-        arr.m_size = size;
-
-        return arr;
+        return repeated(get_ambient_ctx().alloc, size, fill);
     }
 
     // ---------------------------------------------------------
@@ -810,34 +803,34 @@ public:
         m_size = new_size;
     }
 
-        template <typename A>
-        void shape(A &archive) {
-            if constexpr (A::kind == ArchiveKind::Serializer) {
-                USize sz = m_size;
-                archive.prop("@size", sz);
-                USize cap = m_capacity;
-                archive.prop("@capacity", cap);
-            } else {
-                USize sz = 0;
-                archive.prop("@size", sz);
-                if (sz != m_size) {
-                    this->clear();
-                    this->grow_default(sz);
-                }
-    
-                USize cap = 0;
-                archive.prop("@capacity", cap);
-                if (cap > m_capacity) {
-                    this->reserve(cap);
-                }
+    template <typename A>
+    void shape(A &archive) {
+        if constexpr (A::kind == ArchiveKind::Serializer) {
+            USize sz = m_size;
+            archive.prop("@size", sz);
+            USize cap = m_capacity;
+            archive.prop("@capacity", cap);
+        } else {
+            USize sz = 0;
+            archive.prop("@size", sz);
+            if (sz != m_size) {
+                this->clear();
+                this->grow_default(sz);
             }
-    
-            archive.list("@items", [&](A &list_archive) {
-                for (T &item : *this) {
-                    list_archive.prop("", item);
-                }
-            });
+
+            USize cap = 0;
+            archive.prop("@capacity", cap);
+            if (cap > m_capacity) {
+                this->reserve(cap);
+            }
         }
+
+        archive.list("@items", [&](A &list_archive) {
+            for (T &item : *this) {
+                list_archive.prop("", item);
+            }
+        });
+    }
 
 private:
     // ---------------------------------------------------------
