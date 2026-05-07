@@ -11,6 +11,7 @@
 #include <system_error>
 
 #include "fr/core/json.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typetraits.hpp"
 
@@ -121,12 +122,12 @@ String to_string_dispatch(const T &val, const FormatOptions &opts) {
             return String("{Object}");
         }
 
-        JsonSerializer::Options jopts;
-        jopts.pretty = opts.pretty;
-        jopts.types = opts.types;
-        JsonSerializer writer(jopts);
-        writer.prop("v", const_cast<RawT &>(val));
-        return writer.consume();
+        JsonSerializer::Options jopts{.types = opts.types, .pretty = opts.pretty};
+        JsonSerializer serializer(jopts);
+
+        call_shape(serializer, const_cast<RawT &>(val));
+
+        return serializer.consume();
     }
 }
 

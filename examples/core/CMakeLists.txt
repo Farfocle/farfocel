@@ -1,5 +1,6 @@
 set(BENCH_SOURCES
     "dynamic_array.cpp"
+    "format.cpp"
     "serialization.cpp"
 )
 
