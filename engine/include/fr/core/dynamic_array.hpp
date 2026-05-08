@@ -225,6 +225,18 @@ public:
     /**
      * @brief Create an array filled with a specific value using a specific allocator.
      *
+     * @param size Number of elements.
+     * @param value Value to copy into every element.
+     * @return A new DynamicArray instance filled with fill.
+     * @pre T must be nothrow copy constructible.
+     */
+    [[nodiscard]] static DynamicArray from_repeated(USize size, const T &value) noexcept {
+        return from_repeated(get_ambient_ctx().alloc, size, value);
+    }
+
+    /**
+     * @brief Create an array filled with a specific value using a specific allocator.
+     *
      * @param alloc Pointer to the allocator to use.
      * @param size Number of elements.
      * @param value Value to copy into every element.
@@ -232,7 +244,8 @@ public:
      * @pre alloc must be non-null.
      * @pre T must be nothrow copy constructible.
      */
-    [[nodiscard]] static DynamicArray repeated(Alloc *alloc, USize size, const T &value) noexcept {
+    [[nodiscard]] static DynamicArray from_repeated(Alloc *alloc, USize size,
+                                                    const T &value) noexcept {
         FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
                          "T must be nothrow copy constructible");
 
@@ -257,7 +270,7 @@ public:
      * @pre T must be nothrow copy constructible.
      */
     [[nodiscard]] static DynamicArray filled_with(USize size, const T &fill) noexcept {
-        return repeated(get_ambient_ctx().alloc, size, fill);
+        return from_repeated(get_ambient_ctx().alloc, size, fill);
     }
 
     // ---------------------------------------------------------

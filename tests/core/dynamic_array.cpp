@@ -93,7 +93,7 @@ TEST_CASE("DynamicArray - Construction") {
     }
 
     SUBCASE("Filled with") {
-        auto arr = DynamicArray<S32>::repeated(get_ambient_ctx().alloc, 3, 42);
+        auto arr = DynamicArray<S32>::from_repeated(get_ambient_ctx().alloc, 3, 42);
 
         CHECK(arr.size() == 3);
         CHECK(arr[0] == 42);

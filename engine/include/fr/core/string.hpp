@@ -44,7 +44,7 @@ public:
      * @param str Pointer to the character array
      * @details It looks over characters until it finds null-terminator
      */
-    String(const char *str)
+    String(const char *str) noexcept
         : impl::StringBase(get_ambient_ctx().alloc, str ? StringView(str).size() : 0) {
         if (str) {
             append(StringView(str));
@@ -55,7 +55,7 @@ public:
      * @brief Constructor from a StringView
      * @param str View of a string to copy
      */
-    String(StringView str)
+    String(StringView str) noexcept
         : impl::StringBase(get_ambient_ctx().alloc, str.size()) {
         append(str);
     }
@@ -64,7 +64,7 @@ public:
      * @brief Copy constructor
      * @param other String to copy
      */
-    String(const String &other)
+    String(const String &other) noexcept
         : impl::StringBase(other) {
     }
 
@@ -169,14 +169,14 @@ public:
      * @param c Character to repeat.
      * @return A new String instance.
      */
-    [[nodiscard]] static String repeated(Alloc *alloc, USize count, char c) noexcept {
+    [[nodiscard]] static String from_repeated(Alloc *alloc, USize count, char c) noexcept {
         String s(alloc);
         s.append_repeated(count, c);
         return s;
     }
 
-    [[nodiscard]] static String repeated(USize count, char c) noexcept {
-        return repeated(get_ambient_ctx().alloc, count, c);
+    [[nodiscard]] static String from_repeated(USize count, char c) noexcept {
+        return from_repeated(get_ambient_ctx().alloc, count, c);
     }
 
     /**
