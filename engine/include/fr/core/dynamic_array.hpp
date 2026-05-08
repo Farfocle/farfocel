@@ -261,18 +261,6 @@ public:
         return arr;
     }
 
-    /**
-     * @brief Create an array filled with a specific value.
-     *
-     * @param size Number of elements.
-     * @param fill Value to copy into every element.
-     * @return A new DynamicArray instance filled with fill.
-     * @pre T must be nothrow copy constructible.
-     */
-    [[nodiscard]] static DynamicArray filled_with(USize size, const T &fill) noexcept {
-        return from_repeated(get_ambient_ctx().alloc, size, fill);
-    }
-
     // ---------------------------------------------------------
     // Iterators
     // ---------------------------------------------------------
@@ -821,11 +809,13 @@ public:
         if constexpr (A::kind == ArchiveKind::Serializer) {
             USize sz = m_size;
             archive.prop("@size", sz);
+
             USize cap = m_capacity;
             archive.prop("@capacity", cap);
         } else {
             USize sz = 0;
             archive.prop("@size", sz);
+
             if (sz != m_size) {
                 this->clear();
                 this->grow_default(sz);
@@ -833,6 +823,7 @@ public:
 
             USize cap = 0;
             archive.prop("@capacity", cap);
+
             if (cap > m_capacity) {
                 this->reserve(cap);
             }
@@ -1004,5 +995,4 @@ private:
         other.m_alloc = get_ambient_ctx().alloc;
     }
 };
-
 } // namespace fr

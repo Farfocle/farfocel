@@ -3,6 +3,7 @@
 set(TEST_CORE_SOURCES
     "main.cpp"
     "alloc.cpp"
+    "array.cpp"
     "dynamic_array.cpp"
     "optional.cpp"
     "pair.cpp"
