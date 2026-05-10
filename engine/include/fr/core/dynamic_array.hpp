@@ -29,10 +29,13 @@ namespace fr {
  *
  * This container owns its storage and grows as needed. It supports
  * slice views, fast push/pop, and both ordered and unordered removal.
- * @note All operations assume that T is nothrow constructible/destructible.
+ *
+ * @note Foundational requirements for T are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
  */
 template <typename T>
 class DynamicArray {
+    FR_STATIC_ASSERT_NOTHROW_BASE(T);
+
 private:
     Alloc *m_alloc{get_ambient_ctx().alloc};
     T *m_data{nullptr};
@@ -53,7 +56,7 @@ public:
     using const_reference = const T &;
 
     // ---------------------------------------------------------
-    // Boilerplate, Insane Constructors
+    // Constructors
     // ---------------------------------------------------------
 
     /**
@@ -71,8 +74,7 @@ public:
      * @note Allocates memory to fit all elements in @p list.
      */
     DynamicArray(std::initializer_list<T> list) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
-                         "T must be nothrow copy constructible");
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         do_grow_if_needed(list.size());
 
         for (const T &item : list) {
@@ -88,6 +90,7 @@ public:
      * @note Performs a deep copy of all elements. Uses the same allocator as @p other.
      */
     DynamicArray(const DynamicArray &other) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         do_copy_from(other);
     }
 
@@ -122,6 +125,9 @@ public:
      *       new storage will be allocated. The allocator is NOT propagated.
      */
     DynamicArray &operator=(const DynamicArray &other) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
+        FR_STATIC_ASSERT_NOTHROW_COPY_ASSIGNABLE(T);
+
         if (this == &other) {
             return *this;
         }
@@ -202,6 +208,7 @@ public:
      * @pre T must be nothrow default constructible.
      */
     [[nodiscard]] static DynamicArray with_size(Alloc *alloc, USize size) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
         DynamicArray arr(alloc);
         arr.do_reserve(size);
 
@@ -246,8 +253,7 @@ public:
      */
     [[nodiscard]] static DynamicArray from_repeated(Alloc *alloc, USize size,
                                                     const T &value) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
-                         "T must be nothrow copy constructible");
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
 
         DynamicArray arr(alloc);
         arr.do_reserve(size);
@@ -614,6 +620,7 @@ public:
      * @note May trigger a reallocation if the array is full.
      */
     void push_back(const T &value) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         emplace_back(value);
     }
 
@@ -639,8 +646,8 @@ public:
      */
     template <typename... Args>
     T &emplace_back(Args &&...args) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
-                         "T must be nothrow constructible");
+        static_assert(std::is_nothrow_constructible_v<T, Args...>,
+                      "T must be nothrow constructible from Args");
 
         do_grow_if_full();
         T *ptr = std::construct_at(m_data + m_size, std::forward<Args>(args)...);
@@ -704,8 +711,7 @@ public:
      * @note All elements from idx onwards are shifted to the right. O(n).
      */
     void insert(USize idx, const T &value) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T>,
-                         "T must be nothrow copy constructible");
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         emplace(idx, value);
     }
 
@@ -719,8 +725,6 @@ public:
      * @note All elements from idx onwards are shifted to the right. O(n).
      */
     void insert(USize idx, T &&value) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_move_constructible_v<T>,
-                         "T must be nothrow move constructible");
         emplace(idx, std::move(value));
     }
 
@@ -736,8 +740,8 @@ public:
      */
     template <typename... Args>
     void emplace(USize idx, Args &&...args) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
-                         "T must be nothrow constructible");
+        static_assert(std::is_nothrow_constructible_v<T, Args...>,
+                      "T must be nothrow constructible from Args");
         FR_ASSERT(idx <= m_size, "index out of bounds");
 
         do_grow_if_full();
@@ -765,7 +769,6 @@ public:
      * @note Trailing elements are destroyed, but capacity remains unchanged.
      */
     void shrink(USize new_size) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_destructible_v<T>, "T must be nothrow destructible");
         FR_ASSERT(new_size <= m_size, "shrink size overflow");
 
         mem::destroy_range(m_data + new_size, m_size - new_size);
@@ -780,6 +783,7 @@ public:
      * @note If new_size > size(), new elements are default-constructed. Reallocates if needed.
      */
     void grow_default(USize new_size) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
         do_grow_if_needed(new_size);
         mem::default_init_range(m_data + m_size, new_size - m_size);
 
@@ -795,6 +799,7 @@ public:
      * @note If new_size > size(), new elements are copy-constructed from fill.
      */
     void grow_with(USize new_size, const T &fill) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         do_grow_if_needed(new_size);
 
         for (USize i = m_size; i < new_size; ++i) {
@@ -940,8 +945,6 @@ private:
      * @param other Source array.
      */
     void do_copy_from(const DynamicArray &other) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T>, "T must be nothrow copyable");
-
         m_alloc = other.m_alloc;
         if (other.m_size == 0)
             return;
@@ -958,10 +961,6 @@ private:
      * @param other Source array.
      */
     void do_assign_copy(const DynamicArray &other) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T> &&
-                             std::is_nothrow_copy_assignable_v<T>,
-                         "T must be nothrow copyable");
-
         const USize overlap = std::min(m_size, other.m_size);
 
         if (overlap > 0) {

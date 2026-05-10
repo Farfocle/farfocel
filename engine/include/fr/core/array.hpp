@@ -28,9 +28,13 @@ namespace fr {
  * @tparam Size Number of elements.
  *
  * Array provides a fixed-size container that is allocated on the stack.
+ *
+ * @note Foundational requirements for T are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
  */
 template <typename T, USize Size>
 class Array {
+    FR_STATIC_ASSERT_NOTHROW_BASE(T);
+
 private:
     T m_data[Size > 0 ? Size : 1];
 
@@ -50,26 +54,33 @@ public:
     // ---------------------------------------------------------
 
     /**
-     * @brief Construct an array with default-initialized elements.
+     * @brief Construct an array with zero-initialized elements.
+     *
+     * This constructor ensures that all elements are properly initialized.
+     * For primitive types (int, float, etc.), they are guaranteed to be zero-filled.
+     *
      * @pre T must be nothrow default constructible.
      */
     constexpr Array() noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_default_constructible_v<T>,
-                         "T must be nothrow default constructible");
+        FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
+
         if constexpr (Size > 0) {
-            mem::default_init_range(m_data, Size);
+            mem::zero_init_range(m_data, Size);
         }
     }
 
     /**
      * @brief Construct an array from an initializer list.
+     *
+     * If the list contains fewer elements than the array's size, the remaining
+     * elements are zero-initialized.
+     *
      * @param list Elements to copy.
      * @pre list.size() <= Size.
      * @pre T must be nothrow copy constructible.
      */
     constexpr Array(std::initializer_list<T> list) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T>,
-                         "T must be nothrow copy constructible");
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         FR_ASSERT(list.size() <= Size, "initializer list too large");
 
         USize i = 0;
@@ -79,7 +90,7 @@ public:
 
         if constexpr (Size > 0) {
             if (i < Size) {
-                mem::default_init_range(m_data + i, Size - i);
+                mem::zero_init_range(m_data + i, Size - i);
             }
         }
     }
@@ -95,8 +106,7 @@ public:
      * @pre T must be nothrow copy constructible.
      */
     [[nodiscard]] static constexpr Array from_repeated(const T &value) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T>,
-                         "T must be nothrow copy constructible");
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         Array arr;
 
         for (USize i = 0; i < Size; ++i) {

@@ -2,19 +2,9 @@
  * @file tuple.hpp
  * @author Kiju
  *
- * @brief Tuple implementation. Mostly for my own personal misery. Tuples are hard. This tuple is
- * implemented in a so-to-speak standard way, namely it uses recursive template instantiation to
- * attach indices to items. Let's say the user wants a tuple with types A, B, C:
- * Tuple<A, B, C> := TupleLeaf<0, A> + TupleLeaf<1, B> + TupleLeaf<2, C>
- * Actually there is one more level of abstraction here - TupleBase. TupleBase
- * inherits from the leaves and thus creates a sequential memory storage for the data (from index 0
- * to 2 in this case). It is my favorite pastime activity lately - abusing the C++ language.
+ * @brief Tuple implementation.
  *
- * Exercise for an astute reader:
- * An absolute madman (and a mathematician, which shows) wrote this funky article on how to build a
- * Tuple in modern C++ abusing closures in lambdas, effectively implementing church encoding. I
- * highly recommend the read!
- * https://mcyoung.xyz/2022/07/13/tuples-the-hard-way/
+ * Tuple provides a heterogeneous container with full tuple protocol and structured binding support.
  */
 
 #pragma once
@@ -24,6 +14,7 @@
 
 #include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
+#include "fr/core/typetraits.hpp"
 
 namespace fr {
 namespace impl {
@@ -89,14 +80,21 @@ void shape_tuple_items(A &archive, TupleT &value, std::index_sequence<Is...>) no
 
 /**
  * @brief Heterogeneous container with tuple protocol support.
- * @note Inherits privately from `TupleBase` and exposes a typed API through `at`, `each`, and
- * `map`.
+ *
+ * @note Foundational requirements for all Ts are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
  */
 template <typename... Ts>
 class Tuple : impl::TupleBase<std::index_sequence_for<Ts...>, Ts...> {
+    static_assert((IsNothrowBase<Ts> && ...),
+                  "All Ts must satisfy foundational nothrow requirements");
+
     using Base = impl::TupleBase<std::index_sequence_for<Ts...>, Ts...>;
 
 public:
+    /**
+     * @brief Construct a tuple with default-initialized elements.
+     * @pre All Ts must be nothrow default constructible.
+     */
     constexpr Tuple() noexcept
         requires((std::is_default_constructible_v<Ts> &&
                   std::is_nothrow_default_constructible_v<Ts>) &&
@@ -112,9 +110,6 @@ public:
 
     /**
      * @brief Returns item at index I.
-     * @note Explicit object parameters are used here to avoid duplication of the `at` method. This
-     * way one method perfectly forwards all the possibilities (Tuple&, const Tuple&, Tuple&&, const
-     * Tuple&&).
      */
     template <USize I>
     constexpr auto &&at(this auto &&self) noexcept {
@@ -132,16 +127,14 @@ public:
 
     /**
      * @brief Invokes the callback for every item in the tuple.
-     * @note Invocation order matches the tuple index order.
      */
     template <typename F>
     constexpr void each(this auto &&self, F &&f) noexcept {
         [&]<USize... Is>(std::index_sequence<Is...>) {
-            FR_STATIC_ASSERT(
-                (std::is_invocable_v<
-                     F, decltype(std::forward_like<decltype(self)>(self).template at<Is>())> &&
-                 ...),
-                "callback not invocable");
+            static_assert((std::is_invocable_v<F, decltype(std::forward_like<decltype(self)>(self)
+                                                               .template at<Is>())> &&
+                           ...),
+                          "callback not invocable");
             (f(std::forward_like<decltype(self)>(self).template at<Is>()), ...);
         }(std::index_sequence_for<Ts...>{});
     }
@@ -149,17 +142,15 @@ public:
     /**
      * @brief Invokes the callback for every item in the tuple and maps the result onto another
      * tuple.
-     * @note The returned tuple element type at index `I` is the callback result type for item `I`.
      */
     template <typename F>
     constexpr auto map(this auto &&self, F &&f) noexcept {
         return [&]<USize... Is>(std::index_sequence<Is...>) {
-            FR_STATIC_ASSERT(
-                (std::is_invocable_v<
-                     F, decltype(std::forward_like<decltype(self)>(self).template at<Is>())> &&
-                 ...),
-                "callback not invocable");
-            FR_STATIC_ASSERT(
+            static_assert((std::is_invocable_v<F, decltype(std::forward_like<decltype(self)>(self)
+                                                               .template at<Is>())> &&
+                           ...),
+                          "callback not invocable");
+            static_assert(
                 (!std::is_void_v<std::invoke_result_t<
                      F, decltype(std::forward_like<decltype(self)>(self).template at<Is>())>> &&
                  ...),
@@ -200,29 +191,21 @@ public:
         });
     }
 
-    /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing
-    /// the hidden friend idiom.
     template <USize I>
     friend constexpr auto &&get(Tuple &self) noexcept {
         return self.template at<I>();
     }
 
-    /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing
-    /// the hidden friend idiom.
     template <USize I>
     friend constexpr auto &&get(const Tuple &self) noexcept {
         return self.template at<I>();
     }
 
-    /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing
-    /// the hidden friend idiom.
     template <USize I>
     friend constexpr auto &&get(Tuple &&self) noexcept {
         return std::move(self).template at<I>();
     }
 
-    /// @brief This annotation is needed for the tuple protocol to work. It is declared utilizing
-    /// the hidden friend idiom.
     template <USize I>
     friend constexpr auto &&get(const Tuple &&self) noexcept {
         return std::move(self).template at<I>();
@@ -230,12 +213,11 @@ public:
 };
 
 /// @brief Deduction guide, so the user can write Tuple(42, 0.42f)
-/// instead of Tuple<U32, F32>(42, 0.42f).
 template <typename... Ts>
 Tuple(Ts...) -> Tuple<Ts...>;
 } // namespace fr
 
-// These specializations are part of the tuple protocol and enable structured bindings.
+// std specializations for structured bindings
 namespace std {
 template <typename... Ts>
 struct tuple_size<fr::Tuple<Ts...>> : std::integral_constant<USize, sizeof...(Ts)> {};

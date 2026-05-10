@@ -62,10 +62,14 @@ struct HashSetDeafultEq {
  *
  * This implementation uses a flat memory layout with control bytes (Swiss Table)
  * to speed up lookups and minimize cache misses.
+ *
+ * @note Foundational requirements for Key are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
  */
 template <typename Key, typename HashFn = impl::HashSetDeafultHashFnTag,
           typename EqFn = impl::HashSetDeafultEqFnTag>
 class HashSet {
+    FR_STATIC_ASSERT_NOTHROW_BASE(Key);
+
     using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl::HashSetDeafultHashFnTag>,
                                             impl::HashSetDefaultHash<Key>, HashFn>;
 
@@ -198,9 +202,12 @@ public:
      * @brief Copy-constructs a new HashSet.
      * @param other The HashSet to copy from.
      * @note Performs a deep copy of all elements.
+     * @pre Key must be nothrow copy constructible.
      */
     HashSet(const HashSet &other) noexcept
         : m_alloc(other.m_alloc) {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
+
         if (other.m_capacity == 0) {
             return;
         }
@@ -231,8 +238,11 @@ public:
      * @brief Copy-assigns from another HashSet.
      * @param other The HashSet to copy from.
      * @return Reference to this set.
+     * @pre Key must be nothrow copy constructible.
      */
     HashSet &operator=(const HashSet &other) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
+
         if (this == &other) {
             return *this;
         }
@@ -393,8 +403,10 @@ public:
      * @param key The key to insert.
      * @return True if the key was inserted, false if it already exists.
      * @note May trigger a rehash/growth.
+     * @pre Key must be nothrow copy constructible.
      */
     bool insert(const Key &key) {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
         return do_insert(key);
     }
 
@@ -414,9 +426,12 @@ public:
      * @param args Arguments for the key constructor.
      * @return True if the key was inserted, false if it already exists.
      * @note May trigger a rehash/growth.
+     * @pre Key must be nothrow constructible from Args.
      */
     template <typename... Args>
     bool emplace(Args &&...args) {
+        static_assert(std::is_nothrow_constructible_v<Key, Args...>,
+                      "Key must be nothrow constructible from Args");
         return do_insert(Key(std::forward<Args>(args)...));
     }
 
