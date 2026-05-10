@@ -217,6 +217,13 @@ public:
     }
 
     /**
+     * @brief Returns the allocator used by the string.
+     */
+    const Alloc *alloc() const noexcept {
+        return m_alloc;
+    }
+
+    /**
      * @brief Gets the maximum characters without null-terminator.
      *
      * @return Capacity in characters.

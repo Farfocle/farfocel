@@ -203,7 +203,7 @@ public:
      *
      * @return Pointer to allocator.
      */
-    Alloc *get_allocator() const noexcept {
+    const Alloc *alloc() const noexcept {
         return m_alloc;
     }
 

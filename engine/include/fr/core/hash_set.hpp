@@ -196,6 +196,7 @@ public:
      */
     explicit HashSet(Alloc *alloc) noexcept
         : m_alloc(alloc) {
+        FR_ASSERT(alloc, "allocator must be non-null");
     }
 
     /**
@@ -337,6 +338,13 @@ public:
      */
     USize capacity() const noexcept {
         return m_capacity;
+    }
+
+    /**
+     * @brief Returns the allocator used by the set.
+     */
+    const Alloc *alloc() const noexcept {
+        return m_alloc;
     }
 
     /**

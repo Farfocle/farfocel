@@ -339,7 +339,6 @@ public:
     template <typename F>
     [[nodiscard]] auto map(F &&f) noexcept -> Optional<std::invoke_result_t<F, T &>> {
         using FRet = std::invoke_result_t<F, T &>;
-        static_assert(std::is_nothrow_invocable_v<F, T &>, "F must be noexcept for map");
 
         if (!is_nil()) {
             return Optional<FRet>(std::invoke(std::forward<F>(f), m_storage.get()));
@@ -352,7 +351,6 @@ public:
     template <typename F>
     [[nodiscard]] auto map(F &&f) const noexcept -> Optional<std::invoke_result_t<F, const T &>> {
         using FRet = std::invoke_result_t<F, const T &>;
-        static_assert(std::is_nothrow_invocable_v<F, const T &>, "F must be noexcept for map");
 
         if (!is_nil()) {
             return Optional<FRet>(std::invoke(std::forward<F>(f), m_storage.get()));

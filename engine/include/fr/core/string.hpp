@@ -52,6 +52,15 @@ public:
     }
 
     /**
+     * @brief Constructor with allocator
+     * @param alloc Pointer to the allocator.
+     */
+    explicit String(Alloc *alloc) noexcept
+        : impl::StringBase(alloc) {
+        FR_ASSERT(alloc, "allocator must be non-null");
+    }
+
+    /**
      * @brief Constructor from a StringView
      * @param str View of a string to copy
      */

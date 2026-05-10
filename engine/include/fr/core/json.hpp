@@ -99,6 +99,7 @@ public:
      */
     String consume() {
         String output{};
+
         if (m_state != State::Error && m_doc) {
             const yyjson_write_flag flags =
                 m_options.pretty ? YYJSON_WRITE_PRETTY : YYJSON_WRITE_NOFLAG;

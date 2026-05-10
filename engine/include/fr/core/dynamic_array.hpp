@@ -574,7 +574,7 @@ public:
      *
      * @return Pointer to the allocator.
      */
-    Alloc *allocator() const noexcept {
+    const Alloc *alloc() const noexcept {
         return m_alloc;
     }
 
