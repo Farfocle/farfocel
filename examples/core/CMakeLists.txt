@@ -1,7 +1,14 @@
 set(BENCH_SOURCES
+    "array.cpp"
     "dynamic_array.cpp"
     "format.cpp"
+    "hash_map.cpp"
+    "hash_set.cpp"
+    "optional.cpp"
+    "pair_tuple.cpp"
     "serialization.cpp"
+    "slice.cpp"
+    "unique_ptr.cpp"
 )
 
 foreach(source ${BENCH_SOURCES})
