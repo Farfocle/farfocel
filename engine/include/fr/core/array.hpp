@@ -116,9 +116,31 @@ public:
         return arr;
     }
 
+    /**
+     * @brief Create an array from a slice.
+     * @param slice Source slice.
+     * @return A new Array instance containing the slice elements.
+     * @pre slice.size() == Size.
+     * @pre T must be nothrow default constructible and copy assignable.
+     */
+    [[nodiscard]] static constexpr Array from_slice(
+        Slice<const std::remove_const_t<T>> slice) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
+        FR_STATIC_ASSERT_NOTHROW_COPY_ASSIGNABLE(T);
+        FR_ASSERT(slice.size() == Size, "slice size mismatch");
+
+        Array arr;
+        for (USize i = 0; i < Size; ++i) {
+            arr.m_data[i] = slice[i];
+        }
+
+        return arr;
+    }
+
     // ---------------------------------------------------------
     // Iterators
     // ---------------------------------------------------------
+
 
     /**
      * @brief Returns an iterator to the first element.
@@ -296,8 +318,9 @@ public:
     constexpr Slice<T> slice_mut(USize from, USize to) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice(from, to);
+        return slice_mut().slice_mut(from, to);
     }
+
 
     constexpr Slice<const T> slice(USize, USize) const && = delete;
     constexpr Slice<T> slice_mut(USize, USize) && = delete;
@@ -321,8 +344,9 @@ public:
     constexpr Slice<T> slice_mut_from(USize from) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice_from(from);
+        return slice_mut().slice_mut_from(from);
     }
+
 
     constexpr Slice<const T> slice_from(USize) const && = delete;
     constexpr Slice<T> slice_mut_from(USize) && = delete;
@@ -346,8 +370,9 @@ public:
     constexpr Slice<T> slice_mut_to(USize to) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice_to(to);
+        return slice_mut().slice_mut_to(to);
     }
+
 
     constexpr Slice<const T> slice_to(USize) const && = delete;
     constexpr Slice<T> slice_mut_to(USize) && = delete;

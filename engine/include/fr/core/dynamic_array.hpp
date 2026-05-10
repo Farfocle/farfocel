@@ -267,9 +267,52 @@ public:
         return arr;
     }
 
+    /**
+     * @brief Create an array from a slice using the ambient allocator.
+     *
+     * @param slice Source slice.
+     * @return A new DynamicArray instance containing the slice elements.
+     * @pre T must be nothrow copy constructible.
+     */
+    [[nodiscard]] static DynamicArray from_slice(Slice<const std::remove_const_t<T>> slice) noexcept {
+        return from_slice(get_ambient_ctx().alloc, slice);
+    }
+
+    /**
+     * @brief Create an array from a slice using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator to use.
+     * @param slice Source slice.
+     * @return A new DynamicArray instance containing the slice elements.
+     * @pre alloc must be non-null.
+     * @pre T must be nothrow copy constructible.
+     */
+    [[nodiscard]] static DynamicArray from_slice(Alloc *alloc,
+                                                 Slice<const std::remove_const_t<T>> slice) noexcept {
+        FR_ASSERT(alloc, "allocator must be non-null");
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
+
+        DynamicArray arr(alloc);
+        USize size = slice.size();
+        if (size == 0) {
+            return arr;
+        }
+
+        arr.do_reserve(size);
+
+        for (USize i = 0; i < size; ++i) {
+            std::construct_at(arr.m_data + i, slice[i]);
+        }
+
+        arr.m_size = size;
+
+        return arr;
+    }
+
     // ---------------------------------------------------------
     // Iterators
     // ---------------------------------------------------------
+
 
     /**
      * @brief Returns an iterator to the first element.
@@ -467,8 +510,9 @@ public:
     Slice<T> slice_mut(USize from, USize to) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice(from, to);
+        return slice_mut().slice_mut(from, to);
     }
+
 
     Slice<const T> slice(USize, USize) const && = delete;
     Slice<T> slice_mut(USize, USize) && = delete;
@@ -495,8 +539,9 @@ public:
     Slice<T> slice_mut_from(USize from) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice_from(from);
+        return slice_mut().slice_mut_from(from);
     }
+
 
     Slice<const T> slice_from(USize) const && = delete;
     Slice<T> slice_mut_from(USize) && = delete;
@@ -523,8 +568,9 @@ public:
     Slice<T> slice_mut_to(USize to) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice_to(to);
+        return slice_mut().slice_mut_to(to);
     }
+
 
     Slice<const T> slice_to(USize) const && = delete;
     Slice<T> slice_mut_to(USize) && = delete;
