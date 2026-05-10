@@ -10,12 +10,12 @@ S32 main() {
     fr::init_core_ctx();
 
     {
-        fr::Pair<S32, fr::String> p(42, fr::String("Answer"));
+        fr::Pair<S32, fr::String> p(42, "Answer");
 
         auto [num, str] = p;
         std::cout << fr::format("Pair: {} -> {}\n", num, str);
 
-        fr::Tuple t(1, 2.5f, fr::String("#jakub"));
+        fr::Tuple t(1, 2.5f, "#jakub");
 
         t.each([](auto &val) { std::cout << fr::format("Tuple item: {}\n", val); });
 

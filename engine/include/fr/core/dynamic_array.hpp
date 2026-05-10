@@ -274,7 +274,8 @@ public:
      * @return A new DynamicArray instance containing the slice elements.
      * @pre T must be nothrow copy constructible.
      */
-    [[nodiscard]] static DynamicArray from_slice(Slice<const std::remove_const_t<T>> slice) noexcept {
+    [[nodiscard]] static DynamicArray
+    from_slice(Slice<const std::remove_const_t<T>> slice) noexcept {
         return from_slice(get_ambient_ctx().alloc, slice);
     }
 
@@ -287,8 +288,8 @@ public:
      * @pre alloc must be non-null.
      * @pre T must be nothrow copy constructible.
      */
-    [[nodiscard]] static DynamicArray from_slice(Alloc *alloc,
-                                                 Slice<const std::remove_const_t<T>> slice) noexcept {
+    [[nodiscard]] static DynamicArray
+    from_slice(Alloc *alloc, Slice<const std::remove_const_t<T>> slice) noexcept {
         FR_ASSERT(alloc, "allocator must be non-null");
         FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
 
@@ -312,7 +313,6 @@ public:
     // ---------------------------------------------------------
     // Iterators
     // ---------------------------------------------------------
-
 
     /**
      * @brief Returns an iterator to the first element.
@@ -513,7 +513,6 @@ public:
         return slice_mut().slice_mut(from, to);
     }
 
-
     Slice<const T> slice(USize, USize) const && = delete;
     Slice<T> slice_mut(USize, USize) && = delete;
 
@@ -542,7 +541,6 @@ public:
         return slice_mut().slice_mut_from(from);
     }
 
-
     Slice<const T> slice_from(USize) const && = delete;
     Slice<T> slice_mut_from(USize) && = delete;
 
@@ -570,7 +568,6 @@ public:
     {
         return slice_mut().slice_mut_to(to);
     }
-
 
     Slice<const T> slice_to(USize) const && = delete;
     Slice<T> slice_mut_to(USize) && = delete;

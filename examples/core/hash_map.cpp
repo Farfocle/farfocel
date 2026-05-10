@@ -11,9 +11,9 @@ S32 main() {
     {
         fr::HashMap<S32, fr::String> items;
 
-        items.insert(4, fr::String("Apple"));
-        items.insert(2, fr::String("Banana"));
-        items[0] = fr::String("Cherry");
+        items.insert(4, "Sta");
+        items.insert(2, "nislaw");
+        items[0] = fr::String("Dera");
 
         if (auto fruit = items.find(2)) {
             // items.find(2) returns Optional<Value*>, so fruit.unwrap() is Value*

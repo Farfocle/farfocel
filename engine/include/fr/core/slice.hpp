@@ -49,7 +49,6 @@ public:
 
     static constexpr bool is_mut = !std::is_const_v<T>;
 
-
     // ---------------------------------------------------------
     // Construction / Destruction
     // ---------------------------------------------------------
@@ -236,7 +235,6 @@ public:
         return Slice<const_value_type>(m_data, m_size);
     }
 
-
     /**
      * @brief Create a mutable slice view over the entire range.
      *
@@ -248,7 +246,6 @@ public:
     {
         return Slice<T>(m_data, m_size);
     }
-
 
     /**
      * @brief Create a constant sub-slice view.
@@ -264,7 +261,6 @@ public:
         FR_ASSERT(from <= to, "invalid range");
         return Slice<const_value_type>(m_data + from, to - from + 1);
     }
-
 
     /**
      * @brief Create a mutable sub-slice view.
@@ -282,7 +278,6 @@ public:
         return Slice<T>(m_data + from, to - from + 1);
     }
 
-
     /**
      * @brief Create a constant sub-slice starting from an index.
      *
@@ -293,7 +288,6 @@ public:
         FR_ASSERT(from < m_size || (from == 0 && m_size == 0), "index out of bounds");
         return Slice<const_value_type>(m_data + from, m_size - from);
     }
-
 
     /**
      * @brief Create a mutable sub-slice starting from an index.
@@ -308,7 +302,6 @@ public:
         return Slice<T>(m_data + from, m_size - from);
     }
 
-
     /**
      * @brief Create a constant sub-slice up to an index.
      *
@@ -319,7 +312,6 @@ public:
         FR_ASSERT(to < m_size, "index out of bounds");
         return Slice<const_value_type>(m_data, to + 1);
     }
-
 
     /**
      * @brief Create a mutable sub-slice up to an index.
@@ -359,14 +351,12 @@ public:
         const T *data = m_data;
         const T *it = std::find(data, data + m_size, value);
         if (it == data + m_size) {
-            return Pair<Slice<T>, Slice<T>>(Slice<T>(m_data, m_size),
-                                            Slice<T>(m_data + m_size, 0));
+            return Pair<Slice<T>, Slice<T>>(Slice<T>(m_data, m_size), Slice<T>(m_data + m_size, 0));
         }
 
         USize idx = static_cast<USize>(it - data);
         return cut(idx);
     }
-
 
 private:
     /// @brief Internal helper for shallow copy.

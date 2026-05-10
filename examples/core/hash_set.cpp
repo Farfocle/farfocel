@@ -11,9 +11,9 @@ S32 main() {
     {
         fr::HashSet<fr::String> tags;
 
-        tags.insert(fr::String("//"));
-        tags.insert(fr::String("Karol"));
-        tags.insert(fr::String("Szypula"));
+        tags.insert("//");
+        tags.insert("Karol");
+        tags.insert("Szypula");
 
         if (tags.contains("Szypula")) {
             std::cout << "Contains Szypula\n";
