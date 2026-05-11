@@ -1,4 +1,4 @@
-# Farfocel Game Engine
+#intrinsics Farfocel Game Engine
 
 ## Core
 
@@ -48,3 +48,4 @@ minimal, pragmatic and probably not very robust. Examples are placed in
 - [ ] File system helpers
 - [ ] Logger
 - [ ] Custom function wrappers and delegates - alternatives to `std::function`
+- [ ] SIMD intrinsic abstractions
