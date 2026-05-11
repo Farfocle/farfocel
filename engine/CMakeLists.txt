@@ -7,6 +7,7 @@ set(ENGINE_HEADERS
     "include/fr/core/alloc.hpp"
     "include/fr/core/alloc_typedefs.hpp"
     "include/fr/core/arena_alloc.hpp"
+    "include/fr/core/array.hpp"
     "include/fr/core/block_alloc.hpp"
     "include/fr/core/dynamic_array.hpp"
     "include/fr/core/hash.hpp"

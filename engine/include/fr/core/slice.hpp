@@ -1,16 +1,20 @@
 /**
  * @file slice.hpp
  * @author Kiju
+ *
  * @brief Non-owning view over a contiguous range of elements.
  */
+
 #pragma once
 
 #include <algorithm>
 #include <type_traits>
 
 #include "fr/core/macros.hpp"
+#include "fr/core/pair.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
+#include "fr/core/typetraits.hpp"
 
 namespace fr {
 
@@ -20,9 +24,13 @@ namespace fr {
  *
  * Slice does not manage lifetime. The caller must ensure the backing storage
  * remains valid for the Slice's lifetime.
+ *
+ * @note Foundational requirements for T are enforced via IsNothrowBase.
  */
 template <typename T>
 class Slice {
+    static_assert(IsNothrowBase<T>, "T must satisfy foundational nothrow requirements");
+
 private:
     T *m_data{nullptr};
     USize m_size{0};
@@ -31,12 +39,15 @@ public:
     using iterator = T *;
     using const_iterator = const T *;
     using value_type = T;
+    using const_value_type = const std::remove_const_t<T>;
     using size_type = USize;
     using difference_type = std::ptrdiff_t;
     using pointer = T *;
     using const_pointer = const T *;
     using reference = T &;
     using const_reference = const T &;
+
+    static constexpr bool is_mut = !std::is_const_v<T>;
 
     // ---------------------------------------------------------
     // Construction / Destruction
@@ -220,8 +231,8 @@ public:
      *
      * @return Constant Slice.
      */
-    Slice<const std::remove_const_t<T>> slice() const noexcept {
-        return do_slice_self();
+    Slice<const_value_type> slice() const noexcept {
+        return Slice<const_value_type>(m_data, m_size);
     }
 
     /**
@@ -231,9 +242,9 @@ public:
      * @note Only available if T is not const.
      */
     Slice<T> slice_mut() noexcept
-        requires(!std::is_const_v<T>)
+        requires(is_mut)
     {
-        return do_slice_self();
+        return Slice<T>(m_data, m_size);
     }
 
     /**
@@ -244,8 +255,11 @@ public:
      * @return Constant sub-slice.
      * @pre from <= to < size().
      */
-    Slice<const std::remove_const_t<T>> slice(USize from, USize to) const noexcept {
-        return do_slice_bound(from, to);
+    Slice<const_value_type> slice(USize from, USize to) const noexcept {
+        FR_ASSERT(from < m_size, "start index out of bounds");
+        FR_ASSERT(to < m_size, "end index out of bounds");
+        FR_ASSERT(from <= to, "invalid range");
+        return Slice<const_value_type>(m_data + from, to - from + 1);
     }
 
     /**
@@ -256,9 +270,12 @@ public:
      * @return Mutable sub-slice.
      */
     Slice<T> slice_mut(USize from, USize to) const noexcept
-        requires(!std::is_const_v<T>)
+        requires(is_mut)
     {
-        return do_slice_bound(from, to);
+        FR_ASSERT(from < m_size, "start index out of bounds");
+        FR_ASSERT(to < m_size, "end index out of bounds");
+        FR_ASSERT(from <= to, "invalid range");
+        return Slice<T>(m_data + from, to - from + 1);
     }
 
     /**
@@ -267,8 +284,9 @@ public:
      * @param from Start index.
      * @return Constant sub-slice.
      */
-    Slice<const std::remove_const_t<T>> slice_from(USize from) const noexcept {
-        return do_slice_from(from);
+    Slice<const_value_type> slice_from(USize from) const noexcept {
+        FR_ASSERT(from < m_size || (from == 0 && m_size == 0), "index out of bounds");
+        return Slice<const_value_type>(m_data + from, m_size - from);
     }
 
     /**
@@ -278,9 +296,10 @@ public:
      * @return Mutable sub-slice.
      */
     Slice<T> slice_mut_from(USize from) const noexcept
-        requires(!std::is_const_v<T>)
+        requires(is_mut)
     {
-        return do_slice_from(from);
+        FR_ASSERT(from < m_size || (from == 0 && m_size == 0), "index out of bounds");
+        return Slice<T>(m_data + from, m_size - from);
     }
 
     /**
@@ -289,8 +308,9 @@ public:
      * @param to End index.
      * @return Constant sub-slice.
      */
-    Slice<const std::remove_const_t<T>> slice_to(USize to) const noexcept {
-        return do_slice_to(to);
+    Slice<const_value_type> slice_to(USize to) const noexcept {
+        FR_ASSERT(to < m_size, "index out of bounds");
+        return Slice<const_value_type>(m_data, to + 1);
     }
 
     /**
@@ -300,58 +320,45 @@ public:
      * @return Mutable sub-slice.
      */
     Slice<T> slice_mut_to(USize to) const noexcept
-        requires(!std::is_const_v<T>)
+        requires(is_mut)
     {
-        return do_slice_to(to);
+        FR_ASSERT(to < m_size, "index out of bounds");
+        return Slice<T>(m_data, to + 1);
+    }
+
+    /**
+     * @brief Cut the slice at an index into two slices.
+     *
+     * @param idx Index where the split occurs (left size = idx).
+     * @return Pair of slices: [0, idx) and [idx, size()).
+     * @pre idx <= size().
+     */
+    Pair<Slice<T>, Slice<T>> cut(USize idx) const noexcept {
+        FR_ASSERT(idx <= m_size, "index out of bounds");
+        return Pair<Slice<T>, Slice<T>>(Slice<T>(m_data, idx),
+                                        Slice<T>(m_data + idx, m_size - idx));
+    }
+
+    /**
+     * @brief Cut the slice at the first occurrence of a value.
+     *
+     * If the value is not found, the first slice contains all elements and the second is empty.
+     *
+     * @param value Value to search for.
+     * @return Pair of slices split at the first matching element.
+     */
+    Pair<Slice<T>, Slice<T>> cut_by(const std::remove_const_t<T> &value) const noexcept {
+        const T *data = m_data;
+        const T *it = std::find(data, data + m_size, value);
+        if (it == data + m_size) {
+            return Pair<Slice<T>, Slice<T>>(Slice<T>(m_data, m_size), Slice<T>(m_data + m_size, 0));
+        }
+
+        USize idx = static_cast<USize>(it - data);
+        return cut(idx);
     }
 
 private:
-    /**
-     * @brief Internal helper to create a slice of the full range.
-     *
-     * @return Slice covering full range.
-     */
-    inline Slice do_slice_self() const noexcept {
-        return Slice(m_data, m_size);
-    }
-
-    /**
-     * @brief Internal helper to create a bounded sub-slice.
-     *
-     * @param from Start index.
-     * @param to End index.
-     * @return Bounded sub-slice.
-     */
-    inline Slice do_slice_bound(USize from, USize to) const noexcept {
-        FR_ASSERT(from < m_size, "start index out of bounds");
-        FR_ASSERT(to < m_size, "end index out of bounds");
-        FR_ASSERT(from <= to, "invalid range");
-
-        return Slice(m_data + from, to - from + 1);
-    }
-
-    /**
-     * @brief Internal helper to create a sub-slice starting from from.
-     *
-     * @param from Start index.
-     * @return Sub-slice from index.
-     */
-    inline Slice do_slice_from(USize from) const noexcept {
-        FR_ASSERT(from < m_size || (from == 0 && m_size == 0), "index out of bounds");
-        return Slice(m_data + from, m_size - from);
-    }
-
-    /**
-     * @brief Internal helper to create a sub-slice ending at to.
-     *
-     * @param to End index.
-     * @return Sub-slice up to index.
-     */
-    inline Slice do_slice_to(USize to) const noexcept {
-        FR_ASSERT(to < m_size, "index out of bounds");
-        return Slice(m_data, to + 1);
-    }
-
     /// @brief Internal helper for shallow copy.
     inline void do_copy_from(const Slice &other) noexcept {
         m_data = other.m_data;

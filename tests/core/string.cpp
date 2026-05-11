@@ -14,11 +14,11 @@ TEST_CASE("StringView - Basic Operations") {
     CHECK(sv.back() == 'e');
     CHECK(sv[9] == 'E');
 
-    StringView sub1 = sv.substr(0, 8);
+    StringView sub1 = sv.view(0, 7);
     CHECK(sub1.size() == 8);
     CHECK(sub1 == "Farfocel");
 
-    StringView sub2 = sv.substr(9);
+    StringView sub2 = sv.view_from(9);
     CHECK(sub2 == "Engine");
 
     CHECK(sv.starts_with("Farfocel"));
@@ -54,12 +54,12 @@ TEST_CASE("String - SSO max") {
     CHECK(empty.capacity() == 23);
     CHECK(empty.is_short_string());
 
-    String sso_str("12345678901234567890123");
+    String sso_str = String::from_view("12345678901234567890123");
     CHECK(sso_str.size() == 23);
     CHECK(sso_str.capacity() == 23);
     CHECK(sso_str.is_short_string());
 
-    String heap_str("123456789012345678901234");
+    String heap_str = String::from_view("123456789012345678901234");
     CHECK(heap_str.size() == 24);
     CHECK(heap_str.capacity() >= 24);
     CHECK(!heap_str.is_short_string());
@@ -75,7 +75,7 @@ TEST_CASE("String - SSO max") {
     CHECK(copied_heap.is_short_string());
     CHECK(copied_heap.size() == 0);
 
-    String dynamic_str("Short");
+    String dynamic_str = String::from_view("Short");
     CHECK(dynamic_str.is_short_string());
 
     dynamic_str.append(" STRING that defaldkjfalsdjflsadfj ljsadlfkajsdl kjfaslkdjf lsjdaf lksajdf "
@@ -93,7 +93,7 @@ TEST_CASE("String - SSO max") {
 }
 
 TEST_CASE("String - Modification") {
-    String str("Engine");
+    String str = String::from_view("Engine");
 
     str.push_back('X');
     CHECK(str == "EngineX");
@@ -119,10 +119,39 @@ TEST_CASE("String - Modification") {
     str.clear();
     CHECK(str.size() == 0);
     CHECK(str.capacity() >= 0);
+
+    SUBCASE("Explicit resizing") {
+        str = String::from_view("Hello");
+        str.shrink(3);
+        CHECK(str == "Hel");
+
+        str.grow_default(5);
+        CHECK(str.size() == 5);
+        CHECK(str[3] == '\0');
+
+        str.grow_with(8, '!');
+        CHECK(str == String::from_sized_chars("Hel\0\0!!!", 8));
+    }
+
+    SUBCASE("Removal") {
+        str = String::from_view("ABCDE");
+        str.remove_shift(1); // "ACDE"
+        CHECK(str == "ACDE");
+
+        str.remove_swap(1); // Swap 'C' with 'E' -> "AEDE" -> "AED"
+        CHECK(str == "AED");
+    }
+
+    SUBCASE("View API") {
+        str = String::from_view("Farfocel");
+        CHECK(str.view(0, 2) == "Far");
+        CHECK(str.view_from(3) == "focel");
+        CHECK(str.view_to(2) == "Far");
+    }
 }
 
 TEST_CASE("String - Search") {
-    String str("The quick brown fox jumps over the lazy dog");
+    String str = String::from_view("The quick brown fox jumps over the lazy dog");
 
     CHECK(str.find("brown") == 10);
     CHECK(str.find('q') == 4);
@@ -139,29 +168,29 @@ TEST_CASE("String - Search") {
 }
 
 TEST_CASE("String - Utilities") {
-    String whitespace_str("   \t\n  Trim me  \n\r   ");
+    String whitespace_str = String::from_view("   \t\n  Trim me  \n\r   ");
     whitespace_str.trim();
     CHECK(whitespace_str == "Trim me");
 
-    String lower("FARFOCEL engine 123");
+    String lower = String::from_view("FARFOCEL engine 123");
     lower.to_lower_ascii();
     CHECK(lower == "farfocel engine 123");
 
-    String upper("farfocel engine 123");
+    String upper = String::from_view("farfocel engine 123");
     upper.to_upper_ascii();
     CHECK(upper == "FARFOCEL ENGINE 123");
 
     CHECK(upper.contains("ENGINE"));
     CHECK(!upper.contains("engine"));
 
-    String s1 = "Alpha";
-    String s2 = "Beta";
+    String s1 = String::from_view("Alpha");
+    String s2 = String::from_view("Beta");
     String s3 = s1 + s2;
     CHECK(s3 == "AlphaBeta");
 }
 
 TEST_CASE("String - Iterators and element accesss") {
-    String str("Data");
+    String str = String::from_view("Data");
 
     CHECK(str.front() == 'D');
     CHECK(str.back() == 'a');

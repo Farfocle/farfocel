@@ -64,10 +64,14 @@ struct HashMapDeafultEq {
  *
  * HashMap provides O(1) average-time complexity for insertions, lookups, and removals.
  * It uses a Swiss Table-like architecture to achieve high cache efficiency.
+ *
+ * @note Foundational requirements for Key and Value are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
  */
 template <typename Key, typename Value, typename HashFn = impl::HashMapDeafultHashFnTag,
           typename CmpFn = impl::HashMapDeafultEqFnTag>
 class HashMap {
+    FR_STATIC_ASSERT_NOTHROW_BASE(Key);
+    FR_STATIC_ASSERT_NOTHROW_BASE(Value);
 
     using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl::HashMapDeafultHashFnTag>,
                                             impl::HashMapDeafultHash<Key>, HashFn>;
@@ -198,14 +202,19 @@ public:
      */
     explicit HashMap(Alloc *alloc) noexcept
         : m_alloc(alloc) {
+        FR_ASSERT(alloc, "allocator must be non-null");
     }
 
     /**
      * @brief Copy-constructs a new HashMap.
      * @param other Source map.
+     * @pre Key and Value must be nothrow copy constructible.
      */
     HashMap(const HashMap &other) noexcept
         : m_alloc(other.m_alloc) {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Value);
+
         if (other.m_capacity > 0) {
             do_grow(other.m_capacity);
             for (auto pair : other) {
@@ -235,8 +244,12 @@ public:
      * @brief Copy-assigns from another HashMap.
      * @param other Source map.
      * @return Reference to this map.
+     * @pre Key and Value must be nothrow copy constructible.
      */
     HashMap &operator=(const HashMap &other) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Value);
+
         if (this != &other) {
             clear();
             for (auto pair : other) {
@@ -289,6 +302,31 @@ public:
     }
 
     /**
+     * @brief Creates an empty HashMap with a specific capacity using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator.
+     * @param capacity Minimum capacity.
+     * @return A new empty HashMap instance.
+     */
+    static HashMap with_capacity(Alloc *alloc, USize capacity) noexcept {
+        HashMap map(alloc);
+        if (capacity > 0) {
+            map.do_grow(math::round_up_pow2(capacity));
+        }
+        return map;
+    }
+
+    /**
+     * @brief Creates an empty HashMap with a specific capacity.
+     *
+     * @param capacity Minimum capacity.
+     * @return A new empty HashMap instance.
+     */
+    static HashMap with_capacity(USize capacity) noexcept {
+        return with_capacity(get_ambient_ctx().alloc, capacity);
+    }
+
+    /**
      * @brief Returns the number of elements in the map.
      */
     USize load() const noexcept {
@@ -300,6 +338,13 @@ public:
      */
     USize capacity() const noexcept {
         return m_capacity;
+    }
+
+    /**
+     * @brief Returns the allocator used by the map.
+     */
+    const Alloc *alloc() const noexcept {
+        return m_alloc;
     }
 
     /**
@@ -400,8 +445,11 @@ public:
      * @param key Key to insert.
      * @param value Value to insert.
      * @return True if insertion happened, false if key already exists.
+     * @pre Key and Value must be nothrow copy constructible.
      */
     bool insert(const Key &key, const Value &value) {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Value);
         return do_insert(key, value);
     }
 
@@ -410,8 +458,10 @@ public:
      * @param key Key to insert.
      * @param value Value to move.
      * @return True if insertion happened, false if key already exists.
+     * @pre Key must be nothrow copy constructible.
      */
     bool insert(const Key &key, Value &&value) {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
         return do_insert(key, std::move(value));
     }
 
@@ -421,9 +471,14 @@ public:
      * @param key Key to insert.
      * @param args Arguments for Value constructor.
      * @return True if insertion happened, false if key already exists.
+     * @pre Key must be nothrow copy constructible.
+     * @pre Value must be nothrow constructible from Args.
      */
     template <typename... Args>
     bool emplace(const Key &key, Args &&...args) {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
+        static_assert(std::is_nothrow_constructible_v<Value, Args...>,
+                      "Value must be nothrow constructible from Args");
         return do_insert(key, Value(std::forward<Args>(args)...));
     }
 
@@ -472,8 +527,13 @@ public:
      * @param key Key to look up.
      * @return Reference to the value.
      * @note May trigger a rehash/growth.
+     * @pre Key must be nothrow copy constructible.
+     * @pre Value must be nothrow default constructible.
      */
     Value &operator[](const Key &key) {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
+        FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(Value);
+
         std::ptrdiff_t idx = do_find_idx(key);
         if (idx != -1) {
             return m_slots[idx].value;

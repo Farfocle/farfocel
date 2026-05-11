@@ -2,15 +2,11 @@
  * @file optional.hpp
  * @author Kiju
  *
- * @brief A noexcept Optional<T> with nil optimization support. This implementation is more minimal
- * than std::optional in terms of API (which is think is bloated anyways) but still contains a
- * monadic `map` and rust inspired `unwrap` and `unwrap_or`. It also overloads the arrow operator
- * `->` for quick and easy access. If something goes wrong it asserts, simple and fast. The main
- * selling point of this implementation is nil optimization. If a generic type `T` supports a nil
- * value (or is a raw pointer) the optional of this type does not add any additional memory
- * footprint - it is a zero const abstraction. For example: every raw pointer `T*` already has a nil
- * value `nullptr` thus, there is no need for extra bookkeeping. `nullptr` is an empty optional,
- * everthing else is a valid, value optional of `T`.
+ * @brief A noexcept Optional<T> with nil optimization support.
+ *
+ * This implementation provides a monadic API and niche optimization for nillable types.
+ *
+ * @note Foundational requirements for T are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
  */
 
 #pragma once
@@ -48,8 +44,8 @@ struct NillableOptionalStorage {
     template <typename... Args>
     constexpr NillableOptionalStorage(Args &&...args) noexcept
         : data(std::forward<Args>(args)...) {
-        FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
-                         "T must be nothrow constructible for Optional");
+        static_assert(std::is_nothrow_constructible_v<T, Args...>,
+                      "T must be nothrow constructible for Optional");
     }
 
     [[nodiscard]] constexpr bool is_nil() const noexcept {
@@ -76,8 +72,8 @@ struct NillableOptionalStorage {
 
     template <typename... Args>
     void emplace(Args &&...args) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
-                         "T must be nothrow constructible for Optional::emplace");
+        static_assert(std::is_nothrow_constructible_v<T, Args...>,
+                      "T must be nothrow constructible for Optional::emplace");
         reset();
         std::construct_at(&data, std::forward<Args>(args)...);
     }
@@ -107,16 +103,15 @@ struct GenericOptionalStorage {
     constexpr GenericOptionalStorage(Args &&...args) noexcept
         : value(std::forward<Args>(args)...),
           engaged(true) {
-        FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
-                         "T must be nothrow constructible for Optional");
+        static_assert(std::is_nothrow_constructible_v<T, Args...>,
+                      "T must be nothrow constructible for Optional");
     }
 
     GenericOptionalStorage(const GenericOptionalStorage &storage) noexcept
         : dummy(0),
           engaged(storage.engaged) {
         if (storage.engaged) {
-            FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
-                             "T must be nothrow copy constructible");
+            FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
             std::construct_at(&value, storage.value);
         }
     }
@@ -125,8 +120,7 @@ struct GenericOptionalStorage {
         : dummy(0),
           engaged(storage.engaged) {
         if (storage.engaged) {
-            FR_STATIC_ASSERT((std::is_nothrow_move_constructible_v<T>),
-                             "T must be nothrow move constructible");
+            FR_STATIC_ASSERT_NOTHROW_MOVE_CONSTRUCTIBLE(T);
             std::construct_at(&value, std::move(storage.value));
             storage.reset();
         }
@@ -159,8 +153,8 @@ struct GenericOptionalStorage {
 
     template <typename... Args>
     void emplace(Args &&...args) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
-                         "T must be nothrow constructible for Optional::emplace");
+        static_assert(std::is_nothrow_constructible_v<T, Args...>,
+                      "T must be nothrow constructible for Optional::emplace");
         reset();
         std::construct_at(&value, std::forward<Args>(args)...);
         engaged = true;
@@ -181,6 +175,8 @@ struct GenericOptionalStorage {
  */
 template <typename T>
 class Optional {
+    FR_STATIC_ASSERT_NOTHROW_BASE(T);
+
     using Storage = std::conditional_t<IsNillable<T>, impl::NillableOptionalStorage<T>,
                                        impl::GenericOptionalStorage<T>>;
 
@@ -203,14 +199,17 @@ public:
                  !std::is_same_v<std::decay_t<U>, NilTag>)
     constexpr Optional(U &&v) noexcept
         : m_storage(std::forward<U>(v)) {
-        FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, U>),
-                         "T must be nothrow constructible from U");
+        static_assert(std::is_nothrow_constructible_v<T, U>,
+                      "T must be nothrow constructible from U");
     }
 
     Optional(const Optional &o) noexcept = default;
     Optional(Optional &&o) noexcept = default;
 
     Optional &operator=(const Optional &o) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
+        FR_STATIC_ASSERT_NOTHROW_COPY_ASSIGNABLE(T);
+
         if (this == &o) {
             return *this;
         }
@@ -332,9 +331,7 @@ public:
 
     /// @brief Returns the value if present, otherwise returns fallback.
     [[nodiscard]] T unwrap_or(T fallback) const noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
-                         "T must be nothrow copy constructible for unwrap_or");
-
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         return !is_nil() ? m_storage.get() : fallback;
     }
 
@@ -342,7 +339,6 @@ public:
     template <typename F>
     [[nodiscard]] auto map(F &&f) noexcept -> Optional<std::invoke_result_t<F, T &>> {
         using FRet = std::invoke_result_t<F, T &>;
-        FR_STATIC_ASSERT((std::is_nothrow_invocable_v<F, T &>), "F must be noexcept for map");
 
         if (!is_nil()) {
             return Optional<FRet>(std::invoke(std::forward<F>(f), m_storage.get()));
@@ -355,7 +351,6 @@ public:
     template <typename F>
     [[nodiscard]] auto map(F &&f) const noexcept -> Optional<std::invoke_result_t<F, const T &>> {
         using FRet = std::invoke_result_t<F, const T &>;
-        FR_STATIC_ASSERT((std::is_nothrow_invocable_v<F, const T &>), "F must be noexcept for map");
 
         if (!is_nil()) {
             return Optional<FRet>(std::invoke(std::forward<F>(f), m_storage.get()));

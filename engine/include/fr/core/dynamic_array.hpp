@@ -29,10 +29,13 @@ namespace fr {
  *
  * This container owns its storage and grows as needed. It supports
  * slice views, fast push/pop, and both ordered and unordered removal.
- * @note All operations assume that T is nothrow constructible/destructible.
+ *
+ * @note Foundational requirements for T are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
  */
 template <typename T>
 class DynamicArray {
+    FR_STATIC_ASSERT_NOTHROW_BASE(T);
+
 private:
     Alloc *m_alloc{get_ambient_ctx().alloc};
     T *m_data{nullptr};
@@ -53,7 +56,7 @@ public:
     using const_reference = const T &;
 
     // ---------------------------------------------------------
-    // Boilerplate, Insane Constructors
+    // Constructors
     // ---------------------------------------------------------
 
     /**
@@ -71,8 +74,7 @@ public:
      * @note Allocates memory to fit all elements in @p list.
      */
     DynamicArray(std::initializer_list<T> list) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
-                         "T must be nothrow copy constructible");
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         do_grow_if_needed(list.size());
 
         for (const T &item : list) {
@@ -88,6 +90,7 @@ public:
      * @note Performs a deep copy of all elements. Uses the same allocator as @p other.
      */
     DynamicArray(const DynamicArray &other) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         do_copy_from(other);
     }
 
@@ -122,6 +125,9 @@ public:
      *       new storage will be allocated. The allocator is NOT propagated.
      */
     DynamicArray &operator=(const DynamicArray &other) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
+        FR_STATIC_ASSERT_NOTHROW_COPY_ASSIGNABLE(T);
+
         if (this == &other) {
             return *this;
         }
@@ -169,56 +175,40 @@ public:
      * @return A new empty DynamicArray instance.
      * @pre alloc must be non-null.
      */
-    [[nodiscard]] static DynamicArray with_allocator(Alloc *alloc) noexcept {
+    [[nodiscard]] static DynamicArray with_alloc(Alloc *alloc) noexcept {
         return DynamicArray(alloc);
-    }
-
-    /**
-     * @brief Create an empty array with an initial reserved capacity using the default allocator.
-     *
-     * @param capacity The number of elements to reserve space for.
-     * @return A new empty DynamicArray instance.
-     */
-    [[nodiscard]] static DynamicArray with_capacity(USize capacity) noexcept {
-        return with_capacity(capacity, get_ambient_ctx().alloc);
     }
 
     /**
      * @brief Create an empty array with an initial reserved capacity using a specific allocator.
      *
-     * @param capacity The number of elements to reserve space for.
      * @param alloc Pointer to the allocator to use.
+     * @param capacity The number of elements to reserve space for.
      * @return A new empty DynamicArray instance.
      * @pre alloc must be non-null.
      */
-    [[nodiscard]] static DynamicArray with_capacity(USize capacity, Alloc *alloc) noexcept {
+    [[nodiscard]] static DynamicArray with_capacity(Alloc *alloc, USize capacity) noexcept {
         DynamicArray darr(alloc);
         darr.do_reserve(capacity);
 
         return darr;
     }
 
-    /**
-     * @brief Create an array of a specific size with default-initialized elements.
-     *
-     * @param size Initial number of elements.
-     * @return A new DynamicArray instance of the requested size.
-     * @pre T must be nothrow default constructible.
-     */
-    [[nodiscard]] static DynamicArray with_size(USize size) noexcept {
-        return with_size(size, get_ambient_ctx().alloc);
+    [[nodiscard]] static DynamicArray with_capacity(USize capacity) noexcept {
+        return with_capacity(get_ambient_ctx().alloc, capacity);
     }
 
     /**
      * @brief Create an array of a specific size using a specific allocator.
      *
-     * @param size Initial number of elements.
      * @param alloc Pointer to the allocator to use.
+     * @param size Initial number of elements.
      * @return A new DynamicArray instance of the requested size.
      * @pre alloc must be non-null.
      * @pre T must be nothrow default constructible.
      */
-    [[nodiscard]] static DynamicArray with_size(USize size, Alloc *alloc) noexcept {
+    [[nodiscard]] static DynamicArray with_size(Alloc *alloc, USize size) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
         DynamicArray arr(alloc);
         arr.do_reserve(size);
 
@@ -229,37 +219,90 @@ public:
     }
 
     /**
-     * @brief Create an array filled with a specific value.
+     * @brief Create an array of a specific size with default-initialized elements.
      *
-     * @param size Number of elements.
-     * @param fill Value to copy into every element.
-     * @return A new DynamicArray instance filled with fill.
-     * @pre T must be nothrow copy constructible.
+     * @param size Initial number of elements.
+     * @return A new DynamicArray instance of the requested size.
+     * @pre T must be nothrow default constructible.
      */
-    [[nodiscard]] static DynamicArray filled_with(USize size, const T &fill) noexcept {
-        return filled_with(size, fill, get_ambient_ctx().alloc);
+    [[nodiscard]] static DynamicArray with_size(USize size) noexcept {
+        return with_size(get_ambient_ctx().alloc, size);
     }
 
     /**
      * @brief Create an array filled with a specific value using a specific allocator.
      *
      * @param size Number of elements.
-     * @param fill Value to copy into every element.
+     * @param value Value to copy into every element.
+     * @return A new DynamicArray instance filled with fill.
+     * @pre T must be nothrow copy constructible.
+     */
+    [[nodiscard]] static DynamicArray from_repeated(USize size, const T &value) noexcept {
+        return from_repeated(get_ambient_ctx().alloc, size, value);
+    }
+
+    /**
+     * @brief Create an array filled with a specific value using a specific allocator.
+     *
      * @param alloc Pointer to the allocator to use.
+     * @param size Number of elements.
+     * @param value Value to copy into every element.
      * @return A new DynamicArray instance filled with fill.
      * @pre alloc must be non-null.
      * @pre T must be nothrow copy constructible.
      */
-    [[nodiscard]] static DynamicArray filled_with(USize size, const T &fill,
-                                                  Alloc *alloc) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_copy_constructible_v<T>),
-                         "T must be nothrow copy constructible");
+    [[nodiscard]] static DynamicArray from_repeated(Alloc *alloc, USize size,
+                                                    const T &value) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
 
         DynamicArray arr(alloc);
         arr.do_reserve(size);
 
         for (USize i = 0; i < size; ++i) {
-            std::construct_at(arr.m_data + i, fill);
+            std::construct_at(arr.m_data + i, value);
+        }
+
+        arr.m_size = size;
+
+        return arr;
+    }
+
+    /**
+     * @brief Create an array from a slice using the ambient allocator.
+     *
+     * @param slice Source slice.
+     * @return A new DynamicArray instance containing the slice elements.
+     * @pre T must be nothrow copy constructible.
+     */
+    [[nodiscard]] static DynamicArray
+    from_slice(Slice<const std::remove_const_t<T>> slice) noexcept {
+        return from_slice(get_ambient_ctx().alloc, slice);
+    }
+
+    /**
+     * @brief Create an array from a slice using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator to use.
+     * @param slice Source slice.
+     * @return A new DynamicArray instance containing the slice elements.
+     * @pre alloc must be non-null.
+     * @pre T must be nothrow copy constructible.
+     */
+    [[nodiscard]] static DynamicArray
+    from_slice(Alloc *alloc, Slice<const std::remove_const_t<T>> slice) noexcept {
+        FR_ASSERT(alloc, "allocator must be non-null");
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
+
+        DynamicArray arr(alloc);
+        USize size = slice.size();
+        if (size == 0) {
+            return arr;
+        }
+
+        arr.do_reserve(size);
+
+        for (USize i = 0; i < size; ++i) {
+            std::construct_at(arr.m_data + i, slice[i]);
         }
 
         arr.m_size = size;
@@ -467,7 +510,7 @@ public:
     Slice<T> slice_mut(USize from, USize to) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice(from, to);
+        return slice_mut().slice_mut(from, to);
     }
 
     Slice<const T> slice(USize, USize) const && = delete;
@@ -495,7 +538,7 @@ public:
     Slice<T> slice_mut_from(USize from) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice_from(from);
+        return slice_mut().slice_mut_from(from);
     }
 
     Slice<const T> slice_from(USize) const && = delete;
@@ -523,7 +566,7 @@ public:
     Slice<T> slice_mut_to(USize to) & noexcept
         requires(!std::is_const_v<T>)
     {
-        return slice_mut().slice_to(to);
+        return slice_mut().slice_mut_to(to);
     }
 
     Slice<const T> slice_to(USize) const && = delete;
@@ -574,7 +617,7 @@ public:
      *
      * @return Pointer to the allocator.
      */
-    Alloc *allocator() const noexcept {
+    const Alloc *alloc() const noexcept {
         return m_alloc;
     }
 
@@ -620,6 +663,7 @@ public:
      * @note May trigger a reallocation if the array is full.
      */
     void push_back(const T &value) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         emplace_back(value);
     }
 
@@ -645,8 +689,8 @@ public:
      */
     template <typename... Args>
     T &emplace_back(Args &&...args) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
-                         "T must be nothrow constructible");
+        static_assert(std::is_nothrow_constructible_v<T, Args...>,
+                      "T must be nothrow constructible from Args");
 
         do_grow_if_full();
         T *ptr = std::construct_at(m_data + m_size, std::forward<Args>(args)...);
@@ -710,8 +754,7 @@ public:
      * @note All elements from idx onwards are shifted to the right. O(n).
      */
     void insert(USize idx, const T &value) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T>,
-                         "T must be nothrow copy constructible");
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         emplace(idx, value);
     }
 
@@ -725,8 +768,6 @@ public:
      * @note All elements from idx onwards are shifted to the right. O(n).
      */
     void insert(USize idx, T &&value) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_move_constructible_v<T>,
-                         "T must be nothrow move constructible");
         emplace(idx, std::move(value));
     }
 
@@ -742,8 +783,8 @@ public:
      */
     template <typename... Args>
     void emplace(USize idx, Args &&...args) noexcept {
-        FR_STATIC_ASSERT((std::is_nothrow_constructible_v<T, Args...>),
-                         "T must be nothrow constructible");
+        static_assert(std::is_nothrow_constructible_v<T, Args...>,
+                      "T must be nothrow constructible from Args");
         FR_ASSERT(idx <= m_size, "index out of bounds");
 
         do_grow_if_full();
@@ -771,7 +812,6 @@ public:
      * @note Trailing elements are destroyed, but capacity remains unchanged.
      */
     void shrink(USize new_size) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_destructible_v<T>, "T must be nothrow destructible");
         FR_ASSERT(new_size <= m_size, "shrink size overflow");
 
         mem::destroy_range(m_data + new_size, m_size - new_size);
@@ -786,6 +826,7 @@ public:
      * @note If new_size > size(), new elements are default-constructed. Reallocates if needed.
      */
     void grow_default(USize new_size) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
         do_grow_if_needed(new_size);
         mem::default_init_range(m_data + m_size, new_size - m_size);
 
@@ -801,6 +842,7 @@ public:
      * @note If new_size > size(), new elements are copy-constructed from fill.
      */
     void grow_with(USize new_size, const T &fill) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
         do_grow_if_needed(new_size);
 
         for (USize i = m_size; i < new_size; ++i) {
@@ -810,34 +852,37 @@ public:
         m_size = new_size;
     }
 
-        template <typename A>
-        void shape(A &archive) {
-            if constexpr (A::kind == ArchiveKind::Serializer) {
-                USize sz = m_size;
-                archive.prop("@size", sz);
-                USize cap = m_capacity;
-                archive.prop("@capacity", cap);
-            } else {
-                USize sz = 0;
-                archive.prop("@size", sz);
-                if (sz != m_size) {
-                    this->clear();
-                    this->grow_default(sz);
-                }
-    
-                USize cap = 0;
-                archive.prop("@capacity", cap);
-                if (cap > m_capacity) {
-                    this->reserve(cap);
-                }
+    template <typename A>
+    void shape(A &archive) {
+        if constexpr (A::kind == ArchiveKind::Serializer) {
+            USize sz = m_size;
+            archive.prop("@size", sz);
+
+            USize cap = m_capacity;
+            archive.prop("@capacity", cap);
+        } else {
+            USize sz = 0;
+            archive.prop("@size", sz);
+
+            if (sz != m_size) {
+                this->clear();
+                this->grow_default(sz);
             }
-    
-            archive.list("@items", [&](A &list_archive) {
-                for (T &item : *this) {
-                    list_archive.prop("", item);
-                }
-            });
+
+            USize cap = 0;
+            archive.prop("@capacity", cap);
+
+            if (cap > m_capacity) {
+                this->reserve(cap);
+            }
         }
+
+        archive.list("@items", [&](A &list_archive) {
+            for (T &item : *this) {
+                list_archive.prop("", item);
+            }
+        });
+    }
 
 private:
     // ---------------------------------------------------------
@@ -943,8 +988,6 @@ private:
      * @param other Source array.
      */
     void do_copy_from(const DynamicArray &other) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T>, "T must be nothrow copyable");
-
         m_alloc = other.m_alloc;
         if (other.m_size == 0)
             return;
@@ -961,10 +1004,6 @@ private:
      * @param other Source array.
      */
     void do_assign_copy(const DynamicArray &other) noexcept {
-        FR_STATIC_ASSERT(std::is_nothrow_copy_constructible_v<T> &&
-                             std::is_nothrow_copy_assignable_v<T>,
-                         "T must be nothrow copyable");
-
         const USize overlap = std::min(m_size, other.m_size);
 
         if (overlap > 0) {
@@ -998,5 +1037,4 @@ private:
         other.m_alloc = get_ambient_ctx().alloc;
     }
 };
-
 } // namespace fr

@@ -64,15 +64,15 @@ TEST_CASE("HashSet - Basic Operations") {
 TEST_CASE("HashSet - String Keys") {
     HashSet<String> set;
 
-    set.insert(String("Hello"));
-    set.insert(String("World"));
+    set.insert(String::from_view("Hello"));
+    set.insert(String::from_view("World"));
 
-    CHECK(set.contains("Hello"));
-    CHECK(set.contains("World"));
-    CHECK(!set.contains("Farfocel"));
+    CHECK(set.contains(String::from_view("Hello")));
+    CHECK(set.contains(String::from_view("World")));
+    CHECK(!set.contains(String::from_view("Farfocel")));
 
-    set.remove("Hello");
-    CHECK(!set.contains("Hello"));
+    set.remove(String::from_view("Hello"));
+    CHECK(!set.contains(String::from_view("Hello")));
     CHECK(set.load() == 1);
 }
 

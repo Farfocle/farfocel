@@ -4,9 +4,7 @@
  *
  * @brief Simple and lightweight two-element container.
  *
- * @details Pair exists because fr::Tuple couses a lot of compile time computation resulting in slow
- * compilation times. Pair is much simpler, thus faster to compile, it only supports 2 type slots.
- * This implementaions supports structured bindings and all that nice syntax sugar.
+ * Pair provides a lean way to hold two types with full tuple protocol support.
  */
 
 #pragma once
@@ -17,6 +15,7 @@
 #include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
+#include "fr/core/typetraits.hpp"
 
 namespace fr {
 
@@ -25,9 +24,14 @@ namespace fr {
  *
  * This is a zero-cost abstraction for holding a duo of types. It supports the
  * full tuple protocol, meaning you can use structured bindings like `auto [a, b] = my_pair;`.
+ *
+ * @note Foundational requirements for First and Second are enforced via IsNothrowBase.
  */
 template <typename First, typename Second>
 class Pair {
+    static_assert(IsNothrowBase<First>, "First must satisfy foundational nothrow requirements");
+    static_assert(IsNothrowBase<Second>, "Second must satisfy foundational nothrow requirements");
+
 public:
     /// @brief Default constructor. Value-initializes members to keep things sane.
     constexpr Pair() noexcept

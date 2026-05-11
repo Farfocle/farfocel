@@ -13,8 +13,10 @@
 #pragma once
 
 #include <algorithm>
+#include <limits>
 #include <ostream>
 
+#include "fr/core/ctx.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/string_base.hpp"
@@ -25,7 +27,7 @@ namespace fr {
 
 class String : public impl::StringBase {
 public:
-    static constexpr USize npos = static_cast<USize>(-1);
+    static constexpr USize npos = std::numeric_limits<USize>::max();
 
     inline static USize growth_multiplier_percent = 200;
 
@@ -35,57 +37,43 @@ public:
     /// CONSTRUCTORS, ASSIGNERS, DESTRUCTORS
     ////////
 
-    String()
-        : impl::StringBase() {
-    }
-
-    /**
-     * @brief Constructor from a StringView
-     * @param str View of a string to copy
-     */
-    String(StringView str)
-        : impl::StringBase(str.size()) {
-        append(str);
-    }
+    String() noexcept = default;
 
     /**
      * @brief Constructor from an array of characters
      * @param str Pointer to the character array
      * @details It looks over characters until it finds null-terminator
      */
-    String(const char *str)
-        : impl::StringBase(str ? StringView(str).size() : 0) {
+    String(const char *str) noexcept
+        : impl::StringBase(get_ambient_ctx().alloc, str ? StringView(str).size() : 0) {
         if (str) {
             append(StringView(str));
         }
     }
 
     /**
-     * @brief Constructor from an array of characters of known length
-     * @param str Pointer to the character array
-     * @param count The amount of characters to copy
+     * @brief Constructor with allocator
+     * @param alloc Pointer to the allocator.
      */
-    String(const char *str, USize count)
-        : impl::StringBase(count) {
-        if (str && count > 0)
-            append(StringView(str, count));
+    explicit String(Alloc *alloc) noexcept
+        : impl::StringBase(alloc) {
+        FR_ASSERT(alloc, "allocator must be non-null");
     }
 
     /**
-     * @brief Constructor for a repeated character string
-     * @param count Count of repeated characters
-     * @param c Character to repeat
+     * @brief Constructor from a StringView
+     * @param str View of a string to copy
      */
-    String(USize count, char c)
-        : impl::StringBase(count) {
-        append(count, c);
+    String(StringView str) noexcept
+        : impl::StringBase(get_ambient_ctx().alloc, str.size()) {
+        append(str);
     }
 
     /**
      * @brief Copy constructor
      * @param other String to copy
      */
-    String(const String &other)
+    String(const String &other) noexcept
         : impl::StringBase(other) {
     }
 
@@ -95,6 +83,109 @@ public:
      */
     String(String &&other) noexcept
         : impl::StringBase(std::move(other)) {
+    }
+
+    /**
+     * @brief Create an empty string using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator to use.
+     * @return A new empty String instance.
+     */
+    [[nodiscard]] static String with_alloc(Alloc *alloc) noexcept {
+        return String(alloc);
+    }
+
+    /**
+     * @brief Create an empty string with an initial reserved capacity.
+     *
+     * @param alloc Pointer to the allocator to use.
+     * @param capacity The number of characters to reserve space for.
+     * @return A new empty String instance.
+     */
+    [[nodiscard]] static String with_capacity(Alloc *alloc, USize capacity) noexcept {
+        String str(alloc);
+        str.reserve(capacity);
+        return str;
+    }
+
+    [[nodiscard]] static String with_capacity(USize capacity) noexcept {
+        return with_capacity(get_ambient_ctx().alloc, capacity);
+    }
+
+    /**
+     * @brief Create a string from a StringView using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator to use.
+     * @param str View of a string to copy.
+     * @return A new String instance.
+     */
+    [[nodiscard]] static String from_view(Alloc *alloc, StringView str) noexcept {
+        String s(alloc);
+        s.append(str);
+        return s;
+    }
+
+    [[nodiscard]] static String from_view(StringView str) noexcept {
+        return from_view(get_ambient_ctx().alloc, str);
+    }
+
+    /**
+     * @brief Create a string from an array of characters using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator to use.
+     * @param str Pointer to the character array.
+     * @return A new String instance.
+     */
+    [[nodiscard]] static String from_chars(Alloc *alloc, const char *str) noexcept {
+        if (!str) {
+            return String(alloc);
+        }
+
+        return from_view(alloc, StringView(str));
+    }
+
+    [[nodiscard]] static String from_chars(const char *str) noexcept {
+        return from_chars(get_ambient_ctx().alloc, str);
+    }
+
+    /**
+     * @brief Create a string from an array of characters of known length using a specific
+     * allocator.
+     *
+     * @param alloc Pointer to the allocator to use.
+     * @param str Pointer to the character array.
+     * @param count The amount of characters to copy.
+     * @return A new String instance.
+     */
+    [[nodiscard]] static String from_sized_chars(Alloc *alloc, const char *str,
+                                                 USize count) noexcept {
+        if (!str || count == 0) {
+            return String(alloc);
+        }
+
+        return from_view(alloc, StringView(str, count));
+    }
+
+    [[nodiscard]] static String from_sized_chars(const char *str, USize count) noexcept {
+        return from_sized_chars(get_ambient_ctx().alloc, str, count);
+    }
+
+    /**
+     * @brief Create a string of repeated characters using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator to use.
+     * @param count Count of repeated characters.
+     * @param c Character to repeat.
+     * @return A new String instance.
+     */
+    [[nodiscard]] static String from_repeated(Alloc *alloc, USize count, char c) noexcept {
+        String s(alloc);
+        s.append_repeated(count, c);
+        return s;
+    }
+
+    [[nodiscard]] static String from_repeated(USize count, char c) noexcept {
+        return from_repeated(get_ambient_ctx().alloc, count, c);
     }
 
     /**
@@ -144,7 +235,7 @@ public:
      */
     String &assign(USize count, char c) {
         clear();
-        append(count, c);
+        append_repeated(count, c);
         return *this;
     }
 
@@ -272,25 +363,45 @@ public:
     //////
 
     /**
-     * @brief Forcefully resizes the string
-     * @param count New total string length
-     * @param c Character to be used in place of newly allocated space
-     * @details If count < string's length then it gets cut.
-     * If count > string's length then new memory is allocated and populated with the specified
-     * character.
+     * @brief Shrink the string to a new size.
+     *
+     * @param new_size The new size of the string.
+     * @pre new_size <= size().
      */
-    void resize(USize count, char c = '\0') {
-        USize current_size = size();
+    void shrink(USize new_size) noexcept {
+        FR_ASSERT(new_size <= size(), "shrink size overflow");
+        set_size(new_size);
+    }
 
-        if (current_size > count) {
-            set_size(count);
-            return;
-        } else if (current_size == count) {
+    /**
+     * @brief Grow the string to a new size by default-initializing new characters.
+     *
+     * @param new_size The target size.
+     */
+    void grow_default(USize new_size) noexcept {
+        USize current_size = size();
+        if (new_size <= current_size) {
             return;
         }
 
-        std::memset(prepare_append(count - current_size), c, count - current_size);
-        set_size(count);
+        std::memset(prepare_append(new_size - current_size), '\0', new_size - current_size);
+        set_size(new_size);
+    }
+
+    /**
+     * @brief Grow the string to a new size by filling new characters with c.
+     *
+     * @param new_size The target size.
+     * @param c The character to copy into new elements.
+     */
+    void grow_with(USize new_size, char c) noexcept {
+        USize current_size = size();
+        if (new_size <= current_size) {
+            return;
+        }
+
+        std::memset(prepare_append(new_size - current_size), c, new_size - current_size);
+        set_size(new_size);
     }
 
     /**
@@ -324,6 +435,40 @@ public:
     }
 
     /**
+     * @brief Remove a character at idx by swapping it with the last character.
+     *
+     * @param idx Index of the character to remove.
+     * @pre idx < size().
+     */
+    void remove_swap(USize idx) noexcept {
+        FR_ASSERT(idx < size(), "index out of bounds");
+        USize current_size = size();
+
+        if (idx != current_size - 1) {
+            data()[idx] = data()[current_size - 1];
+        }
+
+        pop_back();
+    }
+
+    /**
+     * @brief Remove a character at idx while preserving the order of remaining characters.
+     *
+     * @param idx Index of the character to remove.
+     * @pre idx < size().
+     */
+    void remove_shift(USize idx) noexcept {
+        FR_ASSERT(idx < size(), "index out of bounds");
+        USize current_size = size();
+
+        if (idx < current_size - 1) {
+            fr::mem::shift_range_left(data() + idx, current_size - idx - 1, 1);
+        }
+
+        set_size(current_size - 1);
+    }
+
+    /**
      * @brief Adds a string view to the current string
      * @param str The view to be added
      */
@@ -348,7 +493,7 @@ public:
      * @param count The amount of characters to be added
      * @param c The character to be added
      */
-    String &append(USize count, char c) {
+    String &append_repeated(USize count, char c) {
         if (count == 0)
             return *this;
 
@@ -655,27 +800,6 @@ public:
         return npos;
     }
 
-    ////////
-    /// OTHER & QOL
-    ////////
-
-    /**
-     * @brief Returns a newly constructed string object with its value initialized to a substring
-     * @param pos Position of the first character to include
-     * @param count Amount of characters to include
-     * @return The new string object
-     */
-    String substr(USize pos, USize count = npos) const {
-        USize current_size = size();
-        if (pos >= current_size)
-            return String();
-
-        if (count == npos || pos + count > current_size)
-            count = current_size - pos;
-
-        return String(data() + pos, count);
-    }
-
     /**
      * @brief Lexicographically compares this string to another
      * @param str The view to compare with
@@ -791,6 +915,40 @@ public:
      */
     StringView view() const noexcept {
         return StringView(data(), size());
+    }
+
+    /**
+     * @brief Returns a substring view.
+     *
+     * @param from Start index (inclusive).
+     * @param to End index (inclusive).
+     * @return A StringView covering the range [from, to].
+     * @pre from <= to < size().
+     */
+    StringView view(USize from, USize to) const noexcept {
+        return view().view(from, to);
+    }
+
+    /**
+     * @brief Returns a substring view starting from the given position.
+     *
+     * @param from Start position.
+     * @return A StringView covering [from, size()).
+     * @pre from < size() or (from == 0 && size() == 0).
+     */
+    StringView view_from(USize from) const noexcept {
+        return view().view_from(from);
+    }
+
+    /**
+     * @brief Returns a substring view up to the given position.
+     *
+     * @param to End position.
+     * @return A StringView covering [0, to].
+     * @pre to < size().
+     */
+    StringView view_to(USize to) const noexcept {
+        return view().view_to(to);
     }
 
     template <typename A>

@@ -191,7 +191,7 @@ TEST_CASE("Serialization - Hash and Hash32") {
 }
 
 TEST_CASE("Deserialization - Basic Types") {
-    String json = "{\"b\":true,\"u\":42,\"s\":-10,\"f\":3.14,\"str\":\"hello\"}";
+    String json = String::from_view("{\"b\":true,\"u\":42,\"s\":-10,\"f\":3.14,\"str\":\"hello\"}");
     JsonDeserializer reader(json.view());
 
     bool b = false;
@@ -217,7 +217,7 @@ TEST_CASE("Deserialization - Complex Structure") {
     Data original;
     original.arr = {10, 20};
     original.set.insert(30);
-    original.map.insert(1, "one");
+    original.map.insert(1, String("one"));
     original.opt_some = 42;
     original.opt_none = none();
     original.ptr = make_unique<S32>(100);

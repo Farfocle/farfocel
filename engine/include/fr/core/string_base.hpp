@@ -51,10 +51,19 @@ public:
     /**
      * @brief Default constructor
      *
-     * @param alloc Pointer to the allocator.
      * @note This sets the type to short string
      */
-    explicit StringBase(fr::Alloc *alloc = fr::get_ambient_ctx().alloc) noexcept
+    StringBase() noexcept {
+        m_data.short_string.text[0] = '\0';
+        m_data.short_string.space_left = max_short_string_size;
+    }
+
+    /**
+     * @brief Constructor with allocator
+     *
+     * @param alloc Pointer to the allocator.
+     */
+    explicit StringBase(fr::Alloc *alloc) noexcept
         : m_alloc(alloc) {
         m_data.short_string.text[0] = '\0';
         m_data.short_string.space_left = max_short_string_size;
@@ -63,10 +72,10 @@ public:
     /**
      * @brief Preallocating constructor
      *
-     * @param capacity_to_allocate Characters to preallocate.
      * @param alloc Pointer to the allocator.
+     * @param capacity_to_allocate Characters to preallocate.
      */
-    explicit StringBase(USize capacity_to_allocate, fr::Alloc *alloc = fr::get_ambient_ctx().alloc)
+    StringBase(fr::Alloc *alloc, USize capacity_to_allocate)
         : m_alloc(alloc) {
         // Short string
         if (capacity_to_allocate <= 23) {
@@ -89,13 +98,12 @@ public:
     /**
      * @brief Acquiring constructor
      *
+     * @param alloc The allocator used.
      * @param ptr Allocated string memory.
      * @param size Length without null-terminator.
      * @param allocated_capacity Memory size with null-terminator.
-     * @param alloc The allocator used.
      */
-    StringBase(char *ptr, USize size, USize allocated_capacity, acquire_memory_t,
-               fr::Alloc *alloc = fr::get_ambient_ctx().alloc)
+    StringBase(fr::Alloc *alloc, char *ptr, USize size, USize allocated_capacity, acquire_memory_t)
         : m_alloc(alloc) {
         FR_ASSERT(size > 0, "size must be non-zero");
         FR_ASSERT(allocated_capacity >= size + 1, "capacity too small");
@@ -206,6 +214,13 @@ public:
             (static_cast<std::ptrdiff_t>(maybe_small_size) >= 0) ? maybe_small_size : final_size;
 
         return final_size;
+    }
+
+    /**
+     * @brief Returns the allocator used by the string.
+     */
+    const Alloc *alloc() const noexcept {
+        return m_alloc;
     }
 
     /**
@@ -414,7 +429,7 @@ private:
     static const USize extract_capacity_mask =
         ~(USize(extract_flag_mask) << (8 * (sizeof(USize) - 1)));
 
-    fr::Alloc *m_alloc;
+    fr::Alloc *m_alloc{fr::get_ambient_ctx().alloc};
     union {
         struct {
             char text[max_short_string_size];

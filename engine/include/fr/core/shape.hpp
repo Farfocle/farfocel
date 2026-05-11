@@ -20,10 +20,15 @@ enum class ArchiveKind : U8 { Serializer, Deserializer };
 template <typename T>
 concept IsArchive =
     requires(T &archive, U32 &value) {
+        { T::Options } -> std::same_as<typename T::Options>;
         { T::kind } -> std::same_as<ArchiveKind>;
         { archive.prop("@name", value) } -> std::same_as<void>;
-        { archive.list("@items", [](T &) {}) } -> std::same_as<void>;
-        { archive.dict("@items", [](T &) {}) } -> std::same_as<void>;
+        {
+            archive.list("@items", [](T &) {})
+        } -> std::same_as<void>;
+        {
+            archive.dict("@items", [](T &) {})
+        } -> std::same_as<void>;
         { archive.current_list_size() } -> std::same_as<USize>;
     } && !std::is_copy_constructible_v<T> && !std::is_copy_assignable_v<T> &&
     !std::is_move_constructible_v<T> && !std::is_move_assignable_v<T>;
@@ -54,7 +59,7 @@ consteval StringView get_typename() {
         return "@unknown";
     }
     USize start = start_at + 4;
-    return name.substr(start, end - start);
+    return name.view(start, end - 1);
 #elif defined(_MSC_VER)
     StringView name = __FUNCSIG__;
     USize start_at = name.find("get_typename<");
@@ -63,7 +68,7 @@ consteval StringView get_typename() {
         return "@unknown";
     }
     USize start = start_at + StringView("get_typename<").size();
-    return name.substr(start, end - start);
+    return name.view(start, end - 1);
 #else
     return "@unknown";
 #endif

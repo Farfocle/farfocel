@@ -3,7 +3,8 @@
  * @author Tfoedy
  *
  * @brief Smart unique pointer implementation with custom allocator support.
- * * UniquePtr ensures that dynamically allocated memory and objects are properly
+ *
+ * UniquePtr ensures that dynamically allocated memory and objects are properly
  * destroyed and deallocated when the pointer goes out of scope.
  */
 
@@ -18,6 +19,7 @@
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
+#include "fr/core/typetraits.hpp"
 
 namespace fr {
 
@@ -46,8 +48,7 @@ template <typename T>
 
 template <typename T>
     requires(!std::is_array_v<T>)
-[[nodiscard]] inline UniquePtr<T> adopt_unique(T *raw_ptr,
-                                               Alloc *alloc = get_ambient_ctx().alloc);
+[[nodiscard]] inline UniquePtr<T> adopt_unique(T *raw_ptr, Alloc *alloc = get_ambient_ctx().alloc);
 
 template <typename T>
     requires(std::is_array_v<T> && std::extent_v<T> == 0)
@@ -61,9 +62,13 @@ template <typename T>
 /**
  * @brief Smart pointer managing a single allocated object.
  * @tparam T Type of the managed object.
+ *
+ * @note Foundational requirements for T are enforced via IsNothrowBase.
  */
 template <typename T>
 class UniquePtr {
+    static_assert(IsNothrowBase<T>, "T must satisfy foundational nothrow requirements");
+
 public:
     /// @brief Creates an empty UniquePtr.
     UniquePtr() = default;
@@ -105,7 +110,7 @@ public:
 
     /**
      * @brief Dereference operator.
-     * 
+     *
      * @return Pointer to the managed object.
      */
     T *operator->() const noexcept {
@@ -115,7 +120,7 @@ public:
 
     /**
      * @brief Dereference operator.
-     * 
+     *
      * @return Reference to the managed object.
      */
     T &operator*() const noexcept {
@@ -125,7 +130,7 @@ public:
 
     /**
      * @brief Boolean conversion.
-     * 
+     *
      * @return True if managing an object.
      */
     explicit operator bool() const noexcept {
@@ -134,7 +139,7 @@ public:
 
     /**
      * @brief Logical NOT operator.
-     * 
+     *
      * @return True if empty.
      */
     bool operator!() const noexcept {
@@ -143,7 +148,7 @@ public:
 
     /**
      * @brief Equality comparison with nullptr.
-     * 
+     *
      * @return True if empty.
      */
     bool operator==(std::nullptr_t) const noexcept {
@@ -152,7 +157,7 @@ public:
 
     /**
      * @brief Gets the underlying raw pointer without transferring ownership.
-     * 
+     *
      * @return Raw pointer.
      */
     T *borrow() const noexcept {
@@ -161,7 +166,7 @@ public:
 
     /**
      * @brief Releases ownership of the managed object.
-     * 
+     *
      * @return Raw pointer. Caller is now responsible for memory.
      */
     [[nodiscard]] T *leak() noexcept {
@@ -185,7 +190,7 @@ public:
 
     /**
      * @brief Swaps contents with another UniquePtr.
-     * 
+     *
      * @param other Pointer to swap with.
      */
     void swap(UniquePtr &other) noexcept {
@@ -195,10 +200,10 @@ public:
 
     /**
      * @brief Returns the allocator used.
-     * 
+     *
      * @return Pointer to allocator.
      */
-    Alloc *get_allocator() const noexcept {
+    const Alloc *alloc() const noexcept {
         return m_alloc;
     }
 
@@ -250,6 +255,9 @@ private:
  */
 template <typename T>
 class UniquePtr<T[]> {
+    static_assert(IsNothrowBase<std::remove_extent_t<T>>,
+                  "T must satisfy foundational nothrow requirements");
+
 public:
     UniquePtr() = default;
 
@@ -288,13 +296,13 @@ public:
 
     /**
      * @brief Array element accessor.
-     * 
+     *
      * @param index Element index.
      * @return Reference to the element.
      * @pre m_ptr != nullptr.
      * @pre index < size.
      */
-    T &operator[](USize index) const noexcept {
+    std::remove_extent_t<T> &operator[](USize index) const noexcept {
         FR_ASSERT(m_ptr != nullptr, "dereference null pointer");
         FR_ASSERT(index < m_size, "index out of bounds");
         return m_ptr[index];
@@ -302,7 +310,7 @@ public:
 
     /**
      * @brief Boolean conversion.
-     * 
+     *
      * @return True if managing an array.
      */
     explicit operator bool() const noexcept {
@@ -311,7 +319,7 @@ public:
 
     /**
      * @brief Logical NOT operator.
-     * 
+     *
      * @return True if empty.
      */
     bool operator!() const noexcept {
@@ -320,7 +328,7 @@ public:
 
     /**
      * @brief Equality comparison with nullptr.
-     * 
+     *
      * @return True if empty.
      */
     bool operator==(std::nullptr_t) const noexcept {
@@ -329,16 +337,16 @@ public:
 
     /**
      * @brief Returns the underlying pointer.
-     * 
+     *
      * @return Raw pointer.
      */
-    T *borrow() const noexcept {
+    std::remove_extent_t<T> *borrow() const noexcept {
         return m_ptr;
     }
 
     /**
      * @brief Returns the array size.
-     * 
+     *
      * @return Number of elements.
      */
     USize get_size() const noexcept {
@@ -347,7 +355,7 @@ public:
 
     /**
      * @brief Returns the allocator used.
-     * 
+     *
      * @return Pointer to allocator.
      */
     Alloc *get_allocator() const noexcept {
@@ -375,11 +383,11 @@ public:
 
     /**
      * @brief Releases ownership of the managed array.
-     * 
+     *
      * @return Raw pointer.
      */
-    [[nodiscard]] T *leak() noexcept {
-        T *temp = m_ptr;
+    [[nodiscard]] std::remove_extent_t<T> *leak() noexcept {
+        std::remove_extent_t<T> *temp = m_ptr;
         m_ptr = nullptr;
         return temp;
     }
@@ -392,7 +400,8 @@ public:
         if (m_ptr) {
             fr::mem::destroy_range(m_ptr, m_size);
             if (m_alloc) {
-                m_alloc->deallocate(m_ptr, m_size * sizeof(T), alignof(T));
+                m_alloc->deallocate(m_ptr, m_size * sizeof(std::remove_extent_t<T>),
+                                    alignof(std::remove_extent_t<T>));
             }
             m_ptr = nullptr;
             m_size = 0;
@@ -401,7 +410,7 @@ public:
 
     /**
      * @brief Swaps contents with another UniquePtr.
-     * 
+     *
      * @param other Pointer to swap with.
      */
     void swap(UniquePtr &other) noexcept {
@@ -411,11 +420,11 @@ public:
     }
 
 private:
-    T *m_ptr = nullptr;
+    std::remove_extent_t<T> *m_ptr = nullptr;
     Alloc *m_alloc = nullptr;
     USize m_size = 0;
 
-    explicit UniquePtr(T *ptr, Alloc *alloc, USize size)
+    explicit UniquePtr(std::remove_extent_t<T> *ptr, Alloc *alloc, USize size)
         : m_ptr(ptr),
           m_alloc(alloc),
           m_size(size) {
@@ -436,7 +445,7 @@ private:
 
 /**
  * @brief Constructs an object using a specific allocator.
- * 
+ *
  * @tparam T Type to construct.
  * @param alloc Allocator to use.
  * @param args Arguments for the constructor.

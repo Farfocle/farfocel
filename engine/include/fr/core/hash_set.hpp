@@ -62,10 +62,14 @@ struct HashSetDeafultEq {
  *
  * This implementation uses a flat memory layout with control bytes (Swiss Table)
  * to speed up lookups and minimize cache misses.
+ *
+ * @note Foundational requirements for Key are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
  */
 template <typename Key, typename HashFn = impl::HashSetDeafultHashFnTag,
           typename EqFn = impl::HashSetDeafultEqFnTag>
 class HashSet {
+    FR_STATIC_ASSERT_NOTHROW_BASE(Key);
+
     using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl::HashSetDeafultHashFnTag>,
                                             impl::HashSetDefaultHash<Key>, HashFn>;
 
@@ -192,15 +196,19 @@ public:
      */
     explicit HashSet(Alloc *alloc) noexcept
         : m_alloc(alloc) {
+        FR_ASSERT(alloc, "allocator must be non-null");
     }
 
     /**
      * @brief Copy-constructs a new HashSet.
      * @param other The HashSet to copy from.
      * @note Performs a deep copy of all elements.
+     * @pre Key must be nothrow copy constructible.
      */
     HashSet(const HashSet &other) noexcept
         : m_alloc(other.m_alloc) {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
+
         if (other.m_capacity == 0) {
             return;
         }
@@ -231,8 +239,11 @@ public:
      * @brief Copy-assigns from another HashSet.
      * @param other The HashSet to copy from.
      * @return Reference to this set.
+     * @pre Key must be nothrow copy constructible.
      */
     HashSet &operator=(const HashSet &other) noexcept {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
+
         if (this == &other) {
             return *this;
         }
@@ -291,6 +302,31 @@ public:
     }
 
     /**
+     * @brief Creates an empty HashSet with a specific capacity using a specific allocator.
+     *
+     * @param alloc Pointer to the allocator.
+     * @param capacity Minimum capacity.
+     * @return A new empty HashSet instance.
+     */
+    static HashSet with_capacity(Alloc *alloc, USize capacity) noexcept {
+        HashSet set(alloc);
+        if (capacity > 0) {
+            set.do_grow(math::round_up_pow2(capacity));
+        }
+        return set;
+    }
+
+    /**
+     * @brief Creates an empty HashSet with a specific capacity.
+     *
+     * @param capacity Minimum capacity.
+     * @return A new empty HashSet instance.
+     */
+    static HashSet with_capacity(USize capacity) noexcept {
+        return with_capacity(get_ambient_ctx().alloc, capacity);
+    }
+
+    /**
      * @brief Returns the number of elements currently in the set.
      */
     USize load() const noexcept {
@@ -302,6 +338,13 @@ public:
      */
     USize capacity() const noexcept {
         return m_capacity;
+    }
+
+    /**
+     * @brief Returns the allocator used by the set.
+     */
+    const Alloc *alloc() const noexcept {
+        return m_alloc;
     }
 
     /**
@@ -368,8 +411,10 @@ public:
      * @param key The key to insert.
      * @return True if the key was inserted, false if it already exists.
      * @note May trigger a rehash/growth.
+     * @pre Key must be nothrow copy constructible.
      */
     bool insert(const Key &key) {
+        FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
         return do_insert(key);
     }
 
@@ -389,9 +434,12 @@ public:
      * @param args Arguments for the key constructor.
      * @return True if the key was inserted, false if it already exists.
      * @note May trigger a rehash/growth.
+     * @pre Key must be nothrow constructible from Args.
      */
     template <typename... Args>
     bool emplace(Args &&...args) {
+        static_assert(std::is_nothrow_constructible_v<Key, Args...>,
+                      "Key must be nothrow constructible from Args");
         return do_insert(Key(std::forward<Args>(args)...));
     }
 

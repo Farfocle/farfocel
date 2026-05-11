@@ -18,7 +18,7 @@ namespace fr {
 /**
  * @brief Represents a 64-bit hash value with split parts for hash table indexing.
  *
- * This implementation follows the design where the hash is split into H1 (high bits)
+ * This implementation follows the design where the hash is split into H1 (high 57 bits)
  * for indexing and H2 (low 7 bits) for control byte comparison, similar to Abseil/SwissTable.
  */
 struct Hash {

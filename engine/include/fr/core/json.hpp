@@ -99,6 +99,7 @@ public:
      */
     String consume() {
         String output{};
+
         if (m_state != State::Error && m_doc) {
             const yyjson_write_flag flags =
                 m_options.pretty ? YYJSON_WRITE_PRETTY : YYJSON_WRITE_NOFLAG;
@@ -106,7 +107,7 @@ public:
             USize len = 0;
             char *data = yyjson_mut_write(m_doc, flags, &len);
             if (data) {
-                output = String(data, len);
+                output = String::from_sized_chars(data, len);
                 std::free(data);
             } else {
                 m_state = State::Error;
@@ -483,7 +484,7 @@ public:
         } else if constexpr (std::is_same_v<RawT, String>) {
             const char *str = yyjson_get_str(val);
             if (str) {
-                value = String(str, yyjson_get_len(val));
+                value = String::from_sized_chars(str, yyjson_get_len(val));
             }
         } else if constexpr (std::is_same_v<RawT, StringView>) {
             const char *str = yyjson_get_str(val);

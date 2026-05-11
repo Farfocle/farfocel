@@ -1,7 +1,7 @@
-#include "fr/core/dynamic_array.hpp"
 #include <iostream>
 
 #include "fr/core/ctx.hpp"
+#include "fr/core/dynamic_array.hpp"
 #include "fr/core/json.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
@@ -30,7 +30,7 @@ S32 main() {
     fr::init_core_ctx();
 
     {
-        World world{.positions = {{1.0, 2.0}, {3.0, 4.0}}};
+        World world{.positions = {{2.0, 1.0}, {3.0, 7.0}}};
 
         fr::JsonSerializer serializer({.types = false, .pretty = true});
 
