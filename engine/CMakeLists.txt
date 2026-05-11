@@ -30,11 +30,18 @@ set(ENGINE_HEADERS
     "include/fr/core/tuple.hpp"
     "include/fr/core/typedefs.hpp"
     "include/fr/core/unique_ptr.hpp"
+#### platform
+    "include/fr/platform/window.hpp"
+
+#### renderer
 )
 
 set(ENGINE_SOURCES
 #### core
     "src/core/ctx.cpp"
+#### platform
+    "src/platform/sdl3/sdl3_window.cpp"
+#### renderer
 )
 
 
@@ -44,10 +51,15 @@ set_target_properties(engine PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(engine PRIVATE farfocel_compiler_options)
 target_link_libraries(engine PUBLIC yyjson)
 
+target_link_libraries(engine PUBLIC glad)
+target_link_libraries(engine PUBLIC glm::glm)
+target_link_libraries(engine PUBLIC SDL3::SDL3-static)
+
 target_include_directories(engine
     PUBLIC "include"
     PRIVATE "src"
-
+    # this is quite ugly, but i couldn't get aliases to work properly
+    PRIVATE "${CMAKE_SOURCE_DIR}/3rdparty/glad/include"
 )
 
 if(BUILD_SHARED_LIBS)

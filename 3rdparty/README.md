@@ -3,6 +3,9 @@
 ## Engine:
 
 - Doctest
+- glad
+- glm
+- SDL
 
 ## Editor:
 
