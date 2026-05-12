@@ -49,4 +49,4 @@ minimal, pragmatic and probably not very robust. Examples are placed in
 - [ ] Logger
 - [ ] Custom function wrappers and delegates - alternatives to `std::function`
 - [ ] SIMD intrinsic abstractions
-- [ ] `TypeIdx` generator
+- [x] `TypeIdx` generator

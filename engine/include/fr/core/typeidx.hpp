@@ -7,6 +7,8 @@
 
 #include "fr/core/typedefs.hpp"
 
+#pragma once
+
 namespace fr {
 using TypeIdx = U32;
 

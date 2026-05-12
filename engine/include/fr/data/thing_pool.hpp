@@ -142,6 +142,8 @@ public:
 
     /**
      * @brief Removes a thing if it is valid.
+     * @return If the thing was removed returns true, if not (the thing does not exist or is not
+     * valid) returns false.
      */
     bool remove(Thing thing) noexcept {
         if (!check(thing)) {
