@@ -13,16 +13,18 @@ set(TEST_CORE_SOURCES
     "string.cpp"
     "hash_set.cpp"
     "hash_map.cpp"
+    "inline_any.cpp"
     "serialization.cpp"
     "format.cpp"
 )
 
+
 add_executable(farfocel_test_core ${TEST_CORE_SOURCES})
 
 target_link_libraries(farfocel_test_core
-    PRIVATE 
-        engine 
-        farfocel_compiler_options 
+    PRIVATE
+        engine
+        farfocel_compiler_options
         doctest
 )
 
