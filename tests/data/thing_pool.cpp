@@ -6,7 +6,8 @@
 namespace fr {
 
 TEST_CASE("ThingPool - handout and check") {
-    ThingPool pool;
+    impl::ThingPool pool;
+
 
     Thing a = pool.handout();
     Thing b = pool.handout();
@@ -22,7 +23,8 @@ TEST_CASE("ThingPool - handout and check") {
 }
 
 TEST_CASE("ThingPool - remove and reuse slot") {
-    ThingPool pool;
+    impl::ThingPool pool;
+
 
     Thing a = pool.handout();
     Thing b = pool.handout();
@@ -40,7 +42,8 @@ TEST_CASE("ThingPool - remove and reuse slot") {
 }
 
 TEST_CASE("ThingPool - remove invalid") {
-    ThingPool pool;
+    impl::ThingPool pool;
+
 
     CHECK(!pool.remove(Thing::nil()));
 

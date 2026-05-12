@@ -10,7 +10,8 @@ struct TestPart {
 };
 
 TEST_CASE("PartPool - emplace and get") {
-    PartPool<TestPart> pool;
+    impl::PartPool<TestPart> pool;
+
 
     pool.emplace(3, TestPart{42});
     pool.emplace(7, TestPart{11});
@@ -21,7 +22,8 @@ TEST_CASE("PartPool - emplace and get") {
 }
 
 TEST_CASE("PartPool - remove swaps last") {
-    PartPool<TestPart> pool;
+    impl::PartPool<TestPart> pool;
+
 
     pool.emplace(2, TestPart{10});
     pool.emplace(5, TestPart{20});
@@ -40,7 +42,8 @@ TEST_CASE("PartPool - remove swaps last") {
 }
 
 TEST_CASE("PartPool - insert overloads") {
-    PartPool<TestPart> pool;
+    impl::PartPool<TestPart> pool;
+
 
     TestPart a{5};
     pool.insert(1, a);

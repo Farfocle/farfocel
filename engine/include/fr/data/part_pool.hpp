@@ -16,7 +16,8 @@
 #include "fr/core/macros.hpp"
 #include "fr/data/thing.hpp"
 
-namespace fr {
+namespace fr::impl {
+
 
 /**
  * @brief PartPool is responsible for storing and managing parts.
@@ -173,4 +174,5 @@ private:
     /// @brief A dense index array for looking the original thing index of the part.
     DynamicArray<ThingIdx> m_dense_indices{};
 };
-} // namespace fr
+} // namespace fr::impl
+

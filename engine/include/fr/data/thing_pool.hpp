@@ -18,8 +18,9 @@
 #include "fr/core/typedefs.hpp"
 #include "fr/data/thing.hpp"
 
-namespace fr {
+namespace fr::impl {
 class ThingPool {
+
 public:
     constexpr static USize total_capacity = 1 << 20;
     using Storage = Array<Thing, total_capacity>;
@@ -180,4 +181,4 @@ private:
     ThingIdx m_next_free_idx{0};
     USize m_next_free_count{0};
 };
-} // namespace fr
+} // namespace fr::impl
