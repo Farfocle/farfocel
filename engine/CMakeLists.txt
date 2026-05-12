@@ -34,6 +34,7 @@ set(ENGINE_HEADERS
     "include/fr/platform/window.hpp"
 
 #### renderer
+    "include/fr/renderer/rhi.hpp"
 )
 
 set(ENGINE_SOURCES
@@ -42,6 +43,7 @@ set(ENGINE_SOURCES
 #### platform
     "src/platform/sdl3/sdl3_window.cpp"
 #### renderer
+    "src/renderer/opengl/opengl_rhi.cpp"
 )
 
 
@@ -51,9 +53,9 @@ set_target_properties(engine PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(engine PRIVATE farfocel_compiler_options)
 target_link_libraries(engine PUBLIC yyjson)
 
-target_link_libraries(engine PUBLIC glad)
+target_link_libraries(engine PRIVATE glad)
 target_link_libraries(engine PUBLIC glm::glm)
-target_link_libraries(engine PUBLIC SDL3::SDL3-static)
+target_link_libraries(engine PRIVATE SDL3::SDL3-static)
 
 target_include_directories(engine
     PUBLIC "include"
