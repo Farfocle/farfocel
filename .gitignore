@@ -44,3 +44,5 @@ CMakeUserPresets.json
 *.sln
 *.vcxproj
 *.filters
+
+.direnv
