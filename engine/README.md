@@ -32,6 +32,9 @@ minimal, pragmatic and probably not very robust. Examples are placed in
 - [ ] `Result`
 - [x] `Bitmask`
 - [ ] `DynamicBitmask`
+- [ ] `Any`
+- [ ] `InlineAny`
+- [ ] `PagedDynamicArray`
 
 ### Serialization
 

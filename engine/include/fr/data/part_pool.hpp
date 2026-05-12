@@ -18,7 +18,6 @@
 
 namespace fr::impl {
 
-
 /**
  * @brief PartPool is responsible for storing and managing parts.
  *
@@ -175,4 +174,3 @@ private:
     DynamicArray<ThingIdx> m_dense_indices{};
 };
 } // namespace fr::impl
-
