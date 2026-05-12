@@ -30,6 +30,9 @@ set(ENGINE_HEADERS
     "include/fr/core/tuple.hpp"
     "include/fr/core/typedefs.hpp"
     "include/fr/core/unique_ptr.hpp"
+
+### data
+    "include/fr/data/thing.hpp"
 )
 
 set(ENGINE_SOURCES
@@ -51,7 +54,7 @@ target_include_directories(engine
 )
 
 if(BUILD_SHARED_LIBS)
-    target_compile_definitions(engine PRIVATE FR_STL_EXPORT)
+  target_compile_definitions(engine PRIVATE FR_STL_EXPORT)
 else()
-    target_compile_definitions(engine PUBLIC FR_STL_STATIC)
+  target_compile_definitions(engine PUBLIC FR_STL_STATIC)
 endif()
