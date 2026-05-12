@@ -110,7 +110,7 @@ inline void copy_raw_range(const T *src, USize sz, T *dst) noexcept {
  * @pre If sz > 0, ptr points to valid storage.
  */
 template <typename T>
-inline void set_raw_range(T *ptr, int value, USize sz) noexcept {
+inline void set_raw_range(T *ptr, USize value, USize sz) noexcept {
     FR_STATIC_ASSERT(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
     FR_ASSERT(sz == 0 || ptr != nullptr, "pointer must be non-null");
 

@@ -33,6 +33,7 @@ set(ENGINE_HEADERS
 
 ### data
     "include/fr/data/thing.hpp"
+    "include/fr/data/thing_pool.hpp"
 )
 
 set(ENGINE_SOURCES

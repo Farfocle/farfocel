@@ -36,7 +36,7 @@ class Array {
     FR_STATIC_ASSERT_NOTHROW_BASE(T);
 
 private:
-    T m_data[Size > 0 ? Size : 1];
+    T m_data[Size > 0 ? Size : 1]{};
 
 public:
     using iterator = T *;
