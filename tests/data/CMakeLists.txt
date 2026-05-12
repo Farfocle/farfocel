@@ -3,7 +3,9 @@
 set(TEST_DATA_SOURCES
     "main.cpp"
     "thing_pool.cpp"
+    "part_pool.cpp"
 )
+
 
 add_executable(farfocel_test_data ${TEST_DATA_SOURCES})
 
