@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <iostream>
 #include <memory>
 
 #include "fr/core/alloc.hpp"
@@ -16,7 +15,6 @@
 #include "fr/core/bitset.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/macros.hpp"
-#include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/thing.hpp"
 
