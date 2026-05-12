@@ -1,5 +1,6 @@
 #include <doctest.h>
 
+#include "fr/core/bitset.hpp"
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/hash.hpp"
 #include "fr/core/hash_map.hpp"
@@ -244,6 +245,31 @@ TEST_CASE("Deserialization - Complex Structure") {
     CHECK(*deserialized.ptr == 100);
     CHECK(deserialized.pair.first() == 7);
     CHECK(deserialized.pair.second() == "seven");
+}
+
+TEST_CASE("Serialization - Bitset") {
+    Bitset<10> original;
+    original.zero_all();
+    original.one_bit(0);
+    original.one_bit(3);
+    original.one_bit(9);
+
+    JsonSerializer writer;
+    writer.prop("bitset", original);
+    String json = writer.consume();
+
+    CHECK(json.view().find("\"@size\":10") != StringView::npos);
+    CHECK(json.view().find("\"@value\":\"1001000001\"") != StringView::npos);
+
+    Bitset<10> deserialized;
+    JsonDeserializer reader(json.view());
+    reader.prop("bitset", deserialized);
+
+    CHECK(deserialized.count_ones() == 3);
+    CHECK(deserialized.check_bit(0));
+    CHECK(deserialized.check_bit(3));
+    CHECK(deserialized.check_bit(9));
+    CHECK(!deserialized.check_bit(1));
 }
 
 } // namespace fr

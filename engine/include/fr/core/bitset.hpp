@@ -14,6 +14,8 @@
 
 #include "fr/core/array.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/core/shape.hpp"
+#include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
@@ -306,6 +308,40 @@ public:
     template <BitsetEachOneCallback Fn>
     constexpr void each_one(Fn &&fn) const {
         do_each_one(std::forward<Fn>(fn));
+    }
+
+    /**
+     * @brief Implementation of shape protocol. Serializes as a string of ones and zeros.
+     */
+    template <typename A>
+    void shape(A &a) {
+        if constexpr (A::kind == ArchiveKind::Serializer) {
+            USize sz = SZ;
+
+            a.prop("@size", sz);
+
+            String s = String::with_capacity(SZ);
+            for (USize i = 0; i < SZ; ++i) {
+                s.push_back(check_bit(i) ? '1' : '0');
+            }
+
+            a.prop("@value", s);
+        } else {
+            USize sz = 0;
+
+            a.prop("@size", sz);
+            FR_ASSERT(sz == SZ, "Bitset size mismatch during deserialization");
+
+            String s;
+            a.prop("@value", s);
+
+            zero_all();
+            for (USize i = 0; i < std::min(SZ, s.size()); ++i) {
+                if (s[i] == '1') {
+                    one_bit(i);
+                }
+            }
+        }
     }
 
 private:

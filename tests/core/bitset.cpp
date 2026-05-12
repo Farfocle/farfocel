@@ -34,16 +34,20 @@ TEST_CASE("Bitset - Basic Operations") {
         bs.zero_all();
         bs.set_bit(2, true);
         bs.flip_bit(2);
+
         CHECK(!bs.check_bit(2));
+
         bs.flip_bit(2);
         CHECK(bs.check_bit(2));
     }
 
     SUBCASE("one_all, zero_all, flip_all") {
         bs.one_all();
+
         for (USize i = 0; i < 10; ++i) {
             CHECK(bs.check_bit(i));
         }
+
         CHECK(bs.count_ones() == 10);
         CHECK(bs.count_zeros() == 0);
 
@@ -51,6 +55,7 @@ TEST_CASE("Bitset - Basic Operations") {
         for (USize i = 0; i < 10; ++i) {
             CHECK(!bs.check_bit(i));
         }
+
         CHECK(bs.count_ones() == 0);
         CHECK(bs.count_zeros() == 10);
 
@@ -58,6 +63,7 @@ TEST_CASE("Bitset - Basic Operations") {
         for (USize i = 0; i < 10; ++i) {
             CHECK(bs.check_bit(i));
         }
+
         CHECK(bs.count_ones() == 10);
         CHECK(bs.count_zeros() == 0);
     }
