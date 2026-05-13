@@ -100,6 +100,20 @@ public:
     constexpr Bitset() noexcept = default;
 
     /**
+     * @brief Construct a bitset with all bits set to 0.
+     */
+    [[nodiscard]] static constexpr Bitset<SZ> with_zeros() noexcept {
+        return Bitset<SZ>();
+    }
+
+    /**
+     * @brief Construct a bitset with all bits set to 1.
+     */
+    [[nodiscard]] static constexpr Bitset<SZ> with_ones() noexcept {
+        return Bitset<SZ>(~Bitset<SZ>());
+    }
+
+    /**
      * @brief Get the number of bits in the bitset.
      */
     [[nodiscard]] static constexpr USize size() noexcept {

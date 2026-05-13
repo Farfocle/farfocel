@@ -173,4 +173,10 @@ private:
     /// @brief A dense index array for looking the original thing index of the part.
     DynamicArray<ThingIdx> m_dense_indices{};
 };
+
+FR_STATIC_ASSERT(sizeof(PartPool<Byte>) == sizeof(PartPool<U64>),
+                 "part pools must have the same size regardless of the element type");
+
+FR_STATIC_ASSERT(alignof(PartPool<Byte>) == alignof(PartPool<U64>),
+                 "part pools must have the same alignment regardless of the element type");
 } // namespace fr::impl

@@ -29,7 +29,7 @@ TEST_CASE("ThingPool - remove and reuse slot") {
     Thing a = pool.handout();
     Thing b = pool.handout();
 
-    CHECK(pool.remove(a));
+    CHECK(pool.destroy(a));
     CHECK(!pool.check(a));
     CHECK(pool.check(b));
 
@@ -45,11 +45,11 @@ TEST_CASE("ThingPool - remove invalid") {
     impl::ThingPool pool;
 
 
-    CHECK(!pool.remove(Thing::nil()));
+    CHECK(!pool.destroy(Thing::nil()));
 
     Thing a = pool.handout();
-    CHECK(pool.remove(a));
-    CHECK(!pool.remove(a));
+    CHECK(pool.destroy(a));
+    CHECK(!pool.destroy(a));
 }
 
 } // namespace fr

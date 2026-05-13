@@ -128,12 +128,10 @@ public:
         }
 
         if (thing.idx() >= total_capacity) {
-
             return false;
         }
 
         if (!m_alive->check_bit(thing.idx())) {
-
             return false;
         }
 
@@ -142,11 +140,11 @@ public:
     }
 
     /**
-     * @brief Removes a thing if it is valid.
-     * @return If the thing was removed returns true, if not (the thing does not exist or is not
+     * @brief Destroys a thing if it is valid.
+     * @return If the thing was destroyed returns true, if not (the thing does not exist or is not
      * valid) returns false.
      */
-    bool remove(Thing thing) noexcept {
+    bool destroy(Thing thing) noexcept {
         if (!check(thing)) {
             return false;
         }
@@ -181,4 +179,5 @@ private:
     ThingIdx m_next_free_idx{0};
     USize m_next_free_count{0};
 };
+
 } // namespace fr::impl
