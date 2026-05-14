@@ -20,7 +20,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <bit>
 #include <cstddef>
 
@@ -121,8 +120,7 @@ public:
      *
      * @param other Copied string.
      */
-    StringBase(const StringBase &other)
-        : m_alloc(other.m_alloc) {
+    StringBase(const StringBase &other) {
         if (other.is_short_string()) {
             // using long_string is faster than short_string, as we just care about copying the
             // 24-bytes of the union and not the details
@@ -182,11 +180,11 @@ public:
      * @param other Swapped string.
      */
     void swap(StringBase &other) noexcept {
+        FR_ASSERT(m_alloc == other.m_alloc, "cannot swap strings with different allocators");
+
         auto const t = m_data.long_string;
         m_data.long_string = other.m_data.long_string;
         other.m_data.long_string = t;
-
-        std::swap(m_alloc, other.m_alloc);
     }
 
     /**
