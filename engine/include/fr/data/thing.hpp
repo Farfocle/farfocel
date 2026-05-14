@@ -11,9 +11,6 @@
 
 namespace fr {
 
-using ThingIdx = U32;
-using ThingGen = U32;
-
 /**
  * @brief Thing represents a universal handle to all game objects. By default, it is 32 bits wide.
  *
@@ -22,77 +19,78 @@ using ThingGen = U32;
  */
 struct Thing {
 public:
+    using Raw = U32;
+    static constexpr Raw max_index = 0xFFFFF;
+    static constexpr Raw max_gen = 0xFFF;
+
     constexpr Thing() noexcept = default;
 
-    constexpr Thing(ThingIdx idx, ThingGen gen) noexcept
-        : m_idx(idx),
-          m_gen(gen) {
+    explicit constexpr Thing(Raw idx, Raw gen) noexcept {
+        m_thing = (gen << 20) | idx;
+    }
+
+    static constexpr Thing from_raw(Raw raw) noexcept {
+        return Thing(raw);
     }
 
     /**
      * @brief Returns the index part of the thing.
      */
-    constexpr ThingIdx idx() const noexcept {
-        return m_idx;
+    constexpr Raw idx() const noexcept {
+        return m_thing & 0xFFFFF;
     }
 
-    /**
-     * @brief Returns the generation part of the thing.
-     */
-    constexpr ThingGen gen() const noexcept {
-        return m_gen;
+    constexpr Raw gen() const noexcept {
+        return m_thing >> 20;
     }
 
     /**
      * @brief Sets the index part of the thing.
      */
-    constexpr void set_idx(ThingIdx idx) noexcept {
-        m_idx = idx;
+    constexpr void set_idx(Raw idx) noexcept {
+        m_thing = (m_thing & 0xFFF00000) | idx;
     }
 
     /**
      * @brief Sets the generation part of the thing.
      */
-    constexpr void set_gen(ThingGen gen) noexcept {
-        m_gen = gen;
+    constexpr void set_gen(Raw gen) noexcept {
+        m_thing = (m_thing & 0x000FFFFF) | (gen << 20);
     }
 
     /**
      * @brief Increments generation, skipping 0.
      */
     constexpr void inc_gen() noexcept {
-        ++m_gen;
-        if (m_gen == 0) {
-            m_gen = 1;
-        }
+        set_gen((gen() + 1) % (max_gen + 1));
     }
 
     /**
      * @brief Returns the raw value of the thing as U32.
      */
-    constexpr U32 as_raw() const noexcept {
-        return (m_gen << 20) | m_idx;
+    constexpr Raw as_raw() const noexcept {
+        return m_thing;
     }
 
     /**
      * @brief Returns the nil value of the thing.
      */
     static constexpr Thing nil() noexcept {
-        return Thing(0, 0);
+        return Thing(0);
     }
 
     /**
      * @brief Returns whether the thing is nil.
      */
     constexpr bool is_nil() const noexcept {
-        return m_idx == 0 && m_gen == 0;
+        return m_thing == 0;
     }
 
     /**
      * @brief Returns whether the thing is nil.
      */
     constexpr bool operator==(const Thing &other) const noexcept {
-        return as_raw() == other.as_raw();
+        return m_thing == other.m_thing;
     }
 
     /**
@@ -103,7 +101,8 @@ public:
     }
 
 private:
-    ThingIdx m_idx : 20 {0};
-    ThingGen m_gen : 12 {0};
+    explicit constexpr Thing(Raw raw) noexcept : m_thing(raw) {}
+
+    U32 m_thing{0};
 };
 } // namespace fr
