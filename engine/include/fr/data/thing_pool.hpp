@@ -82,13 +82,13 @@ public:
      */
     Thing handout() noexcept {
         FR_ASSERT(m_load < MAX_THINGS, "pool is full");
-        ThingsArray &storage = *m_things;
+        ThingsArray &things = *m_things;
 
         if (m_next_free_count == 0) {
             const ThingIdx idx = static_cast<ThingIdx>(m_load);
             const Thing out(idx, 0);
 
-            storage[idx] = out;
+            things[idx] = out;
             m_alive->one_bit(idx);
 
             ++m_load;
@@ -96,7 +96,7 @@ public:
         }
 
         const ThingIdx idx = m_next_free_idx;
-        Thing slot = storage[idx];
+        Thing& slot = things[idx];
 
         --m_next_free_count;
         if (m_next_free_count == 0) {
@@ -105,14 +105,12 @@ public:
             m_next_free_idx = slot.idx();
         }
 
-        ThingGen gen = static_cast<ThingGen>(slot.gen() + 1);
-
-        const Thing out(idx, gen);
-        storage[idx] = out;
+        slot.set_idx(idx);
+        slot.inc_gen();
         m_alive->one_bit(idx);
         ++m_load;
 
-        return out;
+        return slot;
     }
 
     /**
