@@ -210,8 +210,7 @@ public:
      * @param other Source map.
      * @pre Key and Value must be nothrow copy constructible.
      */
-    HashMap(const HashMap &other) noexcept
-        : m_alloc(other.m_alloc) {
+    HashMap(const HashMap &other) noexcept {
         FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
         FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Value);
 
@@ -267,17 +266,25 @@ public:
      */
     HashMap &operator=(HashMap &&other) noexcept {
         if (this != &other) {
-            do_destroy_storage();
-            m_alloc = other.m_alloc;
-            m_capacity = other.m_capacity;
-            m_load = other.m_load;
-            m_slots = other.m_slots;
-            m_ctrls = other.m_ctrls;
+            if (m_alloc == other.m_alloc) {
+                do_destroy_storage();
+                m_capacity = other.m_capacity;
+                m_load = other.m_load;
+                m_slots = other.m_slots;
+                m_ctrls = other.m_ctrls;
 
-            other.m_slots = nullptr;
-            other.m_ctrls = nullptr;
-            other.m_capacity = 0;
-            other.m_load = 0;
+                other.m_slots = nullptr;
+                other.m_ctrls = nullptr;
+                other.m_capacity = 0;
+                other.m_load = 0;
+            } else {
+                clear();
+                for (auto pair : other) {
+                    auto &[k, v] = pair;
+                    insert(std::move(const_cast<Key &>(k)), std::move(v));
+                }
+                other.clear();
+            }
         }
         return *this;
     }
@@ -296,7 +303,7 @@ public:
      * @return A new empty HashMap instance.
      * @pre alloc must not be null.
      */
-    static HashMap with_allocator(Alloc *alloc) noexcept {
+    static HashMap with_alloc(Alloc *alloc) noexcept {
         FR_ASSERT(alloc, "allocator must be non-null");
         return HashMap(alloc);
     }

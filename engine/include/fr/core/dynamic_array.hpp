@@ -141,17 +141,33 @@ public:
      *
      * @param other The array to move from.
      * @return Reference to this array.
-     * @note Existing elements are destroyed and current storage is freed before stealing from
-     * other.
+     * @note Fast path: if allocators match, steals memory. Slow path: element-wise move.
      */
     DynamicArray &operator=(DynamicArray &&other) noexcept {
         if (this == &other) {
             return *this;
         }
 
-        do_destroy_all();
-        do_free_storage();
-        do_move_from(std::move(other));
+        if (m_alloc == other.m_alloc) {
+            do_destroy_all();
+            do_free_storage();
+
+            m_data = other.m_data;
+            m_size = other.m_size;
+            m_capacity = other.m_capacity;
+
+            other.m_data = nullptr;
+            other.m_size = 0;
+            other.m_capacity = 0;
+        } else {
+            clear();
+
+            do_reserve(other.m_size);
+            mem::transfer_init_range(other.m_data, other.m_size, m_data);
+
+            m_size = other.m_size;
+            other.m_size = 0;
+        }
 
         return *this;
     }
@@ -988,9 +1004,9 @@ private:
      * @param other Source array.
      */
     void do_copy_from(const DynamicArray &other) noexcept {
-        m_alloc = other.m_alloc;
-        if (other.m_size == 0)
+        if (other.m_size == 0) {
             return;
+        }
 
         do_reserve(other.m_size);
         mem::copy_init_range(other.m_data, other.m_size, m_data);
