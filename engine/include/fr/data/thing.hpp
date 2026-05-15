@@ -16,6 +16,13 @@ using ThingRaw = U32;
 using ThingIdx = U32;
 using ThingGen = U32;
 
+constexpr USize THING_IDX_BITS = 20;
+constexpr USize THING_GEN_BITS = 12;
+constexpr USize THING_RAW_BITS = THING_IDX_BITS + THING_GEN_BITS;
+constexpr ThingIdx THING_MAX_IDX = 0xFFFFF;
+constexpr ThingGen THING_MAX_GEN = 0xFFF;
+constexpr USize MAX_THINGS = 1 << THING_IDX_BITS;
+
 FR_STATIC_ASSERT(sizeof(ThingRaw) * 2 <= sizeof(ThingIdx) + sizeof(ThingGen),
                  "ThingRaw is too large for the index and generation fields");
 
@@ -27,13 +34,10 @@ FR_STATIC_ASSERT(sizeof(ThingRaw) * 2 <= sizeof(ThingIdx) + sizeof(ThingGen),
  */
 struct Thing {
 public:
-    static constexpr ThingRaw max_index = 0xFFFFF;
-    static constexpr ThingRaw max_gen = 0xFFF;
-
     constexpr Thing() noexcept = default;
 
-    explicit constexpr Thing(ThingRaw idx, ThingRaw gen) noexcept {
-        m_thing = (gen << 20) | idx;
+    explicit constexpr Thing(ThingIdx idx, ThingGen gen) noexcept {
+        m_thing = (gen << THING_IDX_BITS) | idx;
     }
 
     static constexpr Thing from_raw(ThingRaw raw) noexcept {
@@ -43,33 +47,33 @@ public:
     /**
      * @brief Returns the index part of the thing.
      */
-    constexpr ThingRaw idx() const noexcept {
+    constexpr ThingIdx idx() const noexcept {
         return m_thing & 0xFFFFF;
     }
 
-    constexpr ThingRaw gen() const noexcept {
-        return m_thing >> 20;
+    constexpr ThingGen gen() const noexcept {
+        return m_thing >> THING_IDX_BITS;
     }
 
     /**
      * @brief Sets the index part of the thing.
      */
-    constexpr void set_idx(ThingRaw idx) noexcept {
+    constexpr void set_idx(ThingIdx idx) noexcept {
         m_thing = (m_thing & 0xFFF00000) | idx;
     }
 
     /**
      * @brief Sets the generation part of the thing.
      */
-    constexpr void set_gen(ThingRaw gen) noexcept {
-        m_thing = (m_thing & 0x000FFFFF) | (gen << 20);
+    constexpr void set_gen(ThingGen gen) noexcept {
+        m_thing = (m_thing & 0x000FFFFF) | (gen << THING_IDX_BITS);
     }
 
     /**
-     * @brief Increments generation, skipping 0.
+     * @brief Increments generation, wraps around, skipping 0.
      */
     constexpr void inc_gen() noexcept {
-        set_gen((gen() + 1) % (max_gen + 1));
+        set_gen((gen() + 1) % (THING_MAX_GEN + 1));
     }
 
     /**

@@ -8,10 +8,11 @@ namespace fr {
 TEST_CASE("ThingPool - handout and check") {
     impl::ThingPool pool;
 
-
     Thing a = pool.handout();
     Thing b = pool.handout();
 
+    CHECK(a.idx() == 1);
+    CHECK(b.idx() == 2);
     CHECK(!a.is_nil());
     CHECK(!b.is_nil());
     CHECK(a != b);
@@ -24,7 +25,6 @@ TEST_CASE("ThingPool - handout and check") {
 
 TEST_CASE("ThingPool - remove and reuse slot") {
     impl::ThingPool pool;
-
 
     Thing a = pool.handout();
     Thing b = pool.handout();
@@ -43,7 +43,6 @@ TEST_CASE("ThingPool - remove and reuse slot") {
 
 TEST_CASE("ThingPool - remove invalid") {
     impl::ThingPool pool;
-
 
     CHECK(!pool.destroy(Thing::nil()));
 

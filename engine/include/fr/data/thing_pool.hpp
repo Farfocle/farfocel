@@ -22,9 +22,8 @@ namespace fr::impl {
 class ThingPool {
 
 public:
-    constexpr static USize total_capacity = 1 << 20;
-    using Storage = Array<Thing, total_capacity>;
-    using AliveBits = Bitset<total_capacity>;
+    using ThingsArray = Array<Thing, MAX_THINGS>;
+    using AliveArray = Bitset<MAX_THINGS>;
 
     /**
      * @brief Constructs a ThingPool with the given allocator. If no allocator is provided, the
@@ -32,10 +31,10 @@ public:
      */
     explicit ThingPool(Alloc *alloc = get_ambient_ctx().alloc) noexcept
         : m_alloc(alloc),
-          m_block(static_cast<Byte *>(alloc->allocate(block_size, block_align))) {
+          m_buffer(static_cast<Byte *>(alloc->allocate(block_size, block_align))) {
 
-        m_storage = std::construct_at(reinterpret_cast<Storage *>(m_block));
-        m_alive = std::construct_at(reinterpret_cast<AliveBits *>(m_block + alive_offset));
+        m_things = std::construct_at(reinterpret_cast<ThingsArray *>(m_buffer));
+        m_alive = std::construct_at(reinterpret_cast<AliveArray *>(m_buffer + alive_offset));
 
         m_alive->zero_all();
     }
@@ -45,8 +44,8 @@ public:
      */
     ~ThingPool() noexcept {
         std::destroy_at(m_alive);
-        std::destroy_at(m_storage);
-        m_alloc->deallocate(m_block, block_size, block_align);
+        std::destroy_at(m_things);
+        m_alloc->deallocate(m_buffer, block_size, block_align);
     }
 
     ThingPool(const ThingPool &) = delete;
@@ -65,11 +64,14 @@ public:
      * @brief Returns the capacity of this pool.
      */
     USize capacity() const noexcept {
-        return total_capacity;
+        return MAX_THINGS;
     }
 
     /**
-     * @brief Returns the number of things currently handed out.
+     * @brief The number of things currently alive.
+     *
+     * @return The number of things currently handed out.
+     * @note Does include the default nil thing at index 0.
      */
     USize load() const noexcept {
         return m_load;
@@ -79,8 +81,8 @@ public:
      * @brief Returns a new thing from this pool.
      */
     Thing handout() noexcept {
-        FR_ASSERT(m_load < total_capacity, "pool is full");
-        Storage &storage = *m_storage;
+        FR_ASSERT(m_load < MAX_THINGS, "pool is full");
+        ThingsArray &storage = *m_things;
 
         if (m_next_free_count == 0) {
             const ThingIdx idx = static_cast<ThingIdx>(m_load);
@@ -105,13 +107,10 @@ public:
 
         ThingGen gen = static_cast<ThingGen>(slot.gen() + 1);
 
-        if (gen == 0) {
-            gen = 1;
-        }
-
         const Thing out(idx, gen);
         storage[idx] = out;
         m_alive->one_bit(idx);
+        ++m_load;
 
         return out;
     }
@@ -120,28 +119,19 @@ public:
      * @brief Returns the thing stored at a slot index.
      */
     Thing get(ThingIdx idx) const noexcept {
-        FR_ASSERT(idx < total_capacity, "index out of bounds");
-        return (*m_storage)[idx];
+        FR_ASSERT(idx < MAX_THINGS, "index out of bounds");
+        return (*m_things)[idx];
     }
 
     /**
-     * @brief Returns whether a thing is valid and alive.
+     * @brief Returns whether a thing is alive.
      */
     bool check(Thing thing) const noexcept {
-        if (thing.is_nil()) {
-            return false;
-        }
-
-        if (thing.idx() >= total_capacity) {
-            return false;
-        }
-
         if (!m_alive->check_bit(thing.idx())) {
             return false;
         }
 
-        const Thing slot = (*m_storage)[thing.idx()];
-        return slot.gen() == thing.gen();
+        return get(thing.idx()).gen() == thing.gen();
     }
 
     /**
@@ -154,7 +144,7 @@ public:
             return false;
         }
 
-        Storage &storage = *m_storage;
+        ThingsArray &storage = *m_things;
         const ThingIdx idx = thing.idx();
 
         m_alive->zero_bit(idx);
@@ -162,23 +152,25 @@ public:
 
         m_next_free_idx = idx;
         ++m_next_free_count;
+        --m_load;
 
         return true;
     }
 
 private:
-    static constexpr USize storage_align = alignof(Storage);
-    static constexpr USize alive_align = alignof(AliveBits);
+    static constexpr USize storage_align = alignof(ThingsArray);
+    static constexpr USize alive_align = alignof(AliveArray);
     static constexpr USize block_align = storage_align > alive_align ? storage_align : alive_align;
-    static constexpr USize alive_offset = (sizeof(Storage) + alive_align - 1) & ~(alive_align - 1);
-    static constexpr USize block_size = alive_offset + sizeof(AliveBits);
+    static constexpr USize alive_offset =
+        (sizeof(ThingsArray) + alive_align - 1) & ~(alive_align - 1);
+    static constexpr USize block_size = alive_offset + sizeof(AliveArray);
 
     Alloc *m_alloc{get_ambient_ctx().alloc};
-    Byte *m_block{nullptr};
-    Storage *m_storage{nullptr};
-    AliveBits *m_alive{nullptr};
+    Byte *m_buffer{nullptr};
+    ThingsArray *m_things{nullptr};
+    AliveArray *m_alive{nullptr};
 
-    /// @note This is initialized to 1 to signal nil thing.
+    /// @note This is initialized to 1 to signal nil thing at index 0.
     USize m_load{1};
 
     ThingIdx m_next_free_idx{0};

@@ -24,7 +24,7 @@ namespace fr {
 class World {
 public:
     using AnyPartPool = InlineAny<sizeof(impl::PartPool<Byte>), alignof(impl::PartPool<Byte>)>;
-    using PartPools = Array<AnyPartPool, max_parts>;
+    using PartPools = Array<AnyPartPool, MAX_PARTS>;
 
     World() noexcept
         : m_alloc(get_ambient_ctx().alloc) {
@@ -103,18 +103,19 @@ public:
      */
     template <typename T, typename... Args>
     T &emplace_part(Thing thing, Args &&...args) noexcept {
-        FR_ASSERT(check_thing(thing), "thing is not valid");
-        // @todo Return a stub if the thing does not exist.
-
         TypeIdx tidx = impl::DataTypeIdxGen::template gen<T>();
-        FR_ASSERT(tidx < max_parts, "part type exceeds max parts; increase max_parts");
+        FR_ASSERT(tidx < MAX_PARTS, "part type exceeds max parts; increase MAX_PARTS");
+
+        if (!check_thing(thing)) {
+            auto pool = do_get_part_pool_by_tidx<T>(tidx);
+        }
 
         if (!m_part_pools_alive.check_bit(tidx)) {
             m_part_pools_alive.one_bit(tidx);
             m_part_pools[tidx] = AnyPartPool(impl::PartPool<T>(m_alloc));
         }
 
-        auto pool = do_part_pool_by_tidx<T>(tidx);
+        auto pool = do_get_part_pool_by_tidx<T>(tidx);
         return pool.template emplace<T, Args...>(std::forward<Args>(args)...);
     }
 
@@ -141,22 +142,25 @@ public:
      */
     template <typename T>
     void detach_part(Thing thing) noexcept {
-        FR_ASSERT(thing != Thing::nil(), "detach_part: thing is nil");
-        auto pool = do_part_pool_by_tidx<T>(tidx_of<T>());
+        if (thing.is_nil()) {
+            return;
+        }
+
+        auto pool = do_get_part_pool_by_tidx<T>(tidx_of<T>());
         pool.template detach<T>(thing);
     }
 
 private:
     template <typename T>
-    impl::PartPool<T> do_part_pool_by_tidx(TypeIdx tidx) noexcept {
-        FR_ASSERT(tidx < max_parts, "part type exceeds max parts; increase max_parts");
+    impl::PartPool<T> do_get_part_pool_by_tidx(TypeIdx tidx) noexcept {
+        FR_ASSERT(tidx < MAX_PARTS, "part type exceeds max parts; increase max_parts");
         return m_part_pools[tidx].cast<impl::PartPool<T>>();
     }
 
     impl::ThingPool m_thing_pool{};
 
     PartPools m_part_pools{PartPools::from_repeated(AnyPartPool::nil())};
-    Bitset<max_parts> m_part_pools_alive{Bitset<max_parts>::with_zeros()};
+    Bitset<MAX_PARTS> m_part_pools_alive{Bitset<MAX_PARTS>::with_zeros()};
 
     Alloc *m_alloc{get_ambient_ctx().alloc};
 };
