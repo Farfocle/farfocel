@@ -49,6 +49,11 @@ public:
         m_alloc->deallocate(m_block, block_size, block_align);
     }
 
+    ThingPool(const ThingPool &) = delete;
+    ThingPool(ThingPool &&) = delete;
+    ThingPool &operator=(const ThingPool &) = delete;
+    ThingPool &operator=(ThingPool &&) = delete;
+
     /**
      * @brief Returns the allocator used by this pool.
      */
@@ -74,7 +79,7 @@ public:
      * @brief Returns a new thing from this pool.
      */
     Thing handout() noexcept {
-        FR_ASSERT(m_load < total_capacity, "Pool is full");
+        FR_ASSERT(m_load < total_capacity, "pool is full");
         Storage &storage = *m_storage;
 
         if (m_next_free_count == 0) {

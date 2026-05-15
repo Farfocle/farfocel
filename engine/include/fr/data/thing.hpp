@@ -7,9 +7,17 @@
 
 #pragma once
 
+#include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
+
+using ThingRaw = U32;
+using ThingIdx = U32;
+using ThingGen = U32;
+
+FR_STATIC_ASSERT(sizeof(ThingRaw) * 2 <= sizeof(ThingIdx) + sizeof(ThingGen),
+                 "ThingRaw is too large for the index and generation fields");
 
 /**
  * @brief Thing represents a universal handle to all game objects. By default, it is 32 bits wide.
@@ -19,42 +27,41 @@ namespace fr {
  */
 struct Thing {
 public:
-    using Raw = U32;
-    static constexpr Raw max_index = 0xFFFFF;
-    static constexpr Raw max_gen = 0xFFF;
+    static constexpr ThingRaw max_index = 0xFFFFF;
+    static constexpr ThingRaw max_gen = 0xFFF;
 
     constexpr Thing() noexcept = default;
 
-    explicit constexpr Thing(Raw idx, Raw gen) noexcept {
+    explicit constexpr Thing(ThingRaw idx, ThingRaw gen) noexcept {
         m_thing = (gen << 20) | idx;
     }
 
-    static constexpr Thing from_raw(Raw raw) noexcept {
+    static constexpr Thing from_raw(ThingRaw raw) noexcept {
         return Thing(raw);
     }
 
     /**
      * @brief Returns the index part of the thing.
      */
-    constexpr Raw idx() const noexcept {
+    constexpr ThingRaw idx() const noexcept {
         return m_thing & 0xFFFFF;
     }
 
-    constexpr Raw gen() const noexcept {
+    constexpr ThingRaw gen() const noexcept {
         return m_thing >> 20;
     }
 
     /**
      * @brief Sets the index part of the thing.
      */
-    constexpr void set_idx(Raw idx) noexcept {
+    constexpr void set_idx(ThingRaw idx) noexcept {
         m_thing = (m_thing & 0xFFF00000) | idx;
     }
 
     /**
      * @brief Sets the generation part of the thing.
      */
-    constexpr void set_gen(Raw gen) noexcept {
+    constexpr void set_gen(ThingRaw gen) noexcept {
         m_thing = (m_thing & 0x000FFFFF) | (gen << 20);
     }
 
@@ -68,7 +75,7 @@ public:
     /**
      * @brief Returns the raw value of the thing as U32.
      */
-    constexpr Raw as_raw() const noexcept {
+    constexpr ThingRaw as_raw() const noexcept {
         return m_thing;
     }
 
@@ -101,7 +108,9 @@ public:
     }
 
 private:
-    explicit constexpr Thing(Raw raw) noexcept : m_thing(raw) {}
+    explicit constexpr Thing(ThingRaw raw) noexcept
+        : m_thing(raw) {
+    }
 
     U32 m_thing{0};
 };
