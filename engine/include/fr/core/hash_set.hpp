@@ -205,8 +205,7 @@ public:
      * @note Performs a deep copy of all elements.
      * @pre Key must be nothrow copy constructible.
      */
-    HashSet(const HashSet &other) noexcept
-        : m_alloc(other.m_alloc) {
+    HashSet(const HashSet &other) noexcept {
         FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
 
         if (other.m_capacity == 0) {
@@ -267,17 +266,25 @@ public:
             return *this;
         }
 
-        do_destroy_storage();
-        m_alloc = other.m_alloc;
-        m_capacity = other.m_capacity;
-        m_load = other.m_load;
-        m_slots = other.m_slots;
-        m_ctrls = other.m_ctrls;
+        if (m_alloc == other.m_alloc) {
+            do_destroy_storage();
+            m_capacity = other.m_capacity;
+            m_load = other.m_load;
+            m_slots = other.m_slots;
+            m_ctrls = other.m_ctrls;
 
-        other.m_slots = nullptr;
-        other.m_ctrls = nullptr;
-        other.m_capacity = 0;
-        other.m_load = 0;
+            other.m_slots = nullptr;
+            other.m_ctrls = nullptr;
+            other.m_capacity = 0;
+            other.m_load = 0;
+        } else {
+            clear();
+            for (const Key &key : other) {
+                insert(std::move(const_cast<Key &>(key)));
+            }
+
+            other.clear();
+        }
 
         return *this;
     }
@@ -296,7 +303,7 @@ public:
      * @return A new empty HashSet instance.
      * @pre alloc must not be null.
      */
-    static HashSet with_allocator(Alloc *alloc) noexcept {
+    static HashSet with_alloc(Alloc *alloc) noexcept {
         FR_ASSERT(alloc, "allocator must be non-null");
         return HashSet(alloc);
     }
