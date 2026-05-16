@@ -12,28 +12,35 @@ struct TestPart {
 TEST_CASE("PartPool - emplace and get") {
     impl::PartPool<TestPart> pool;
 
-    pool.emplace(3, TestPart{42});
-    pool.emplace(7, TestPart{11});
+    Thing a = Thing(3, 0);
+    Thing b = Thing(7, 0);
 
-    CHECK(pool.load() == 3);
-    CHECK(pool.get(3).value == 42);
-    CHECK(pool.get(7).value == 11);
+    pool.emplace_unchecked(a, TestPart{42});
+    pool.emplace_unchecked(b, TestPart{11});
+
+    CHECK(pool.part_count() == 3);
+    CHECK(pool.get_unchecked(a).value == 42);
+    CHECK(pool.get_unchecked(b).value == 11);
 }
 
 TEST_CASE("PartPool - remove swaps last") {
     impl::PartPool<TestPart> pool;
 
-    pool.emplace(2, TestPart{10});
-    pool.emplace(5, TestPart{20});
-    pool.emplace(9, TestPart{30});
+    Thing a = Thing(2, 0);
+    Thing b = Thing(5, 0);
+    Thing c = Thing(9, 0);
 
-    CHECK(pool.load() == 4);
+    pool.emplace_unchecked(a, TestPart{10});
+    pool.emplace_unchecked(b, TestPart{20});
+    pool.emplace_unchecked(c, TestPart{30});
 
-    pool.destroy(5);
+    CHECK(pool.part_count() == 4);
 
-    CHECK(pool.load() == 3);
+    pool.destroy(b);
 
-    const auto &parts = pool.parts_array();
+    CHECK(pool.part_count() == 3);
+
+    const auto &parts = pool.part_slice_with_stub();
     CHECK(parts.size() == 3);
     CHECK(parts[1].value == 10);
     CHECK(parts[2].value == 30);
@@ -42,13 +49,16 @@ TEST_CASE("PartPool - remove swaps last") {
 TEST_CASE("PartPool - insert overloads") {
     impl::PartPool<TestPart> pool;
 
-    TestPart a{5};
-    pool.insert(1, a);
-    pool.insert(4, TestPart{9});
+    Thing a = Thing(1, 0);
+    Thing b = Thing(4, 0);
 
-    CHECK(pool.load() == 3);
-    CHECK(pool.get(1).value == 5);
-    CHECK(pool.get(4).value == 9);
+    TestPart a_part{5};
+    pool.insert_unchecked(a, a_part);
+    pool.insert_unchecked(b, TestPart{9});
+
+    CHECK(pool.part_count() == 3);
+    CHECK(pool.get_unchecked(a).value == 5);
+    CHECK(pool.get_unchecked(b).value == 9);
 }
 
 } // namespace fr

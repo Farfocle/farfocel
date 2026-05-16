@@ -32,8 +32,11 @@ set(ENGINE_HEADERS
     "include/fr/core/unique_ptr.hpp"
 
 ### data
+    "include/fr/data/part.hpp"
+    "include/fr/data/part_pool.hpp"
     "include/fr/data/thing.hpp"
     "include/fr/data/thing_pool.hpp"
+    "include/fr/data/typeidx.hpp"
 )
 
 set(ENGINE_SOURCES
