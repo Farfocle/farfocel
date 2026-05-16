@@ -13,6 +13,16 @@
 
 namespace fr::math {
 
+// karol: added min and max functions
+template <typename T>
+constexpr const T &min(const T &a, const T &b) noexcept {
+    return (b < a) ? b : a;
+}
+
+template <typename T>
+constexpr const T &max(const T &a, const T &b) noexcept {
+    return (a < b) ? b : a;
+}
 /**
  * @brief Check whether @p n is a power of two.
  * @param n Value to test.

@@ -34,7 +34,8 @@ set(ENGINE_HEADERS
     "include/fr/platform/window.hpp"
 
 #### renderer
-    "include/fr/renderer/rhi.hpp"
+    "include/fr/renderer/render_device.hpp"
+    "include/fr/renderer/mesh.hpp"
 )
 
 set(ENGINE_SOURCES
@@ -43,7 +44,7 @@ set(ENGINE_SOURCES
 #### platform
     "src/platform/sdl3/sdl3_window.cpp"
 #### renderer
-    "src/renderer/opengl/opengl_rhi.cpp"
+    "src/renderer/opengl/opengl_render_device.cpp"
 )
 
 
