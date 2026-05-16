@@ -43,11 +43,19 @@ all.
 
 ### Signature
 
-`Signature` is a bitset of size `MAX_PARTS`. If a part of type `T` is attached
-to a thing, then the bitset at the type index of `T` is set to one, otherwise it
-is set to zero.
+`Signature` is an opaque wrapper around a bitset of size `MAX_PARTS`. If a part
+of type `T` is attached to a thing, then the bit at the type index of `T` is set
+and otherwise it is cleared. The underlying bitset is exposed via
+`Signature::bitset()` for read-only access.
+
+### Signature Pool
+
+`SignaturePool` stores one signature per thing in a fixed-size array of
+`MAX_THINGS`. It is a single allocation and does not grow. By default all
+signatures are zeroed (no parts attached).
 
 ### Thing Pool
+
 
 As mentioned before `ThingPool` is the single source of truth for all the things
 in the game. It contains a heap allocated non-growing array of things of size
