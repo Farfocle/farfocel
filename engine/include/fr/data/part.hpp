@@ -30,6 +30,13 @@ public:
     }
 
     /**
+     * @brief Reset all bits (no parts attached).
+     */
+    void clear() noexcept {
+        m_bits.zero_all();
+    }
+
+    /**
      * @brief Attach a part type by its TypeIdx.
      * @param idx Type index of the part.
      */
@@ -37,6 +44,7 @@ public:
         FR_ASSERT(idx < MAX_PARTS, "type idx out of bounds");
         m_bits.one_bit(static_cast<USize>(idx));
     }
+
 
     /**
      * @brief Detach a part type by its TypeIdx.
@@ -85,4 +93,3 @@ private:
     BitsetType m_bits{};
 };
 } // namespace fr
-

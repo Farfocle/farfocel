@@ -147,41 +147,20 @@ public:
     }
 
     /**
-     * @brief Returns a reference to the stub.
+     * @brief Returns a pointer to the stub.
      */
-    const T &stub() const noexcept {
-        return m_parts[0];
+    T *get_stub() noexcept {
+        return &m_parts[0];
     }
 
     /**
-     * @brief Returns a reference to the stub.
-     * @warning Thread-unsafe. Caller must ensure no concurrent access.
-     */
-    T &stub_mut() noexcept {
-        return m_parts[0];
-    }
-
-    /**
-     * @brief Returns a reference to the part associated with a given thing.
-     * @note If thing is nil, returns a reference to the stub.
-     *
+     * @brief Returns a pointer to the part associated with a given thing.
+     * @note If thing is nil, returns a pointer to the stub.
      * @warning Caller must ensure the thing is alive and has the pool's part attached.
      */
-    const T &get_unchecked(Thing thing) noexcept {
+    T* get_unchecked(Thing thing) noexcept {
         FR_ASSERT(thing.idx() < m_thing_to_part.size(), "index out of bounds");
-        return m_parts[m_thing_to_part[thing.idx()]];
-    }
-
-    /**
-     * @brief Returns a reference to the part associated with a given thing.
-     * @note If thing is nil, returns a reference to the stub.
-     *
-     * @warning Caller must ensure the thing is alive and has the pool's part attached.
-     * @warning Thread-unsafe. Caller must ensure no concurrent access.
-     */
-    T &get_mut_unchecked(Thing thing) noexcept {
-        FR_ASSERT(thing.idx() < m_thing_to_part.size(), "index out of bounds");
-        return m_parts[m_thing_to_part[thing.idx()]];
+        return &m_parts[m_thing_to_part[thing.idx()]];
     }
 
     /**
@@ -249,8 +228,8 @@ public:
      * @brief Destroy a part attached to a given thing.
      *
      * @param thing The thing to destroy the part of.
-     * @pre Thing is non-nil
      *
+     * @note If idx is 0, does nothing.
      * @warning Caller must ensure idx refers to a live part, otherwise behavior is undefined.
      * @warning Caller must ensure there is an existing part of this type attached to the thing,
      * otherwise behavior is undefined.
@@ -258,8 +237,10 @@ public:
      */
     void destroy(Thing thing) noexcept {
         ThingIdx idx = thing.idx();
+        if (idx == 0) {
+            return;
+        }
 
-        FR_ASSERT(idx != 0, "destroying nil thing is not allowed");
         FR_ASSERT(idx < m_thing_to_part.size(), "index out of bounds");
         FR_ASSERT(m_parts.size() > 0, "remove on empty pool");
 
