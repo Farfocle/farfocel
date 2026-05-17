@@ -307,8 +307,9 @@ inline void zero_init_range(T *ptr, USize sz) noexcept {
     } else {
         FR_STATIC_ASSERT(std::is_nothrow_default_constructible_v<T>,
                          "T must be nothrow constructible");
-        for (USize i = 0; i < sz; ++i)
+        for (USize i = 0; i < sz; ++i) {
             std::construct_at(ptr + i);
+        }
     }
 }
 
