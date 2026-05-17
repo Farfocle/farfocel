@@ -8,13 +8,9 @@
 
 #pragma once
 
-#include <memory>
-
 #include "fr/core/alloc.hpp"
 #include "fr/core/array.hpp"
-#include "fr/core/bitset.hpp"
 #include "fr/core/ctx.hpp"
-#include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/thing.hpp"
 
@@ -22,25 +18,19 @@ namespace fr::impl {
 class ThingPool {
 
 public:
-    using ThingArray = Array<Thing, MAX_THINGS>;
-    using AliveBitset = Bitset<MAX_THINGS>;
+    ThingPool() noexcept
+        : ThingPool(get_ambient_ctx().alloc) {
+    }
 
-    explicit ThingPool(Alloc *alloc = get_ambient_ctx().alloc) noexcept
-        : m_alloc(alloc),
-          m_buffer(static_cast<Byte *>(alloc->allocate(m_block_size, m_block_align))) {
-
-        m_thing_array = std::construct_at(reinterpret_cast<ThingArray *>(m_buffer));
-        m_alive_bitset =
-            std::construct_at(reinterpret_cast<AliveBitset *>(m_buffer + m_alive_offset));
-
-        m_alive_bitset->zero_all();
-        m_alive_bitset->one_bit(0);
+    explicit ThingPool(Alloc *alloc) noexcept {
+        m_alloc = alloc;
+        m_things = static_cast<Array<Thing, MAX_THINGS> *>(
+            m_alloc->allocate(sizeof(Array<Thing, MAX_THINGS>), alignof(Array<Thing, MAX_THINGS>)));
     }
 
     ~ThingPool() noexcept {
-        std::destroy_at(m_alive_bitset);
-        std::destroy_at(m_thing_array);
-        m_alloc->deallocate(m_buffer, m_block_size, m_block_align);
+        m_alloc->deallocate(m_things, sizeof(Array<Thing, MAX_THINGS>),
+                            alignof(Array<Thing, MAX_THINGS>));
     }
 
     ThingPool(const ThingPool &) = delete;
@@ -66,160 +56,111 @@ public:
      * @brief Returns the number of things currently alive.
      */
     USize alive_count() const noexcept {
-        return m_load;
+        return m_alive_count;
     }
 
     /**
      * @brief Returns the number of things currently dead.
      */
     USize dead_count() const noexcept {
-        return MAX_THINGS - m_load;
+        return MAX_THINGS - m_alive_count;
     }
 
     /**
      * @brief Returns the number of things in the free list.
      */
     USize free_count() const noexcept {
-        return m_next_free_count;
+        return m_free_count;
     }
 
     /**
-     * @brief Hands out a new thing from the pool.
-     * @note The returned thing is guaranteed to be alive.
-     *
-     * @warning Thread-unsafe.
+     * @brief Return a new, fresh and non-nil thing.
      */
     Thing handout() noexcept {
-        FR_ASSERT(m_load < MAX_THINGS, "pool is full");
-        ThingArray &things = *m_thing_array;
-
-        if (m_next_free_count == 0) {
-            const ThingIdx idx = static_cast<ThingIdx>(m_load);
-            const Thing out(idx, 0);
-
-            things[idx] = out;
-            m_alive_bitset->one_bit(idx);
-
-            ++m_load;
-            return out;
-        }
-
-        const ThingIdx idx = m_next_free_idx;
-        Thing &slot = things[idx];
-
-        --m_next_free_count;
-        if (m_next_free_count == 0) {
-            m_next_free_idx = 0;
+        if (m_free_count == 0) {
+            return do_handout_from_back();
         } else {
-            m_next_free_idx = slot.idx();
+            return do_handout_from_free();
         }
-
-        slot.set_idx(idx);
-        slot.inc_gen();
-        m_alive_bitset->one_bit(idx);
-        ++m_load;
-
-        return slot;
     }
 
     /**
-     * @brief Returns the thing stored at a slot index
-     *
-     * @param idx The index of the thing to get.
-     * @pre idx < MAX_THINGS.
-     *
-     * @note If the thing is dead, returns a nil thing.
+     * @brief Kills an alive thing.
+     * @note If thing is nil, does nothing, nil thing is immortal.
+     * @warning Caller is responsible for checking if a thing is alive or not.
      */
-    Thing get_by_idx(ThingIdx idx) const noexcept {
-        FR_ASSERT(idx < MAX_THINGS, "idx out of bounds");
-
-        if (!check_by_idx(idx)) {
-            return Thing::nil();
-        }
-
-        return get_by_idx_unchecked(idx);
-    }
-
-    /**
-     * @brief Returns the thing stored at a slot index
-     *
-     * @param idx The index of the thing to get.
-     * @pre idx < MAX_THINGS.
-     *
-     * @warning Does not check whether the thing is alive or dead, may return garbage if the thing
-     * is in the free list, may result in undefined behavior.
-     */
-    Thing get_by_idx_unchecked(ThingIdx idx) const noexcept {
-        FR_ASSERT(idx < MAX_THINGS, "idx out of bounds");
-        return (*m_thing_array)[idx];
-    }
-
-    /**
-     * @brief Returns whether a thing is alive.
-     * @note If the thing is nil, returns false.
-     */
-    bool check(Thing thing) const noexcept {
-        if (!m_alive_bitset->check_bit(thing.idx())) [[unlikely]] {
-            return false;
-        }
-
-        return get_by_idx_unchecked(thing.idx()).gen() == thing.gen();
-    }
-
-    /**
-     * @brief Returns whether a thing is alive by its index. Does not check the generation.
-     * @note If the thing is nil, returns false.
-     * @param idx The index of the thing to check.
-     * @pre idx < MAX_THINGS.
-     * @return True if the thing is alive, false otherwise.
-     */
-    bool check_by_idx(ThingIdx idx) const noexcept {
-        FR_ASSERT(idx < MAX_THINGS, "idx out of bounds");
-        return m_alive_bitset->check_bit(idx);
-    }
-
-    /**
-     * @brief Destroys a thing if it is valid.
-     * @note If the thing is dead, does nothing.
-     *
-     * @warning Thread-unsafe.
-     */
-    void destroy(Thing thing) noexcept {
-        if (!check(thing)) {
+    void kill_alive(Thing thing) noexcept {
+        if (thing.is_nil()) [[unlikely]] {
             return;
         }
 
-        ThingArray &storage = *m_thing_array;
-        const ThingIdx idx = thing.idx();
+        do_kill_unchecked(thing);
+    }
 
-        m_alive_bitset->zero_bit(idx);
-        storage[idx] = Thing(m_next_free_idx, thing.gen());
+    /**
+     * @brief Kills a thing.
+     * @note If thing is nil, does nothing, nil thing is immortal.
+     * @note If thing is not alive, does nothing.
+     */
+    void kill(Thing thing) noexcept {
+        if (thing.is_nil()) [[unlikely]] {
+            return;
+        }
 
-        m_next_free_idx = idx;
-        ++m_next_free_count;
-        --m_load;
+        if (!check(thing)) [[unlikely]] {
+            return;
+        }
+
+        do_kill_unchecked(thing);
+    }
+
+    /**
+     * @brief Checks if a thing is alive or note.
+     * @note The nil thing is alive and immortal.
+     */
+    bool check(Thing thing) const noexcept {
+        auto &things = *m_things;
+        return thing.gen() == things[thing.idx()].gen();
     }
 
 private:
-    static constexpr USize m_storage_align = alignof(ThingArray);
-    static constexpr USize m_alive_align = alignof(AliveBitset);
-    static constexpr USize m_block_align =
-        m_storage_align > m_alive_align ? m_storage_align : m_alive_align;
-    static constexpr USize m_alive_offset =
-        (sizeof(ThingArray) + m_alive_align - 1) & ~(m_alive_align - 1);
-    static constexpr USize m_block_size = m_alive_offset + sizeof(AliveBitset);
+    Thing do_handout_from_back() noexcept {
+        auto &things = *m_things;
+        things[m_alive_count] = Thing(m_alive_count, 0);
 
-    Alloc *m_alloc{get_ambient_ctx().alloc};
+        ++m_alive_count;
+        return things[m_alive_count - 1];
+    }
 
-    Byte *m_buffer{nullptr};
-    ThingArray *m_thing_array{nullptr};
-    AliveBitset *m_alive_bitset{nullptr};
+    Thing do_handout_from_free() noexcept {
+        auto &things = *m_things;
 
-    // This is initialized to 1 to signal nil thing at index 0.
-    USize m_load{1};
+        ThingIdx fresh_idx = m_free_next;
+        ThingGen fresh_gen = things[fresh_idx].gen();
+        ThingIdx next_idx = things[fresh_idx].idx();
 
-    ThingIdx m_next_free_idx{0};
-    USize m_next_free_count{0};
+        m_free_next = next_idx;
+        --m_free_count;
+
+        ++m_alive_count;
+        return Thing(fresh_idx, fresh_gen);
+    }
+
+    void do_kill_unchecked(Thing thing) noexcept {
+        auto &things = *m_things;
+        auto &it = things[thing.idx()];
+
+        it.set_idx(m_free_next);
+        it.inc_gen();
+
+        m_free_next = thing.idx();
+        ++m_free_count;
+    }
+
+    Alloc *m_alloc{nullptr};
+    Array<Thing, MAX_THINGS> *m_things{nullptr};
+    USize m_alive_count{1};
+    USize m_free_count{0};
+    USize m_free_next{0};
 };
-
 } // namespace fr::impl

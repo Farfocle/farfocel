@@ -5,7 +5,7 @@
 
 namespace fr {
 
-TEST_CASE("ThingPool - nil thing") {
+TEST_CASE("ThingPool - nil thing contract") {
     impl::ThingPool pool;
 
     CHECK(pool.alive_count() == 1);
@@ -27,8 +27,6 @@ TEST_CASE("ThingPool - handout and check") {
 
     CHECK(pool.check(a));
     CHECK(pool.check(b));
-    CHECK(pool.get_by_idx_unchecked(a.idx()) == a);
-    CHECK(pool.get_by_idx_unchecked(b.idx()) == b);
 }
 
 TEST_CASE("ThingPool - remove and reuse slot") {
@@ -37,7 +35,7 @@ TEST_CASE("ThingPool - remove and reuse slot") {
     Thing a = pool.handout();
     Thing b = pool.handout();
 
-    pool.destroy(a);
+    pool.kill(a);
 
     CHECK(!pool.check(a));
     CHECK(pool.check(b));
@@ -46,6 +44,7 @@ TEST_CASE("ThingPool - remove and reuse slot") {
 
     CHECK(c.idx() == a.idx());
     CHECK(c.gen() != a.gen());
+
     CHECK(!pool.check(a));
     CHECK(pool.check(c));
 }

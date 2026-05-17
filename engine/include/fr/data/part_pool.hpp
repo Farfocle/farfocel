@@ -24,9 +24,7 @@ namespace fr::impl {
  * @brief PartPool is responsible for storing and managing parts.
  *
  * @tparam T The type of part to store.
- *
  * @pre T must be default-constructible or nillable.
- * @warning Mutations are thread-unsafe.
  */
 template <typename T>
     requires std::is_default_constructible_v<T> || IsNillable<T>
@@ -63,11 +61,8 @@ public:
     ~PartPool() noexcept = default;
 
     /**
-     * @brief Reserve space for a given number of parts.
-     * @note Reserves space for parts array and part -> thing lookup array.
-     *
+     * @brief Reserves space for parts array and part -> thing lookup array.
      * @param size The number of parts to reserve.
-     * @warning Thread-unsafe.
      */
     void reserve_parts(USize size) noexcept {
         FR_ASSERT(size <= MAX_THINGS, "size exceeds ThingIdx limit");
@@ -77,11 +72,8 @@ public:
     }
 
     /**
-     * @brief Reserve space for a given number of lookup indices.
-     * @note Reserves space for part -> thing lookup array.
-     *
+     * @brief Reserves space for part -> thing lookup array.
      * @param size The number of indices to reserve.
-     * @warning Thread-unsafe.
      */
     void reserve_lookup(USize size) noexcept {
         FR_ASSERT(size <= MAX_THINGS, "size exceeds ThingIdx limit");
@@ -89,93 +81,75 @@ public:
     }
 
     /**
-     * @brief Get the number of parts in the pool.
-     *
-     * @return The number of parts.
-     * @note Includes the stub at index 0.
+     * @brief Get the number of parts in the pool including the stub.
      */
     USize part_count() const noexcept {
         return m_parts.size();
     }
 
     /**
-     * @brief Returns a slice of all parts.
-     * @note Includes the stub at index 0.
+     * @brief Returns a slice of parts including the stub.
      */
     Slice<const T> part_slice_with_stub() const noexcept {
         return m_parts.slice();
     }
 
     /**
-     * @brief Returns a slice of all parts.
-     * @note Excludes the stub at index 0.
+     * @brief Returns a slice of parts excluding the stub.
      */
     Slice<const T> part_slice() const noexcept {
         return m_parts.slice_from(1);
     }
 
     /**
-     * @brief Returns a slice mapping thing indices to part indices.
-     * @note Includes the mapping from the nil thing to the stub.
+     * @brief Returns a slice mapping thing indices to part indices; includes the stub mapping.
      */
     Slice<const ThingIdx> thing_to_part_slice_with_stub() const noexcept {
         return m_thing_to_part.slice();
     }
 
     /**
-     * @brief Returns a slice mapping thing indices to part indices.
-     * @note Excludes the mapping from the nil thing to the stub.
+     * @brief Returns a slice mapping thing indices to part indices; excludes the stub mapping.
      */
     Slice<const ThingIdx> thing_to_part_slice() const noexcept {
         return m_thing_to_part.slice_from(1);
     }
 
     /**
-     * @brief Returns a slice mapping part indices to thing indices.
-     * @note Includes the mapping from the stub to the nil thing.
+     * @brief Returns a slice mapping part indices to thing indices; includes the stub mapping.
      */
     Slice<const ThingIdx> part_to_thing_slice_with_stub() const noexcept {
         return m_part_to_thing.slice();
     }
 
     /**
-     * @brief Returns a slice mapping part indices to thing indices.
-     * @note Excludes the mapping from the stub to the nil thing.
+     * @brief Returns a slice mapping part indices to thing indices; excludes the stub mapping.
      */
     Slice<const ThingIdx> part_to_thing_slice() const noexcept {
         return m_part_to_thing.slice_from(1);
     }
 
     /**
-     * @brief Returns a pointer to the stub.
+     * @brief Returns a reference to the stub.
      */
-    T *get_stub() noexcept {
+    T &get_stub() noexcept {
         return &m_parts[0];
     }
 
     /**
-     * @brief Returns a pointer to the part associated with a given thing.
-     * @note If thing is nil, returns a pointer to the stub.
-     * @warning Caller must ensure the thing is alive and has the pool's part attached.
+     * @brief Returns a pointer to the part owned by the thing.
+     * @note If thing is nil, returns a reference to the stub.
+     * @warning Caller must ensure the thing is alive and DOES own part T.
      */
-    T* get_unchecked(Thing thing) noexcept {
+    T *get_unchecked(Thing thing) noexcept {
         FR_ASSERT(thing.idx() < m_thing_to_part.size(), "index out of bounds");
         return &m_parts[m_thing_to_part[thing.idx()]];
     }
 
     /**
-     * @brief Emplace a part at a given index.
-     *
-     * @tparam Args The types of the arguments to forward.
-     * @param thing The thing.
-     * @param args The arguments to forward to the emplace constructor.
-     *
+     * @brief Emplace a part to a thing.
      * @return A reference to the emplaced part.
-     *
-     * @warning Caller must ensure idx is unique, otherwise behavior is undefined.
-     * @warning Caller must ensure there is no existing part of this type attached to the thing,
-     * otherwise behavior is undefined.
-     * @warning Thread-unsafe.
+     * @warning Caller must ensure the thing is alive and DOES NOT own part T.
      */
     template <typename... Args>
     T &emplace_unchecked(Thing thing, Args &&...args) noexcept {
@@ -193,53 +167,34 @@ public:
     }
 
     /**
-     * @brief Insert a part at a given index.
-     *
-     * @param thing The thing.
-     * @param part The part to insert.
+     * @brief Insert a part to a thing.
      * @return A reference to the inserted part.
-     *
-     * @warning Caller must ensure idx is unique, otherwise behavior is undefined.
-     * @warning Caller must ensure there is no existing part of this type attached to the thing,
-     * otherwise behavior is undefined.
-     * @warning Thread-unsafe.
+     * @warning Caller must ensure the thing is alive and DOES NOT own part T.
      */
     T &insert_unchecked(Thing thing, T &&part) noexcept {
         return emplace_unchecked(thing, std::forward<T>(part));
     }
 
     /**
-     * @brief Insert a part at a given index.
-     *
-     * @param thing The thing.
-     * @param part The part to insert.
+     * @brief Insert a part to a thing.
      * @return A reference to the inserted part.
-     *
-     * @warning Caller must ensure idx is unique, otherwise behavior is undefined.
-     * @warning Caller must ensure there is no existing part of this type attached to the thing,
-     * otherwise behavior is undefined.
-     * @warning Thread-unsafe.
+     * @warning Caller must ensure the thing is alive and DOES NOT own part T.
      */
     T &insert_unchecked(Thing thing, const T &part) noexcept {
         return emplace_unchecked(thing, part);
     }
 
     /**
-     * @brief Destroy a part attached to a given thing.
-     *
-     * @param thing The thing to destroy the part of.
-     *
-     * @note If idx is 0, does nothing.
-     * @warning Caller must ensure idx refers to a live part, otherwise behavior is undefined.
-     * @warning Caller must ensure there is an existing part of this type attached to the thing,
-     * otherwise behavior is undefined.
-     * @warning Thread-unsafe.
+     * @brief Destroy a part owned by a thing.
+     * @note If thing is nil, does nothing.
+     * @warning Caller must ensure the thing is alive and DOES own part T.
      */
     void destroy(Thing thing) noexcept {
-        ThingIdx idx = thing.idx();
-        if (idx == 0) {
+        if (thing.is_nil()) [[unlikely]] {
             return;
         }
+
+        ThingIdx idx = thing.idx();
 
         FR_ASSERT(idx < m_thing_to_part.size(), "index out of bounds");
         FR_ASSERT(m_parts.size() > 0, "remove on empty pool");

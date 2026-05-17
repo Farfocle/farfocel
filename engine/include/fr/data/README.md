@@ -15,11 +15,12 @@ is to be destroyed and another created it takes the `idx` of the old thing and
 increments `gen`. You may be interested what the minus one is in `2^20 - 1`.
 There is such a thing as a `nil` thing which is represented by all bits set to
 zero. `nil` is a special value - valid and safe to use but practically useless
-and empty. The nil thing is immortal - always alive and never freed. You can always use the nil thing to get data from the storage and the
-storage will return a `Stub` - a default value that is (again) valid and safe to
-use but practically useless and empty. Operations on `nil` can be for all
-practical purposes considered a **no-op**. Because of how the `ThingPool` is
-structured, there will never be a thing with `idx = 0` and non-zero `gen`.
+and empty. The nil thing is immortal - always alive and never freed. You can
+always use the nil thing to get data from the storage and the storage will
+return a `Stub` - a default value that is (again) valid and safe to use but
+practically useless and empty. Operations on `nil` can be for all practical
+purposes considered a **no-op**. Because of how the `ThingPool` is structured,
+there will never be a thing with `idx = 0` and non-zero `gen`.
 
 ## Implementation Details
 
