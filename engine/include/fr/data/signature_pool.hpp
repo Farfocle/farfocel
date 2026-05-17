@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <memory>
+#include <cstring>
 
 #include "fr/core/alloc.hpp"
 #include "fr/core/array.hpp"
@@ -20,18 +20,26 @@
 namespace fr::impl {
 class SignaturePool {
 public:
-    using SignatureArray = Array<Signature, MAX_THINGS>;
+    using Storage = Array<Signature, MAX_THINGS>;
 
-    explicit SignaturePool(Alloc *alloc = get_ambient_ctx().alloc) noexcept
-        : m_alloc(alloc) {
-        FR_ASSERT(alloc, "allocator must be non-null");
-        void *mem = m_alloc->allocate(sizeof(SignatureArray), alignof(SignatureArray));
-        m_signatures = std::construct_at(static_cast<SignatureArray *>(mem));
+    SignaturePool() noexcept
+        : SignaturePool(get_ambient_ctx().alloc) {
+    }
+
+    explicit SignaturePool(Alloc *alloc) noexcept {
+        m_alloc = alloc;
+
+        void *raw = m_alloc->allocate(sizeof(Storage), alignof(Storage));
+        m_signatures = static_cast<Storage *>(raw);
+
+        // Uses std::memset instead of mem::zero_init_range because the bitset uses 1 bit per thing
+        // which is probably not aligned properly.
+        std::memset(raw, 0, sizeof(Storage));
     }
 
     ~SignaturePool() noexcept {
-        std::destroy_at(m_signatures);
-        m_alloc->deallocate(m_signatures, sizeof(SignatureArray), alignof(SignatureArray));
+        // @safety Bitset is trivially destructible.
+        m_alloc->deallocate(m_signatures, sizeof(Storage), alignof(Storage));
     }
 
     SignaturePool(const SignaturePool &) = delete;
@@ -89,6 +97,6 @@ public:
 
 private:
     Alloc *m_alloc{get_ambient_ctx().alloc};
-    SignatureArray *m_signatures{nullptr};
+    Storage *m_signatures{nullptr};
 };
 } // namespace fr::impl

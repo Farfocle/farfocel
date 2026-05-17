@@ -11,6 +11,7 @@
 #include "fr/core/alloc.hpp"
 #include "fr/core/array.hpp"
 #include "fr/core/ctx.hpp"
+#include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/thing.hpp"
 
@@ -18,19 +19,27 @@ namespace fr::impl {
 class ThingPool {
 
 public:
+
     ThingPool() noexcept
         : ThingPool(get_ambient_ctx().alloc) {
     }
 
     explicit ThingPool(Alloc *alloc) noexcept {
+        using Things = Array<Thing, MAX_THINGS>;
+
         m_alloc = alloc;
-        m_things = static_cast<Array<Thing, MAX_THINGS> *>(
-            m_alloc->allocate(sizeof(Array<Thing, MAX_THINGS>), alignof(Array<Thing, MAX_THINGS>)));
+
+        m_things = static_cast<Things *>(
+            m_alloc->allocate(sizeof(Things), alignof(Things)));
+
+        mem::zero_init_range(m_things, m_things->size());
     }
 
     ~ThingPool() noexcept {
-        m_alloc->deallocate(m_things, sizeof(Array<Thing, MAX_THINGS>),
-                            alignof(Array<Thing, MAX_THINGS>));
+        using Things = Array<Thing, MAX_THINGS>;
+
+        m_alloc->deallocate(m_things, sizeof(Things),
+                            alignof(Things));
     }
 
     ThingPool(const ThingPool &) = delete;

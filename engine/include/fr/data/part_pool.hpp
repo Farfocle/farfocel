@@ -14,37 +14,26 @@
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/macros.hpp"
-#include "fr/core/nil.hpp"
 #include "fr/core/slice.hpp"
 #include "fr/data/thing.hpp"
 
 namespace fr::impl {
 
-/**
- * @brief PartPool is responsible for storing and managing parts.
- *
- * @tparam T The type of part to store.
- * @pre T must be default-constructible or nillable.
- */
 template <typename T>
-    requires std::is_default_constructible_v<T> || IsNillable<T>
+    requires std::is_default_constructible_v<T>
 class PartPool {
 public:
     PartPool() noexcept
         : PartPool(get_ambient_ctx().alloc) {
     }
 
-    explicit PartPool(Alloc *alloc) noexcept
-        : m_alloc(alloc) {
+    explicit PartPool(Alloc *alloc) noexcept {
+        m_alloc = alloc;
         m_parts = DynamicArray<T>::with_alloc(alloc);
         m_thing_to_part = DynamicArray<ThingIdx>::with_alloc(alloc);
         m_part_to_thing = DynamicArray<ThingIdx>::with_alloc(alloc);
 
-        if constexpr (std::is_default_constructible_v<T>) {
-            m_parts.push_back(T());
-        } else {
-            m_parts.push_back(call_nil<T>());
-        }
+        m_parts.push_back(T());
 
         // Push the stub mapping to nil thing.
         m_thing_to_part.push_back(0);
@@ -66,7 +55,6 @@ public:
      */
     void reserve_parts(USize size) noexcept {
         FR_ASSERT(size <= MAX_THINGS, "size exceeds ThingIdx limit");
-
         m_parts.reserve(size);
         m_part_to_thing.reserve(size);
     }
@@ -199,19 +187,19 @@ public:
         FR_ASSERT(idx < m_thing_to_part.size(), "index out of bounds");
         FR_ASSERT(m_parts.size() > 0, "remove on empty pool");
 
-        ThingIdx rem_part_idx = m_thing_to_part[idx];
-        ThingIdx rem_thing_idx = idx;
+        ThingIdx rem_part = m_thing_to_part[idx];
+        ThingIdx rem_thing = idx;
 
-        ThingIdx swap_part_idx = m_parts.size() - 1;
-        ThingIdx swap_thing_idx = m_part_to_thing[swap_part_idx];
+        ThingIdx swap_part = m_parts.size() - 1;
+        ThingIdx swap_thing = m_part_to_thing[swap_part];
 
-        if (rem_part_idx != swap_part_idx) {
-            m_parts[rem_part_idx] = std::move(m_parts[swap_part_idx]);
-            m_thing_to_part[swap_thing_idx] = rem_part_idx;
-            m_part_to_thing[rem_part_idx] = swap_thing_idx;
+        if (rem_part != swap_part) {
+            m_parts[rem_part] = std::move(m_parts[swap_part]);
+            m_thing_to_part[swap_thing] = rem_part;
+            m_part_to_thing[rem_part] = swap_thing;
         }
 
-        m_thing_to_part[rem_thing_idx] = 0;
+        m_thing_to_part[rem_thing] = 0;
         m_part_to_thing.pop_back();
         m_parts.pop_back();
     }
