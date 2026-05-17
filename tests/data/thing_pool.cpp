@@ -5,6 +5,14 @@
 
 namespace fr {
 
+TEST_CASE("ThingPool - nil thing") {
+    impl::ThingPool pool;
+
+    CHECK(pool.alive_count() == 1);
+    CHECK(pool.dead_count() == MAX_THINGS - 1);
+    CHECK(pool.free_count() == 0);
+}
+
 TEST_CASE("ThingPool - handout and check") {
     impl::ThingPool pool;
 

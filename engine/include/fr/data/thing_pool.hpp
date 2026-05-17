@@ -34,6 +34,7 @@ public:
             std::construct_at(reinterpret_cast<AliveBitset *>(m_buffer + m_alive_offset));
 
         m_alive_bitset->zero_all();
+        m_alive_bitset->one_bit(0);
     }
 
     ~ThingPool() noexcept {
@@ -65,14 +66,14 @@ public:
      * @brief Returns the number of things currently alive.
      */
     USize alive_count() const noexcept {
-        return m_load - 1;
+        return m_load;
     }
 
     /**
      * @brief Returns the number of things currently dead.
      */
     USize dead_count() const noexcept {
-        return MAX_THINGS - m_load + 1;
+        return MAX_THINGS - m_load;
     }
 
     /**
