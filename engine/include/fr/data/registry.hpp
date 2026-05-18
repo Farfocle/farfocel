@@ -30,12 +30,9 @@ class Registry {
     friend class fr::Query;
 
 public:
-    // ---------------------------
-    // Constructors and Destructor
-    // ---------------------------
-
     using AnyPartPool = InlineAny<sizeof(PartPool<Byte>), alignof(PartPool<Byte>)>;
 
+    // --------------------------------------------- Constructors and Destructor
     Registry() noexcept
         : m_alloc(get_ambient_ctx().alloc) {};
 
@@ -49,9 +46,7 @@ public:
     Registry &operator=(const Registry &) = delete;
     Registry &operator=(Registry &&) = delete;
 
-    // -----------------------
-    // Internal Storage Access
-    // -----------------------
+    // ------------------------------------------------- Internal Storage Access
 
     /**
      * @brief Returns the allocator used by this registry.
@@ -79,13 +74,11 @@ public:
      * @note Returns nullptr if the pool does not exist.
      */
     template <typename T>
-    const PartPool<T> *part_pool_of() const noexcept {
-        return do_part_pool_of_ptr<T>();
+    const PartPool<T> *part_pool() const noexcept {
+        return do_part_pool_ptr<T>();
     }
 
-    // ----------------
-    // Thing Operations
-    // ----------------
+    // -------------------------------------------------------- Thing Operations
 
     /**
      * @brief Returns a fresh, non-nil thing.
@@ -101,7 +94,7 @@ public:
      */
     void kill(Thing thing) noexcept {
         m_thing_pool.kill(thing);
-        m_signature_pool.reset(thing);
+        m_signature_pool.destroy_all(thing);
     }
 
     /**
@@ -124,9 +117,7 @@ public:
         return !is_alive(thing);
     }
 
-    // ---------------
-    // Part Operations
-    // ---------------
+    // --------------------------------------------------------- Part Operations
 
     /**
      * @brief Checks if a part pool of type T exists.
@@ -188,7 +179,7 @@ public:
             return nullptr;
         }
 
-        m_signature_pool.attach(thing, tidx);
+        m_signature_pool.insert(thing, tidx);
         return &pool.emplace_unchecked(thing, std::forward<Args>(args)...);
     }
 
@@ -232,7 +223,7 @@ public:
         FR_ASSERT(!do_check_part(thing, tidx),
                   "cannot emplace part T if a thing already owns a part T");
 
-        m_signature_pool.attach(thing, tidx);
+        m_signature_pool.insert(thing, tidx);
         return pool.emplace_unchecked(thing, std::forward<Args>(args)...);
     }
 
@@ -275,7 +266,7 @@ public:
         }
 
         PartPool<T> &pool = m_part_pools[tidx].cast_ref<PartPool<T>>();
-        m_signature_pool.detach(thing, tidx);
+        m_signature_pool.destroy(thing, tidx);
         pool.destroy_unchecked(thing);
 
         return true;
@@ -300,10 +291,38 @@ public:
                   "cannot destroy part T if the thing does not own this part");
 
         PartPool<T> &pool = m_part_pools[tidx].cast_ref<PartPool<T>>();
-        m_signature_pool.detach(thing, tidx);
+        m_signature_pool.destroy(thing, tidx);
         pool.destroy_unchecked(thing);
 
         return true;
+    }
+
+    /**
+     * @brief Tries to get the part owned by the thing.
+     * @note Returns nullptr if the pool is missing, the thing is dead, or the thing does not own T.
+     * @note Returns the stub pointer for nil thing if the pool exists.
+     */
+    template <typename T>
+    T *try_get(Thing thing) noexcept {
+        TypeIdx tidx = do_type_idx_of<T>();
+        if (do_check_part_pool(tidx)) [[unlikely]] {
+            return nullptr;
+        }
+
+        PartPool<T> &pool = m_part_pools[tidx].cast_ref<PartPool<T>>();
+        if (do_check_thing_nil(thing)) [[unlikely]] {
+            return &pool.get_stub();
+        }
+
+        if (!do_check_thing_alive(thing)) [[unlikely]] {
+            return nullptr;
+        }
+
+        if (!do_check_part(thing, tidx)) [[unlikely]] {
+            return nullptr;
+        }
+
+        return pool.get_unchecked(thing);
     }
 
     /**
@@ -325,11 +344,13 @@ public:
     template <typename... Include>
     auto query() noexcept {
         Signature include;
-        (include.attach(do_type_idx_of<Include>()), ...);
+        (include.insert(do_type_idx_of<Include>()), ...);
         return fr::Query<Include...>(this, include);
     }
 
 private:
+    // -------------------------------------------------------- Internal Helpers
+
     /**
      * @brief Returns the signature of a thing by its index.
      */
@@ -376,7 +397,7 @@ private:
     }
 
     template <typename T>
-    const PartPool<T> *do_part_pool_of_ptr() const noexcept {
+    const PartPool<T> *do_part_pool_ptr() const noexcept {
         TypeIdx tidx = do_type_idx_of<T>();
         if (do_check_part_pool(tidx)) [[unlikely]] {
             return nullptr;
@@ -386,13 +407,15 @@ private:
     }
 
     bool do_check_part(Thing thing, TypeIdx tidx) const noexcept {
-        return m_signature_pool.check(thing, tidx);
+        return m_signature_pool.owns(thing, tidx);
     }
 
     template <typename T>
     void do_create_part_pool(TypeIdx tidx) noexcept {
         m_part_pools[tidx].template emplace<PartPool<T>>(m_alloc);
     }
+
+    // -------------------------------------------------------- Member Variables
 
     Alloc *m_alloc{nullptr};
     Array<AnyPartPool, MAX_PARTS> m_part_pools{};

@@ -2,7 +2,7 @@
  * @file part.hpp
  * @author Kiju
  *
- * @brief Archetype, some part specific constants.
+ * @brief MAX_PARTS. Interface for a bitset representation of parts owned by a thing.
  */
 
 #pragma once
@@ -15,8 +15,7 @@ namespace fr {
 constexpr USize MAX_PARTS = 128;
 
 /**
- * @brief Represents the parts a thing is made out of. Each bit signals if a specific Part is
- * attatched to the Thing, index to these bits are TypeIdx of the Parts.
+ * @brief Interface for a bitset representation of parts owned by a thing.
  */
 class Signature {
 public:
@@ -30,9 +29,9 @@ public:
     }
 
     /**
-     * @brief Reset all bits (no parts attached).
+     * @brief Destroy all parts - clear all bits.
      */
-    void clear() noexcept {
+    void destroy_all() noexcept {
         m_bits.zero_all();
     }
 
@@ -40,7 +39,7 @@ public:
      * @brief Attach a part type by its TypeIdx.
      * @param idx Type index of the part.
      */
-    void attach(TypeIdx tidx) noexcept {
+    void insert(TypeIdx tidx) noexcept {
         FR_ASSERT(tidx < MAX_PARTS, "type idx out of bounds");
         m_bits.one_bit(static_cast<USize>(tidx));
     }
@@ -49,7 +48,7 @@ public:
      * @brief Detach a part type by its TypeIdx.
      * @param idx Type index of the part.
      */
-    void detach(TypeIdx tidx) noexcept {
+    void destroy(TypeIdx tidx) noexcept {
         FR_ASSERT(tidx < MAX_PARTS, "type idx out of bounds");
         m_bits.zero_bit(static_cast<USize>(tidx));
     }
@@ -59,7 +58,7 @@ public:
      * @param idx Type index of the part.
      * @return True if attached, false otherwise.
      */
-    bool check(TypeIdx tidx) const noexcept {
+    bool owns(TypeIdx tidx) const noexcept {
         FR_ASSERT(tidx < MAX_PARTS, "type idx out of bounds");
         return m_bits.check_bit(static_cast<USize>(tidx));
     }

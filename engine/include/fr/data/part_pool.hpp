@@ -2,7 +2,7 @@
  * @file part_pool.hpp
  * @author Kiju
  *
- * @brief PartPool is responsible for storing and managing parts.
+ * @brief PartPool is a data structure responsible for storing and managing parts.
  */
 
 #pragma once
@@ -19,6 +19,14 @@
 
 namespace fr::impl {
 
+/**
+ * @brief PartPool is a data structure responsible for storing and managing parts.
+ * @tparam T The type of part to store.
+ * @pre T must be default constructible (stub).
+ *
+ * @note Implementation: PartPool consists of three dynamic arrays: m_parts, m_thing_to_part, and
+ * m_part_to_thing.
+ */
 template <typename T>
     requires std::is_default_constructible_v<T>
 class PartPool {
@@ -124,7 +132,6 @@ public:
         return m_parts[0];
     }
 
-
     /**
      * @brief Returns a pointer to the part owned by the thing.
      * @note If thing is nil, returns a reference to the stub.
@@ -206,7 +213,9 @@ public:
     }
 
 private:
+    // -------------------------------------------------------- Member Variables
     Alloc *m_alloc{get_ambient_ctx().alloc};
+
     DynamicArray<T> m_parts{};
 
     // A sparse index array for looking the part index by the original thing index.

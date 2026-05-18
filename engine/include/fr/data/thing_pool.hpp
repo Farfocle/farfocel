@@ -20,6 +20,8 @@ namespace fr::impl {
 class ThingPool {
 
 public:
+    // -------------------------------------------- Constructors and Destructors
+
     ThingPool() noexcept
         : ThingPool(get_ambient_ctx().alloc) {
     }
@@ -46,6 +48,8 @@ public:
     ThingPool(ThingPool &&) = delete;
     ThingPool &operator=(const ThingPool &) = delete;
     ThingPool &operator=(ThingPool &&) = delete;
+
+    // ----------------------------------------------------------------- Methods
 
     /**
      * @brief Returns the allocator used by this pool.
@@ -133,8 +137,10 @@ public:
     }
 
 private:
+    // -------------------------------------------------------- Internal Helpers
     Thing do_handout_from_back() noexcept {
         auto &things = *m_things;
+
         things[m_alive_count] = Thing(m_alive_count, 0);
 
         ++m_alive_count;
@@ -166,6 +172,7 @@ private:
         ++m_free_count;
     }
 
+    // -------------------------------------------------------- Member Variables
     Alloc *m_alloc{nullptr};
     Array<Thing, MAX_THINGS> *m_things{nullptr};
     USize m_alive_count{1};

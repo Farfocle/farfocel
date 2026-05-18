@@ -37,7 +37,7 @@ TEST_CASE("Registry - part pool existence and nil behavior") {
     CHECK(nil_pos != nullptr);
     CHECK(reg.check_part_pool<Position>());
     CHECK(reg.owns<Position>(Thing::nil()));
-    CHECK(reg.part_pool_of<Position>() != nullptr);
+    CHECK(reg.part_pool<Position>() != nullptr);
 }
 
 TEST_CASE("Registry - attach, destroy, and dead thing") {

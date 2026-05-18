@@ -2,7 +2,7 @@
  * @file query.hpp
  * @author Kiju
  *
- * @brief Query system for the hidden sparse set ECS.
+ * @brief Simple query system for the hidden sparse set ECS.
  */
 
 #pragma once
@@ -16,31 +16,20 @@
 namespace fr {
 
 /**
- * @brief Query provides a way to iterate over parts.
+ * @brief Simple query system for the hidden sparse set ECS.
  * @tparam Include List of part types that a thing must own.
  */
 template <typename... Include>
 class Query {
 public:
+    // ------------------------------------------------------------- Constructor
     Query(impl::Registry *registry, Signature include_mask) noexcept
         : m_registry(registry),
           m_include_mask(include_mask) {
         m_iterator_pool_idx = do_find_smallest_pool();
     }
 
-    /**
-     * @brief Adds exclusion filters to the query.
-     * @tparam Exclude List of part types that a thing must NOT own.
-     */
-    template <typename... Exclude>
-    Query &without() noexcept {
-        (m_exclude_mask.attach(impl::DataTypeIdxGen::gen<Exclude>()), ...);
-        return *this;
-    }
-
-    /**
-     * @brief Iterator for matching things.
-     */
+    // ---------------------------------------------------------------- Iterator
     struct Iter {
         using iterator_category = std::forward_iterator_tag;
         using value_type = Tuple<Include &...>;
@@ -108,6 +97,17 @@ public:
         USize m_idx;
     };
 
+    // ----------------------------------------------------------------- Methods
+    /**
+     * @brief Adds exclusion filters to the query.
+     * @tparam Exclude List of part types that a thing must NOT own.
+     */
+    template <typename... Exclude>
+    Query &without() noexcept {
+        (m_exclude_mask.insert(impl::DataTypeIdxGen::gen<Exclude>()), ...);
+        return *this;
+    }
+
     Iter begin() noexcept {
         Slice<const ThingIdx> things = m_registry->do_get_part_to_thing_slice(m_iterator_pool_idx);
         return Iter(m_registry, m_include_mask, m_exclude_mask, things, 1);
@@ -119,8 +119,10 @@ public:
     }
 
 private:
+    // -------------------------------------------------------- Internal Helpers
     TypeIdx do_find_smallest_pool() const noexcept {
         TypeIdx ids[] = {impl::DataTypeIdxGen::gen<Include>()...};
+
         TypeIdx smallest = ids[0];
         USize min_count = m_registry->do_get_part_count(smallest);
 
@@ -136,6 +138,7 @@ private:
         return smallest;
     }
 
+    // -------------------------------------------------------- Member Variables
     impl::Registry *m_registry;
     Signature m_include_mask{};
     Signature m_exclude_mask{};

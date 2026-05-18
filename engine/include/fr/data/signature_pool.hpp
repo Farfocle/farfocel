@@ -68,28 +68,30 @@ public:
         return *m_signatures;
     }
 
-    bool check(Thing thing, TypeIdx tidx) const noexcept {
+    bool owns(Thing thing, TypeIdx tidx) const noexcept {
         const Storage &signatures = *m_signatures;
-        return signatures[thing.idx()].check(tidx);
+        return signatures[thing.idx()].owns(tidx);
     }
 
-    void attach(Thing thing, TypeIdx tidx) noexcept {
+    void insert(Thing thing, TypeIdx tidx) noexcept {
         Storage &signatures = *m_signatures;
-        signatures[thing.idx()].attach(tidx);
+        signatures[thing.idx()].insert(tidx);
     }
 
-    void detach(Thing thing, TypeIdx tidx) noexcept {
+    void destroy(Thing thing, TypeIdx tidx) noexcept {
         Storage &signatures = *m_signatures;
-        signatures[thing.idx()].detach(tidx);
+        signatures[thing.idx()].destroy(tidx);
     }
 
-    void reset(Thing thing) noexcept {
+    void destroy_all(Thing thing) noexcept {
         Storage &signatures = *m_signatures;
-        signatures[thing.idx()].clear();
+        signatures[thing.idx()].destroy_all();
     }
 
 private:
+    // -------------------------------------------------------- Member Variables
     Alloc *m_alloc{get_ambient_ctx().alloc};
+
     Storage *m_signatures{nullptr};
 };
 } // namespace fr::impl

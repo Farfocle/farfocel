@@ -34,8 +34,9 @@ FR_STATIC_ASSERT(sizeof(ThingRaw) * 2 <= sizeof(ThingIdx) + sizeof(ThingGen),
  */
 struct Thing {
 public:
-    constexpr Thing() noexcept = default;
+    // ------------------------------------------------------------ Constructors
 
+    constexpr Thing() noexcept = default;
     explicit constexpr Thing(ThingIdx idx, ThingGen gen) noexcept {
         m_thing = (gen << THING_IDX_BITS) | idx;
     }
@@ -43,6 +44,8 @@ public:
     static constexpr Thing from_raw(ThingRaw raw) noexcept {
         return Thing(raw);
     }
+
+    // ----------------------------------------------------------------- Methods
 
     /**
      * @brief Returns the index part of the thing.
