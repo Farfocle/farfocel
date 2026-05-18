@@ -30,8 +30,34 @@ public:
 
     Mesh(const Mesh &) = delete;
     Mesh &operator=(const Mesh &) = delete;
-    Mesh(Mesh &&) noexcept = default;
-    Mesh &operator=(Mesh &&) noexcept = default;
+    Mesh(Mesh &&other) noexcept
+        : m_device(other.m_device),
+          m_vbo(other.m_vbo),
+          m_ibo(other.m_ibo),
+          m_submeshes(std::move(other.m_submeshes)) {
+        other.m_device = nullptr;
+        // sketchy
+        other.m_vbo = BufferHandle{};
+        other.m_ibo = BufferHandle{};
+    }
+    Mesh &operator=(Mesh &&other) noexcept {
+        if (this != other) {
+            if (m_vbo.is_valid() && m_device)
+                m_device->destroy_buffer(m_vbo);
+            if (m_ibo.is_valid() && m_device)
+                m_device->destroy_buffer(m_ibo);
+
+            m_device = other.m_device;
+            m_vbo = other.m_vbo;
+            m_ibo = other.m_ibo;
+            m_submeshes = std::move(other.m_submeshes);
+
+            other.m_device = nullptr;
+            other.m_vbo = BufferHandle{};
+            other.m_ibo = BufferHandle{};
+        }
+        return *this;
+    }
 
     // we will likely use gltf for model loading
     bool load(RenderDevice *device, StringView file_path);

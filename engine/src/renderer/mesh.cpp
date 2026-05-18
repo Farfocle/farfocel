@@ -19,7 +19,7 @@ bool Mesh::load(RenderDevice *device, StringView path) {
         return false;
     }
 
-    if (cgltf_load_buffers(&options, data, path.data()) != cgltf_result_success) {
+    if (cgltf_load_buffers(&options, data, fpath.data()) != cgltf_result_success) {
         // log
         cgltf_free(data);
         return false;
@@ -38,9 +38,12 @@ bool Mesh::load(RenderDevice *device, StringView path) {
             submesh.vertex_offset = static_cast<U32>(vertices.size());
             submesh.index_offset = static_cast<U32>(indices.size());
 
+            // IBO
             if (primitive.indices != nullptr) {
                 const cgltf_accessor *acc = primitive.indices;
                 submesh.index_count = static_cast<U32>(acc->count);
+
+                indices.reserve(indices.size() + submesh.index_count);
 
                 for (cgltf_size k = 0; k < acc->count; ++k) {
                     U32 index = static_cast<U32>(cgltf_accessor_read_index(acc, k));
@@ -48,6 +51,7 @@ bool Mesh::load(RenderDevice *device, StringView path) {
                 }
             }
 
+            // VERTEXes (VBO)
             U32 vertex_count = 0;
             const cgltf_accessor *pos_acc = nullptr;
             const cgltf_accessor *normal_acc = nullptr;
@@ -65,6 +69,9 @@ bool Mesh::load(RenderDevice *device, StringView path) {
 
             if (pos_acc) {
                 vertex_count = static_cast<U32>(pos_acc->count);
+
+                vertices.reserve(vertices.size() + vertex_count);
+
                 for (cgltf_size k = 0; k < vertex_count; ++k) {
                     Vertex ver{};
                     cgltf_accessor_read_float(pos_acc, k, &ver.position.x, 3);
@@ -83,7 +90,7 @@ bool Mesh::load(RenderDevice *device, StringView path) {
     Slice<const Byte> vertex_data(reinterpret_cast<const Byte *>(vertices.data()),
                                   vertices.size() * sizeof(Vertex));
     Slice<const Byte> index_data(reinterpret_cast<const Byte *>(indices.data()),
-                                 indices.size() * sizeof(Vertex));
+                                 indices.size() * sizeof(U32));
     m_vbo = m_device->create_buffer(vertex_data, false);
     m_ibo = m_device->create_buffer(index_data, false);
 
