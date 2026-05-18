@@ -1,12 +1,6 @@
-# 3rd party libraries used to make
-
-## Engine:
-
+# 3rd party libraries used to make Farfocel:
 - Doctest
 - glad
 - glm
 - SDL
-
-## Editor:
-
--
+- cgltf

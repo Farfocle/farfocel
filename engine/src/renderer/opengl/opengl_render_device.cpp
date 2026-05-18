@@ -160,7 +160,8 @@ private:
 
 class OpenGLRenderDevice : public RenderDevice {
 public:
-    OpenGLRenderDevice() {
+    explicit OpenGLRenderDevice(Alloc *alloc) noexcept
+        : m_alloc(alloc) {
         if (!gladLoadGL(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress))) {
             FR_ASSERT(false, "Couldn't initialize GLAD... that sucks");
         }
@@ -344,6 +345,7 @@ public:
 
             case CommandType::SetViewport: {
                 glViewport(0, 0, cmd.payload.viewport.width, cmd.payload.viewport.height);
+                break;
             }
 
             case CommandType::SetPipeline: {
@@ -394,10 +396,18 @@ public:
         }
     }
 
+    Alloc *get_allocator() const noexcept {
+        return m_alloc;
+    }
+
 private:
     U32 m_next_id{1};
     GLuint m_fallback_fbo{0};
 
+    Alloc *m_alloc{nullptr};
+
+    // this sucks... for now
+    // to-do: implement a generic slot map in core
     HashMap<U32, GLuint> m_buffers;
     HashMap<U32, GLuint> m_textures;
     HashMap<U32, GLuint> m_shaders;
@@ -406,10 +416,23 @@ private:
     OpenGLCommandBuffer m_runtime_cmd_buffer;
 };
 
-FR_API RenderDevice *create_opengl_render_device() noexcept {
-    Alloc *alloc = get_ambient_ctx().alloc;
+// we do this primarily to avoid having to include glad in any other part of the engine
+FR_API RenderDevice *create_opengl_render_device(Alloc *alloc) noexcept {
+    FR_ASSERT(alloc != nullptr, "RenderDevice requiers allocator");
     void *mem = alloc->allocate(sizeof(OpenGLRenderDevice), alignof(OpenGLRenderDevice));
-    return new (mem) OpenGLRenderDevice();
+    return new (mem) OpenGLRenderDevice(alloc);
+}
+
+FR_API void destroy_opengl_render_device(RenderDevice *device) noexcept {
+    if (!device)
+        return;
+
+    auto *gl_device = static_cast<OpenGLRenderDevice *>(device);
+
+    Alloc *alloc = gl_device->get_allocator();
+    gl_device->~OpenGLRenderDevice();
+
+    alloc->deallocate(gl_device, sizeof(OpenGLRenderDevice), alignof(OpenGLRenderDevice));
 }
 
 } // namespace fr
