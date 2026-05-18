@@ -12,8 +12,8 @@
 #include "fr/core/alloc.hpp"
 #include "fr/core/array.hpp"
 #include "fr/core/ctx.hpp"
-#include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
+#include "fr/core/typeidx.hpp"
 #include "fr/data/part.hpp"
 #include "fr/data/thing.hpp"
 
@@ -61,38 +61,24 @@ public:
         return MAX_THINGS;
     }
 
-    /**
-     * @brief Returns the signature by index.
-     * @pre idx < MAX_THINGS.
-     */
-    const Signature &get_by_idx(ThingIdx idx) const noexcept {
-        FR_ASSERT(idx < MAX_THINGS, "idx out of bounds");
-        return (*m_signatures)[idx];
+    bool check(Thing thing, TypeIdx tidx) const noexcept {
+        const Storage &signatures = *m_signatures;
+        return signatures[thing.idx()].check(tidx);
     }
 
-    /**
-     * @brief Returns the signature by index.
-     * @pre idx < MAX_THINGS.
-     * @warning Thread-unsafe. Caller must ensure no concurrent access.
-     */
-    Signature &get_mut_by_idx(ThingIdx idx) noexcept {
-        FR_ASSERT(idx < MAX_THINGS, "idx out of bounds");
-        return (*m_signatures)[idx];
+    void attach(Thing thing, TypeIdx tidx) noexcept {
+        Storage &signatures = *m_signatures;
+        signatures[thing.idx()].attach(tidx);
     }
 
-    /**
-     * @brief Returns the signature for a thing.
-     */
-    const Signature &get(Thing thing) const noexcept {
-        return get_by_idx(thing.idx());
+    void detach(Thing thing, TypeIdx tidx) noexcept {
+        Storage &signatures = *m_signatures;
+        signatures[thing.idx()].detach(tidx);
     }
 
-    /**
-     * @brief Returns the signature for a thing.
-     * @warning Thread-unsafe. Caller must ensure no concurrent access.
-     */
-    Signature &get_mut(Thing thing) noexcept {
-        return get_mut_by_idx(thing.idx());
+    void reset(Thing thing) noexcept {
+        Storage &signatures = *m_signatures;
+        signatures[thing.idx()].clear();
     }
 
 private:

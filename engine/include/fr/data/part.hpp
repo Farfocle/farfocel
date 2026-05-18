@@ -9,7 +9,7 @@
 
 #include "fr/core/bitset.hpp"
 #include "fr/core/macros.hpp"
-#include "fr/data/typeidx.hpp"
+#include "fr/core/typeidx.hpp"
 
 namespace fr {
 constexpr USize MAX_PARTS = 128;
@@ -20,12 +20,12 @@ constexpr USize MAX_PARTS = 128;
  */
 class Signature {
 public:
-    using BitsetType = Bitset<MAX_PARTS>;
+    using Storage = Bitset<MAX_PARTS>;
 
     /**
      * @brief Returns the underlying bitset.
      */
-    const BitsetType &bitset() const noexcept {
+    const Storage &bitset() const noexcept {
         return m_bits;
     }
 
@@ -40,19 +40,18 @@ public:
      * @brief Attach a part type by its TypeIdx.
      * @param idx Type index of the part.
      */
-    void attach_part_by_idx(TypeIdx idx) noexcept {
-        FR_ASSERT(idx < MAX_PARTS, "type idx out of bounds");
-        m_bits.one_bit(static_cast<USize>(idx));
+    void attach(TypeIdx tidx) noexcept {
+        FR_ASSERT(tidx < MAX_PARTS, "type idx out of bounds");
+        m_bits.one_bit(static_cast<USize>(tidx));
     }
-
 
     /**
      * @brief Detach a part type by its TypeIdx.
      * @param idx Type index of the part.
      */
-    void detach_part_by_idx(TypeIdx idx) noexcept {
-        FR_ASSERT(idx < MAX_PARTS, "type idx out of bounds");
-        m_bits.zero_bit(static_cast<USize>(idx));
+    void detach(TypeIdx tidx) noexcept {
+        FR_ASSERT(tidx < MAX_PARTS, "type idx out of bounds");
+        m_bits.zero_bit(static_cast<USize>(tidx));
     }
 
     /**
@@ -60,36 +59,12 @@ public:
      * @param idx Type index of the part.
      * @return True if attached, false otherwise.
      */
-    bool check_by_idx(TypeIdx idx) const noexcept {
-        FR_ASSERT(idx < MAX_PARTS, "type idx out of bounds");
-        return m_bits.check_bit(static_cast<USize>(idx));
-    }
-
-    /**
-     * @brief Attach a part type.
-     */
-    template <typename T>
-    void attach_part() noexcept {
-        attach_part_by_idx(impl::DataTypeIdxGen::gen<T>());
-    }
-
-    /**
-     * @brief Detach a part type.
-     */
-    template <typename T>
-    void detach_part() noexcept {
-        detach_part_by_idx(impl::DataTypeIdxGen::gen<T>());
-    }
-
-    /**
-     * @brief Check whether a part type is attached.
-     */
-    template <typename T>
-    bool check() const noexcept {
-        return check_by_idx(impl::DataTypeIdxGen::gen<T>());
+    bool check(TypeIdx tidx) const noexcept {
+        FR_ASSERT(tidx < MAX_PARTS, "type idx out of bounds");
+        return m_bits.check_bit(static_cast<USize>(tidx));
     }
 
 private:
-    BitsetType m_bits{};
+    Storage m_bits{};
 };
 } // namespace fr

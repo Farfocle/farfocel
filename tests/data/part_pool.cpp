@@ -36,7 +36,7 @@ TEST_CASE("PartPool - remove swaps last") {
 
     CHECK(pool.part_count() == 4);
 
-    pool.destroy(b);
+    pool.destroy_unchecked(b);
 
     CHECK(pool.part_count() == 3);
 

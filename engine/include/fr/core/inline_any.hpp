@@ -41,8 +41,8 @@ public:
         requires(!std::is_same_v<std::decay_t<T>, InlineAny>)
     InlineAny(T &&value) noexcept {
         using DT = std::decay_t<T>;
-        FR_STATIC_ASSERT_NOTHROW_BASE(DT);
         FR_STATIC_ASSERT(sizeof(DT) <= Capacity, "value is too large for InlineAny");
+
         FR_STATIC_ASSERT(alignof(DT) <= Alignment, "alignment is too small for value");
 
         std::construct_at(std::launder(reinterpret_cast<DT *>(m_storage)), std::forward<T>(value));
@@ -178,14 +178,99 @@ public:
      * @brief Casts the value to the specified type.
      * @tparam T The type to cast to.
      * @return A reference to the casted value.
-     * @note No runtime type checking is performed.
+     * @warning No runtime type checking is performed.
+     * @warning If the value is nil, the behavior is undefined, asserts in debug.
      */
     template <typename T>
-    T &cast() noexcept {
+    T &cast_ref() noexcept {
         FR_STATIC_ASSERT(sizeof(T) <= Capacity, "value is too large for InlineAny");
         FR_STATIC_ASSERT(alignof(T) <= Alignment, "alignment is too small for value");
 
-        return *std::launder(reinterpret_cast<T *>(m_storage));
+        T *ptr = std::launder(reinterpret_cast<T *>(m_storage));
+        FR_ASSERT(ptr, "InlineAny is nil");
+
+        return *ptr;
+    }
+
+    /**
+     * @brief Casts the value to the specified type.
+     * @tparam T The type to cast to.
+     * @return A const reference to the casted value.
+     * @warning No runtime type checking is performed.
+     * @warning If the value is nil, the behavior is undefined, asserts in debug.
+     */
+    template <typename T>
+    const T &cast_ref() const noexcept {
+        FR_STATIC_ASSERT(sizeof(T) <= Capacity, "value is too large for InlineAny");
+        FR_STATIC_ASSERT(alignof(T) <= Alignment, "alignment is too small for value");
+
+        const T *ptr = std::launder(reinterpret_cast<const T *>(m_storage));
+        FR_ASSERT(ptr, "InlineAny is nil");
+
+        return *ptr;
+    }
+
+    /**
+     * @brief Emplaces a value of type T in-place, destroying any previous value.
+     * @tparam T The type of the value to store.
+     * @param args Constructor arguments for T.
+     */
+    template <typename T, typename... Args>
+    void emplace(Args &&...args) noexcept {
+        using DT = std::decay_t<T>;
+        FR_STATIC_ASSERT(sizeof(DT) <= Capacity, "value is too large for InlineAny");
+        FR_STATIC_ASSERT(alignof(DT) <= Alignment, "alignment is too small for value");
+
+        if (m_handler) [[likely]] {
+            m_handler(HandlerAction::Destroy, m_storage, nullptr);
+        }
+
+        std::construct_at(std::launder(reinterpret_cast<DT *>(m_storage)),
+                          std::forward<Args>(args)...);
+
+        m_handler = [](HandlerAction action, Byte *dst, Byte *src) {
+            DT *dst_t = std::launder(reinterpret_cast<DT *>(dst));
+            const DT *src_const = src ? std::launder(reinterpret_cast<const DT *>(src)) : nullptr;
+            DT *src_t = src ? std::launder(reinterpret_cast<DT *>(src)) : nullptr;
+
+            switch (action) {
+            case HandlerAction::Destroy:
+                std::destroy_at(dst_t);
+                break;
+            case HandlerAction::Copy:
+                if constexpr (std::is_copy_constructible_v<DT>) {
+                    std::construct_at(dst_t, *src_const);
+                } else {
+                    FR_ASSERT(false, "InlineAny stored type is not copy-constructible");
+                }
+                break;
+            case HandlerAction::Move:
+                if constexpr (std::is_move_constructible_v<DT>) {
+                    std::construct_at(dst_t, std::move(*src_t));
+                } else {
+                    FR_ASSERT(false, "InlineAny stored type is not move-constructible");
+                }
+                break;
+            }
+        };
+    }
+
+    /**
+     * @brief Casts the value to the specified type.
+     * @tparam T The type to cast to.
+     * @return A pointer to the casted value, if the value is nil, returns nullptr.
+     * @warning No runtime type checking is performed.
+     */
+    template <typename T>
+    T *cast_ptr() noexcept {
+        FR_STATIC_ASSERT(sizeof(T) <= Capacity, "value is too large for InlineAny");
+        FR_STATIC_ASSERT(alignof(T) <= Alignment, "alignment is too small for value");
+
+        if (is_nil()) [[unlikely]] {
+            return nullptr;
+        }
+
+        return std::launder(reinterpret_cast<T *>(m_storage));
     }
 
 private:

@@ -8,19 +8,18 @@
 
 #pragma once
 
+#include <cstring>
+
 #include "fr/core/alloc.hpp"
 #include "fr/core/array.hpp"
 #include "fr/core/ctx.hpp"
-#include "fr/core/mem.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/thing.hpp"
-#include <cstring>
 
 namespace fr::impl {
 class ThingPool {
 
 public:
-
     ThingPool() noexcept
         : ThingPool(get_ambient_ctx().alloc) {
     }
@@ -30,7 +29,7 @@ public:
 
         m_alloc = alloc;
 
-        void * raw = m_alloc->allocate(sizeof(Things), alignof(Things));
+        void *raw = m_alloc->allocate(sizeof(Things), alignof(Things));
         m_things = static_cast<Things *>(raw);
 
         // Uses memset to zero-initialize the array - the fastest way to clear memory
@@ -40,8 +39,7 @@ public:
     ~ThingPool() noexcept {
         using Things = Array<Thing, MAX_THINGS>;
 
-        m_alloc->deallocate(m_things, sizeof(Things),
-                            alignof(Things));
+        m_alloc->deallocate(m_things, sizeof(Things), alignof(Things));
     }
 
     ThingPool(const ThingPool &) = delete;
@@ -126,7 +124,7 @@ public:
     }
 
     /**
-     * @brief Checks if a thing is alive or note.
+     * @brief Checks if a thing is alive or dead.
      * @note The nil thing is alive and immortal.
      */
     bool check(Thing thing) const noexcept {

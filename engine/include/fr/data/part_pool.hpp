@@ -121,8 +121,9 @@ public:
      * @brief Returns a reference to the stub.
      */
     T &get_stub() noexcept {
-        return &m_parts[0];
+        return m_parts[0];
     }
+
 
     /**
      * @brief Returns a pointer to the part owned by the thing.
@@ -143,7 +144,7 @@ public:
     T &emplace_unchecked(Thing thing, Args &&...args) noexcept {
         ThingIdx idx = thing.idx();
 
-        if (m_thing_to_part.size() <= idx) {
+        if (m_thing_to_part.size() <= idx) [[unlikely]] {
             m_thing_to_part.grow_default(idx + 1);
         }
 
@@ -177,7 +178,7 @@ public:
      * @note If thing is nil, does nothing.
      * @warning Caller must ensure the thing is alive and DOES own part T.
      */
-    void destroy(Thing thing) noexcept {
+    void destroy_unchecked(Thing thing) noexcept {
         if (thing.is_nil()) [[unlikely]] {
             return;
         }
