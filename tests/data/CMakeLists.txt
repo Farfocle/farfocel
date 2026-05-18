@@ -5,6 +5,7 @@ set(TEST_DATA_SOURCES
     "thing_pool.cpp"
     "part_pool.cpp"
     "registry.cpp"
+    "query.cpp"
 )
 
 

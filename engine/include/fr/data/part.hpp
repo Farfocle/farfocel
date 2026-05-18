@@ -64,6 +64,27 @@ public:
         return m_bits.check_bit(static_cast<USize>(tidx));
     }
 
+    /**
+     * @brief Check whether any part is attached.
+     */
+    bool any() const noexcept {
+        return m_bits.any();
+    }
+
+    /**
+     * @brief Equality comparison for signatures.
+     */
+    friend bool operator==(const Signature &a, const Signature &b) noexcept {
+        return a.m_bits == b.m_bits;
+    }
+
+    /**
+     * @brief Inequality comparison for signatures.
+     */
+    friend bool operator!=(const Signature &a, const Signature &b) noexcept {
+        return !(a == b);
+    }
+
 private:
     Storage m_bits{};
 };

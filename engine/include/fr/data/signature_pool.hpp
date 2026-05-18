@@ -61,6 +61,13 @@ public:
         return MAX_THINGS;
     }
 
+    /**
+     * @brief Returns a reference to the signature storage.
+     */
+    const Storage &signatures() const noexcept {
+        return *m_signatures;
+    }
+
     bool check(Thing thing, TypeIdx tidx) const noexcept {
         const Storage &signatures = *m_signatures;
         return signatures[thing.idx()].check(tidx);

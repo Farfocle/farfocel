@@ -295,6 +295,44 @@ public:
     }
 
     /**
+     * @brief Checks if any bits are set to 1.
+     */
+    [[nodiscard]] constexpr bool any() const noexcept {
+        for (USize i = 0; i < word_count; ++i) {
+            if (m_words[i] != 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @brief Checks if all bits are set to 0.
+     */
+    [[nodiscard]] constexpr bool none() const noexcept {
+        return !any();
+    }
+
+    /**
+     * @brief Equality comparison for bitsets.
+     */
+    friend constexpr bool operator==(const Bitset &a, const Bitset &b) noexcept {
+        for (USize i = 0; i < word_count; ++i) {
+            if (a.m_words[i] != b.m_words[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @brief Inequality comparison for bitsets.
+     */
+    friend constexpr bool operator!=(const Bitset &a, const Bitset &b) noexcept {
+        return !(a == b);
+    }
+
+    /**
      * @brief Returns an iterator to the first set bit.
      */
     [[nodiscard]] constexpr OneIterator ones_begin() const noexcept {
