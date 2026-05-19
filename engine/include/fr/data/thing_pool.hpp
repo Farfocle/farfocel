@@ -98,6 +98,13 @@ public:
     }
 
     /**
+     * @brief Return a thing at given index.
+     */
+    Thing get_by_idx(ThingIdx idx) const noexcept {
+        return (*m_things)[idx];
+    }
+
+    /**
      * @brief Kills an alive thing.
      * @note If thing is nil, does nothing, nil thing is immortal.
      * @warning Caller is responsible for checking if a thing is alive or not.

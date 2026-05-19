@@ -55,12 +55,12 @@ S32 main() {
         registry.emplace<Pos>(c, Pos{13.0, 12.0});
 
         std::cout << "---- query<Pos, Sprite>()\n";
-        for (auto [pos, spirte] : registry.query<Pos, Sprite>()) {
+        for (auto [thing, pos, spirte] : registry.query<Pos, Sprite>()) {
             std::cout << fr::format("pos: {}; sprite: {}", pos, spirte) << "\n";
         }
 
         std::cout << "---- query<Pos>().without<Sprite>()\n";
-        for (auto [pos] : registry.query<Pos>().without<Sprite>()) {
+        for (auto [thing, pos] : registry.query<Pos>().without<Sprite>()) {
             std::cout << fr::format("pos: {}", pos) << "\n";
         }
     }

@@ -33,7 +33,7 @@ TEST_CASE("Registry - Query basic iteration") {
     reg.emplace<B>(t3, 50);
 
     USize count = 0;
-    for (auto [a, b] : reg.query<A, B>()) {
+    for (auto [thing, a, b] : reg.query<A, B>()) {
         ++count;
 
         if (a.value == 10) {
@@ -61,8 +61,9 @@ TEST_CASE("Registry - Query with exclusion") {
     reg.emplace<C>(t2, 5);
 
     USize count = 0;
-    for (auto [a, b] : reg.query<A, B>().without<C>()) {
-        count++;
+    for (auto [thing, a, b] : reg.query<A, B>().without<C>()) {
+        ++count;
+
         CHECK(a.value == 1);
         CHECK(b.value == 2);
     }
@@ -84,8 +85,9 @@ TEST_CASE("Registry - Query smallest pool optimization") {
 
     USize count = 0;
 
-    for (auto [a, b] : reg.query<A, B>()) {
+    for (auto [thing, a, b] : reg.query<A, B>()) {
         ++count;
+
         CHECK(a.value == 1);
         CHECK(b.value == 10);
     }
@@ -106,7 +108,7 @@ TEST_CASE("Registry - Query and killed things") {
 
     USize count = 0;
 
-    for (auto [a] : reg.query<A>()) {
+    for (auto [thing, a] : reg.query<A>()) {
         ++count;
         CHECK(a.value == 2);
     }
