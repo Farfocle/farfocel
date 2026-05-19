@@ -380,7 +380,7 @@ private:
     /**
      * @brief Returns the part -> thing mapping slice for a pool by TypeIdx.
      */
-    Slice<const ThingIdx> do_part_to_thing_slice_by_tidx(TypeIdx tidx) const noexcept {
+    Slice<const Thing> do_part_to_thing_slice_by_tidx(TypeIdx tidx) const noexcept {
         FR_ASSERT(!do_check_part_pool(tidx), "part pool missing");
 
         // Layout of PartPool is same for all T.

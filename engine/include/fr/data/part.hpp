@@ -71,6 +71,13 @@ public:
     }
 
     /**
+     * @brief Check whether none part is attached.
+     */
+    bool none() const noexcept {
+        return m_bits.none();
+    }
+
+    /**
      * @brief Equality comparison for signatures.
      */
     friend bool operator==(const Signature &a, const Signature &b) noexcept {

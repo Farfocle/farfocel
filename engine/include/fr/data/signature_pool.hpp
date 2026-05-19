@@ -20,6 +20,8 @@
 namespace fr::impl {
 class SignaturePool {
 public:
+    // --------------------------------------------- Constructors and Destructor
+
     using Storage = Array<Signature, MAX_THINGS>;
 
     SignaturePool() noexcept
@@ -28,7 +30,6 @@ public:
 
     explicit SignaturePool(Alloc *alloc) noexcept {
         m_alloc = alloc;
-
         void *raw = m_alloc->allocate(sizeof(Storage), alignof(Storage));
         m_signatures = static_cast<Storage *>(raw);
 
@@ -46,6 +47,8 @@ public:
     SignaturePool(SignaturePool &&) = delete;
     SignaturePool &operator=(const SignaturePool &) = delete;
     SignaturePool &operator=(SignaturePool &&) = delete;
+
+    // ---------------------------------------------------------- Storage Access
 
     /**
      * @brief Returns the allocator used by this pool.
@@ -66,6 +69,13 @@ public:
      */
     const Storage &signatures() const noexcept {
         return *m_signatures;
+    }
+
+    // ---------------------------------------------------- Per Thing Operations
+
+    const Signature &get(Thing thing) const noexcept {
+        const Storage &signatures = *m_signatures;
+        return signatures[thing.idx()];
     }
 
     bool owns(Thing thing, TypeIdx tidx) const noexcept {
@@ -91,7 +101,6 @@ public:
 private:
     // -------------------------------------------------------- Member Variables
     Alloc *m_alloc{get_ambient_ctx().alloc};
-
     Storage *m_signatures{nullptr};
 };
 } // namespace fr::impl

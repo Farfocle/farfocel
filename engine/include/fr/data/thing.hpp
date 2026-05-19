@@ -115,6 +115,7 @@ public:
     }
 
 private:
+    // ---------------------------------------------------------------- Internal
     explicit constexpr Thing(ThingRaw raw) noexcept
         : m_thing(raw) {
     }

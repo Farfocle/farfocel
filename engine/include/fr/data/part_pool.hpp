@@ -38,8 +38,8 @@ public:
     explicit PartPool(Alloc *alloc) noexcept {
         m_alloc = alloc;
         m_parts = DynamicArray<T>::with_alloc(alloc);
-        m_thing_to_part = DynamicArray<ThingIdx>::with_alloc(alloc);
-        m_part_to_thing = DynamicArray<ThingIdx>::with_alloc(alloc);
+        m_thing_to_part = DynamicArray<USize>::with_alloc(alloc);
+        m_part_to_thing = DynamicArray<Thing>::with_alloc(alloc);
 
         m_parts.push_back(T());
 
@@ -47,7 +47,7 @@ public:
         m_thing_to_part.push_back(0);
 
         // Push the stub mapping from nil thing to the stub.
-        m_part_to_thing.push_back(0);
+        m_part_to_thing.push_back(Thing::nil());
     }
 
     PartPool(const PartPool &) = delete;
@@ -100,28 +100,28 @@ public:
     /**
      * @brief Returns a slice mapping thing indices to part indices; includes the stub mapping.
      */
-    Slice<const ThingIdx> thing_to_part_slice_with_stub() const noexcept {
+    Slice<const USize> thing_to_part_slice_with_stub() const noexcept {
         return m_thing_to_part.slice();
     }
 
     /**
      * @brief Returns a slice mapping thing indices to part indices; excludes the stub mapping.
      */
-    Slice<const ThingIdx> thing_to_part_slice() const noexcept {
+    Slice<const USize> thing_to_part_slice() const noexcept {
         return m_thing_to_part.slice_from(1);
     }
 
     /**
      * @brief Returns a slice mapping part indices to thing indices; includes the stub mapping.
      */
-    Slice<const ThingIdx> part_to_thing_slice_with_stub() const noexcept {
+    Slice<const Thing> part_to_thing_slice_with_stub() const noexcept {
         return m_part_to_thing.slice();
     }
 
     /**
      * @brief Returns a slice mapping part indices to thing indices; excludes the stub mapping.
      */
-    Slice<const ThingIdx> part_to_thing_slice() const noexcept {
+    Slice<const Thing> part_to_thing_slice() const noexcept {
         return m_part_to_thing.slice_from(1);
     }
 
@@ -157,7 +157,7 @@ public:
 
         m_thing_to_part[idx] = m_parts.size();
         m_parts.emplace_back(std::forward<Args>(args)...);
-        m_part_to_thing.emplace_back(idx);
+        m_part_to_thing.emplace_back(thing);
 
         return m_parts.back();
     }
@@ -190,24 +190,25 @@ public:
             return;
         }
 
-        ThingIdx idx = thing.idx();
+        USize idx = thing.idx();
 
         FR_ASSERT(idx < m_thing_to_part.size(), "index out of bounds");
         FR_ASSERT(m_parts.size() > 0, "remove on empty pool");
 
-        ThingIdx rem_part = m_thing_to_part[idx];
-        ThingIdx rem_thing = idx;
+        USize rem_part_idx = m_thing_to_part[idx];
+        USize rem_thing_idx = idx;
 
-        ThingIdx swap_part = m_parts.size() - 1;
-        ThingIdx swap_thing = m_part_to_thing[swap_part];
+        USize swap_part_idx = m_parts.size() - 1;
+        Thing swap_thing = m_part_to_thing[swap_part_idx];
+        USize swap_thing_idx = swap_thing.idx();
 
-        if (rem_part != swap_part) {
-            m_parts[rem_part] = std::move(m_parts[swap_part]);
-            m_thing_to_part[swap_thing] = rem_part;
-            m_part_to_thing[rem_part] = swap_thing;
+        if (rem_part_idx != swap_part_idx) {
+            m_parts[rem_part_idx] = std::move(m_parts[swap_part_idx]);
+            m_thing_to_part[swap_thing_idx] = rem_part_idx;
+            m_part_to_thing[rem_part_idx] = swap_thing;
         }
 
-        m_thing_to_part[rem_thing] = 0;
+        m_thing_to_part[rem_thing_idx] = 0;
         m_part_to_thing.pop_back();
         m_parts.pop_back();
     }
@@ -219,10 +220,10 @@ private:
     DynamicArray<T> m_parts{};
 
     // A sparse index array for looking the part index by the original thing index.
-    DynamicArray<ThingIdx> m_thing_to_part{};
+    DynamicArray<USize> m_thing_to_part{};
 
     // A dense index array for looking the original thing index of the part.
-    DynamicArray<ThingIdx> m_part_to_thing{};
+    DynamicArray<Thing> m_part_to_thing{};
 };
 
 FR_STATIC_ASSERT(sizeof(PartPool<Byte>) == sizeof(PartPool<U64>),
