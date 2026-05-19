@@ -8,6 +8,7 @@
 #pragma once
 
 #include "fr/core/macros.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
@@ -87,6 +88,22 @@ public:
     }
 
     /**
+     * @brief Returns whether the thing is nil.
+     */
+    constexpr bool operator==(const Thing &other) const noexcept {
+        return m_thing == other.m_thing;
+    }
+
+    /**
+     * @brief Returns whether the thing is not nil.
+     */
+    constexpr bool operator!=(const Thing &other) const noexcept {
+        return !(*this == other);
+    }
+
+    // --------------------------------------------------------------- Protocols
+
+    /**
      * @brief Returns the nil value of the thing.
      */
     static constexpr Thing nil() noexcept {
@@ -100,18 +117,24 @@ public:
         return m_thing == 0;
     }
 
-    /**
-     * @brief Returns whether the thing is nil.
-     */
-    constexpr bool operator==(const Thing &other) const noexcept {
-        return m_thing == other.m_thing;
-    }
+    template <typename Archive>
+    void shape(Archive &archive) noexcept {
+        if constexpr (Archive::kind == ArchiveKind::Serializer) {
+            archive.prop("idx", idx());
+            archive.prop("gen", gen());
+        } else {
+            ThingIdx idx{0};
+            ThingGen gen{0};
 
-    /**
-     * @brief Returns whether the thing is not nil.
-     */
-    constexpr bool operator!=(const Thing &other) const noexcept {
-        return !(*this == other);
+            archive.prop("idx", idx);
+            archive.prop("gen", gen);
+
+            FR_ASSERT(idx <= THING_MAX_IDX, "invalid thing index");
+            FR_ASSERT(gen <= THING_MAX_GEN, "invalid thing generation");
+
+            set_idx(idx);
+            set_gen(gen);
+        }
     }
 
 private:

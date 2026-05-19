@@ -143,6 +143,16 @@ public:
         return thing.gen() == things[thing.idx()].gen();
     }
 
+    // --------------------------------------------------------------- Protocols
+
+    template <typename Archive>
+    void shape(Archive &archive) noexcept {
+        archive.prop("alive_count", m_alive_count);
+        archive.prop("free_count", m_free_count);
+        archive.prop("free_next", m_free_next);
+        archive.prop("things", m_things->slice_to(m_alive_count + m_free_count));
+    }
+
 private:
     // -------------------------------------------------------- Internal Helpers
     Thing do_handout_from_back() noexcept {

@@ -98,6 +98,13 @@ public:
         signatures[thing.idx()].destroy_all();
     }
 
+    // --------------------------------------------------------------- Protocols
+
+    template <typename Archive>
+    void shape(Archive &archive) noexcept {
+        m_signatures->shape(archive);
+    }
+
 private:
     // -------------------------------------------------------- Member Variables
     Alloc *m_alloc{get_ambient_ctx().alloc};
