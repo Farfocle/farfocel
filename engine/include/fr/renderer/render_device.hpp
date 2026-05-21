@@ -82,6 +82,9 @@ public:
     virtual void bind_index_buffer(BufferHandle ibo) noexcept = 0;
     virtual void bind_texture(TextureHandle texture, U32 slot) noexcept = 0;
 
+    virtual void bind_storage_buffer(BufferHandle buffer, U32 slot) noexcept = 0;
+    virtual void set_push_constants(Slice<const Byte> data) noexcept = 0;
+
     virtual void draw_indexed(U32 index_count, U32 index_offset = 0,
                               U32 vertex_offset = 0) noexcept = 0;
 };
@@ -91,6 +94,8 @@ public:
     virtual ~RenderDevice() = default;
 
     virtual BufferHandle create_buffer(Slice<const Byte> data, bool is_dynamic) noexcept = 0;
+    virtual void update_buffer(BufferHandle handle, Slice<const Byte> data,
+                               U32 offset = 0) noexcept = 0;
     virtual TextureHandle create_texture_2d(U32 width, U32 height, TextureFormat format,
                                             Slice<const Byte> data = {}) noexcept = 0;
     virtual ShaderHandle create_shader(StringView vertex_src, StringView fragment_src) noexcept = 0;

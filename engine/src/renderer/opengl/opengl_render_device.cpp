@@ -28,8 +28,10 @@ enum class CommandType : U8 {
     SetViewport,
     SetPipeline,
     BindVertexBuffer,
+    BindStorageBuffer,
     BindIndexBuffer,
     BindTexture,
+    SetPushConstants,
     DrawIndexed
 };
 
@@ -71,6 +73,15 @@ struct OpenGLCommand {
             U32 index_offset;
             U32 vertex_offset;
         } draw;
+
+        struct {
+            BufferHandle buffer;
+            U32 slot;
+        } storage_buffer;
+
+        struct {
+            U32 data[4]; // 16 bytes``
+        } push_constants;
 
     } payload;
 };
@@ -151,6 +162,22 @@ public:
         cmd.payload.draw.index_count = index_count;
         cmd.payload.draw.index_offset = index_offset;
         cmd.payload.draw.vertex_offset = vertex_offset;
+        m_commands.push_back(cmd);
+    }
+
+    void bind_storage_buffer(BufferHandle buffer, U32 slot) noexcept override {
+        OpenGLCommand cmd{};
+        cmd.type = CommandType::BindStorageBuffer;
+        cmd.payload.storage_buffer.buffer = buffer;
+        cmd.payload.storage_buffer.slot = slot;
+        m_commands.push_back(cmd);
+    }
+
+    void set_push_constants(Slice<const Byte> data) noexcept override {
+        FR_ASSERT(data.size() <= 16, "Push constants need to be smaller or equal to 16 bytes");
+        OpenGLCommand cmd{};
+        cmd.type = CommandType::SetPushConstants;
+        std::memcpy(cmd.payload.push_constants.data, data.data(), data.size());
         m_commands.push_back(cmd);
     }
 
@@ -385,6 +412,18 @@ public:
                 glBindVertexBuffer(0, vbo, 0, cmd.payload.vertex_buffer.stride);
                 break;
             }
+            case CommandType::BindStorageBuffer: {
+                GLuint ssbo = *m_buffers.get_data_unsafe(cmd.payload.storage_buffer.buffer.key);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, cmd.payload.storage_buffer.slot, ssbo);
+                break;
+            }
+
+            // opengl does not support push constants, but this is a workaround, and more so, it
+            // will work fully properly when vulkan comes
+            case CommandType::SetPushConstants: {
+                glUniform1ui(0, cmd.payload.push_constants.data[0]);
+                break;
+            }
 
             case CommandType::BindIndexBuffer: {
                 GLuint ibo = *m_buffers.get_data_unsafe(cmd.payload.index_buffer.ibo.key);
@@ -408,6 +447,17 @@ public:
             }
             }
         }
+    }
+
+    void update_buffer(BufferHandle handle, Slice<const Byte> data,
+                       U32 offset = 0) noexcept override {
+        if (data.is_empty())
+            return;
+        GLuint *id =
+            m_buffers.get_data(handle.key); // cannot use unsafe version, since not a drawing loow
+        // this sucks
+        if (id)
+            glNamedBufferSubData(*id, offset, data.size(), data.data());
     }
 
     Alloc *get_allocator() const noexcept {
