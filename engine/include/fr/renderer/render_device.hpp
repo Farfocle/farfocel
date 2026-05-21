@@ -4,48 +4,49 @@
 #pragma once
 
 #include "fr/core/slice.hpp"
+#include "fr/core/slot_map.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
 struct BufferHandle {
-    U32 id{0};
-    bool is_valid() const noexcept {
-        return id != 0;
+    SlotKey key{};
+    [[nodiscard]] bool is_valid() const noexcept {
+        return key.generation % 2 != 0;
     }
 };
 struct TextureHandle {
-    U32 id{0};
-    bool is_valid() const noexcept {
-        return id != 0;
-    }
+    SlotKey key{};
+    [[nodiscard]] bool is_valid() const noexcept {
+        return key.generation % 2 != 0;
+    };
 };
 struct ShaderHandle {
-    U32 id{0};
-    bool is_valid() const noexcept {
-        return id != 0;
+    SlotKey key{};
+    [[nodiscard]] bool is_valid() const noexcept {
+        return key.generation % 2 != 0;
     }
 };
 
 struct RenderPipelineHandle {
-    U32 id{0};
-    bool is_valid() const noexcept {
-        return id != 0;
+    SlotKey key{};
+    [[nodiscard]] bool is_valid() const noexcept {
+        return key.generation % 2 != 0;
     }
 };
 
 inline bool operator==(BufferHandle a, BufferHandle b) noexcept {
-    return a.id == b.id;
+    return a.key == b.key;
 }
 inline bool operator==(TextureHandle a, TextureHandle b) noexcept {
-    return a.id == b.id;
+    return a.key == b.key;
 }
 inline bool operator==(ShaderHandle a, ShaderHandle b) noexcept {
-    return a.id == b.id;
+    return a.key == b.key;
 }
 
 inline bool operator==(RenderPipelineHandle a, RenderPipelineHandle b) {
-    return a.id == b.id;
+    return a.key == b.key;
 }
 
 enum class TextureFormat : U8 {
@@ -102,7 +103,6 @@ public:
     virtual void destory_pipeline(RenderPipelineHandle handle) noexcept = 0;
 
     virtual CommandBuffer *adopt_command_buffer() noexcept = 0;
-    // virtual bool abort_command_buffer(CommandBuffer buffer);
 
     virtual void submit_command_buffer(CommandBuffer *cmd_buffer) noexcept = 0;
 };

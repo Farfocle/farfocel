@@ -1,8 +1,8 @@
 #include "fr/core/alloc.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
-#include "fr/core/hash_map.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/core/slot_map.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/renderer/render_device.hpp"
@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 namespace fr {
+
 struct OpenGLPipeline {
     GLuint program_id{0};
     GLenum cull_mode{GL_BACK};
@@ -32,7 +33,6 @@ enum class CommandType : U8 {
     DrawIndexed
 };
 
-// el monstrosity
 struct OpenGLCommand {
     CommandType type;
     union {
@@ -179,9 +179,7 @@ public:
         GLbitfield flags = is_dynamic ? GL_DYNAMIC_STORAGE_BIT : 0;
         glNamedBufferStorage(id, data.size(), data.data(), flags);
 
-        U32 handle = m_next_id++;
-        m_buffers.insert(handle, id);
-        return BufferHandle{handle};
+        return BufferHandle{m_buffers.add(id)};
     }
 
     TextureHandle create_texture_2d(U32 width, U32 height, TextureFormat format,
@@ -229,9 +227,7 @@ public:
         glTextureParameteri(id, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTextureParameteri(id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-        U32 handle = m_next_id++;
-        m_textures.insert(handle, id);
-        return TextureHandle{handle};
+        return TextureHandle{m_textures.add(id)};
     }
 
     ShaderHandle create_shader(StringView vertex_src, StringView fragment_src) noexcept override {
@@ -256,15 +252,18 @@ public:
         glDeleteShader(vs);
         glDeleteShader(fs);
 
-        U32 handle = m_next_id++;
-        m_shaders.insert(handle, program);
-        return ShaderHandle{handle};
+        return ShaderHandle{m_shaders.add(program)};
     }
 
     RenderPipelineHandle
     create_render_pipeline(const RenderPipelineProperties &properties) noexcept override {
         OpenGLPipeline pipe{};
-        pipe.program_id = m_shaders[properties.shader.id];
+
+        GLuint *shader_id = m_shaders.get_data(properties.shader.key);
+        if (shader_id) {
+            pipe.program_id = *shader_id;
+        }
+
         pipe.depth_test = properties.depth_test ? GL_TRUE : GL_FALSE;
         pipe.depth_write = properties.depth_write ? GL_TRUE : GL_FALSE;
 
@@ -277,25 +276,35 @@ public:
             pipe.cull_mode = (properties.cull_mode == CullMode::Front) ? GL_FRONT : GL_BACK;
         }
 
-        U32 handle = m_next_id++;
-        m_pipelines.insert(handle, pipe);
-        return RenderPipelineHandle{handle};
+        return RenderPipelineHandle{m_pipelines.add(pipe)};
     }
 
     void destroy_buffer(BufferHandle handle) noexcept override {
-        glDeleteBuffers(1, &m_buffers[handle.id]);
-        m_buffers.remove(handle.id);
+        GLuint *id = m_buffers.get_data(handle.key);
+        if (id) {
+            glDeleteBuffers(1, id);
+            m_buffers.erase(handle.key);
+        }
     }
+
     void destroy_texture(TextureHandle handle) noexcept override {
-        glDeleteTextures(1, &m_textures[handle.id]);
-        m_textures.remove(handle.id);
+        GLuint *id = m_textures.get_data(handle.key);
+        if (id) {
+            glDeleteTextures(1, id);
+            m_textures.erase(handle.key);
+        }
     }
+
     void destroy_shader(ShaderHandle handle) noexcept override {
-        glDeleteProgram(m_shaders[handle.id]);
-        m_shaders.remove(handle.id);
+        GLuint *id = m_shaders.get_data(handle.key);
+        if (id) {
+            glDeleteProgram(*id);
+            m_shaders.erase(handle.key);
+        }
     }
+
     void destory_pipeline(RenderPipelineHandle handle) noexcept override {
-        m_pipelines.remove(handle.id);
+        m_pipelines.erase(handle.key);
     }
 
     CommandBuffer *adopt_command_buffer() noexcept override {
@@ -321,8 +330,8 @@ public:
                     GLenum draw_buffers[4] = {GL_NONE};
 
                     for (U32 c = 0; c < cmd.payload.render_pass.num_colors; ++c) {
-                        GLuint gl_tex = m_textures[cmd.payload.render_pass.color_targets[c].id];
-                        // turns out learnopengl is useful after all
+                        GLuint gl_tex = *m_textures.get_data_unsafe(
+                            cmd.payload.render_pass.color_targets[c].key);
                         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + c,
                                                GL_TEXTURE_2D, gl_tex, 0);
                         draw_buffers[c] = GL_COLOR_ATTACHMENT0 + c;
@@ -330,7 +339,8 @@ public:
                     glDrawBuffers(cmd.payload.render_pass.num_colors, draw_buffers);
 
                     if (cmd.payload.render_pass.depth_target.is_valid()) {
-                        GLuint gl_depth = m_textures[cmd.payload.render_pass.depth_target.id];
+                        GLuint gl_depth =
+                            *m_textures.get_data_unsafe(cmd.payload.render_pass.depth_target.key);
                         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
                                                GL_TEXTURE_2D, gl_depth, 0);
                     }
@@ -349,8 +359,10 @@ public:
             }
 
             case CommandType::SetPipeline: {
-                const auto &pipeline = m_pipelines[cmd.payload.pipeline.pipeline.id];
+                const OpenGLPipeline &pipeline =
+                    *m_pipelines.get_data_unsafe(cmd.payload.pipeline.pipeline.key);
                 glUseProgram(pipeline.program_id);
+
                 if (pipeline.depth_test)
                     glEnable(GL_DEPTH_TEST);
                 else
@@ -369,22 +381,24 @@ public:
             }
 
             case CommandType::BindVertexBuffer: {
-                glBindVertexBuffer(0, m_buffers[cmd.payload.vertex_buffer.vbo.id], 0,
-                                   cmd.payload.vertex_buffer.stride);
+                GLuint vbo = *m_buffers.get_data_unsafe(cmd.payload.vertex_buffer.vbo.key);
+                glBindVertexBuffer(0, vbo, 0, cmd.payload.vertex_buffer.stride);
                 break;
             }
 
             case CommandType::BindIndexBuffer: {
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_buffers[cmd.payload.index_buffer.ibo.id]);
+                GLuint ibo = *m_buffers.get_data_unsafe(cmd.payload.index_buffer.ibo.key);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
                 break;
             }
+
             case CommandType::BindTexture: {
-                glBindTextureUnit(cmd.payload.texture.slot,
-                                  m_textures[cmd.payload.texture.texture.id]);
+                GLuint tex = *m_textures.get_data_unsafe(cmd.payload.texture.texture.key);
+                glBindTextureUnit(cmd.payload.texture.slot, tex);
                 break;
             }
+
             case CommandType::DrawIndexed: {
-                // 5 liters of water wasted on a prompt about how to do this
                 glDrawElementsBaseVertex(GL_TRIANGLES, cmd.payload.draw.index_count,
                                          GL_UNSIGNED_INT,
                                          reinterpret_cast<void *>(static_cast<USize>(
@@ -401,22 +415,17 @@ public:
     }
 
 private:
-    U32 m_next_id{1};
     GLuint m_fallback_fbo{0};
-
     Alloc *m_alloc{nullptr};
 
-    // this sucks... for now
-    // to-do: implement a generic slot map in core
-    HashMap<U32, GLuint> m_buffers;
-    HashMap<U32, GLuint> m_textures;
-    HashMap<U32, GLuint> m_shaders;
-    HashMap<U32, OpenGLPipeline> m_pipelines;
+    SlotMap<GLuint> m_buffers;
+    SlotMap<GLuint> m_textures;
+    SlotMap<GLuint> m_shaders;
+    SlotMap<OpenGLPipeline> m_pipelines;
 
     OpenGLCommandBuffer m_runtime_cmd_buffer;
 };
 
-// we do this primarily to avoid having to include glad in any other part of the engine
 FR_API RenderDevice *create_opengl_render_device(Alloc *alloc) noexcept {
     FR_ASSERT(alloc != nullptr, "RenderDevice requiers allocator");
     void *mem = alloc->allocate(sizeof(OpenGLRenderDevice), alignof(OpenGLRenderDevice));

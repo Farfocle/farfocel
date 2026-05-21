@@ -37,6 +37,7 @@ set(ENGINE_HEADERS
 #### renderer
     "include/fr/renderer/render_device.hpp"
     "include/fr/renderer/mesh.hpp"
+    "include/fr/renderer/mesh_loader.hpp"
     "include/fr/renderer/camera.hpp"
 )
 
