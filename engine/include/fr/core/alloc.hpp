@@ -1,5 +1,5 @@
 /**
- * @file allocator.hpp
+ * @file alloc.hpp
  * @author Kiju
  *
  * @brief Polymorphic allocator interface.

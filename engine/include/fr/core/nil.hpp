@@ -21,10 +21,8 @@
 
 namespace fr {
 
-struct NilTag {
-    explicit constexpr NilTag() = default;
-};
 
+// -------------------------------------------------------------- Implementation
 namespace impl {
 
 template <typename T>
@@ -53,6 +51,12 @@ concept HasADLNil = requires {
 };
 
 } // namespace impl
+
+// ------------------------------------------------------------------ Public API
+
+struct NilTag {
+    explicit constexpr NilTag() = default;
+};
 
 /**
  * @brief Concept for types that have a defined nil value.
