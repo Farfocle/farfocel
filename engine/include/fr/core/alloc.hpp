@@ -3,6 +3,47 @@
  * @author Kiju
  *
  * @brief Polymorphic allocator interface.
+ *
+ * @detail Allocator Design.
+ * Allocator design is a critical component of Farfocel's memory management. The engine uses a
+ * custom allocator interface (`fr::Alloc`) to manage memory efficiently. Allocators are polymorphic
+ * and may be stateful. Using polymorphic allocators simplifies memory management across DLL
+ * boundaries and enables specialized memory arenas without templating container types.
+ *
+ * All core owning containers (where "owning" means the container manages its own raw memory) must
+ * adhere to the following contract:
+ *
+ * 1. Interface & Storage Contract
+ *
+ * - The allocator is stored as a private/protected member variable of type `Alloc* m_alloc`.
+ * - The allocator is initialized to `get_ambient_ctx().alloc` by default.
+ * - Every owning container provides an explicit constructor that accepts an `Alloc*`.
+ * - Every owning container provides a static factory method `with_alloc(Alloc*)`.
+ * - Every owning container provides a `const Alloc* alloc() const noexcept` getter to access the
+ *   allocator.
+ *
+ * 2. Propagation Rules
+ *
+ * Compiler-generated copy and move operations are **fatal** for objects managing raw memory (they
+ * lead to double-frees and memory leaks). All owning containers **MUST** explicitly implement or `=
+ * delete` their copy/move constructors and assignment operators according to these propagation
+ * rules:
+ *
+ * - Copy Construction: Allocators DO NOT propagate.
+ *   - The newly constructed container uses `get_ambient_ctx().alloc` (unless an allocator is
+ *     explicitly passed to a specific constructor). It then deep-copies the elements.
+ * - Move Construction: Allocators DO propagate.
+ *   - The newly constructed container steals both the memory pointer and the `m_alloc` pointer from
+ *     the source. The source is left in a valid, empty state.
+ * - Copy Assignment: Allocators DO NOT propagate.
+ *   - The destination container keeps its existing allocator. It allocates new memory (if
+ *     necessary) using its own allocator and deep-copies the elements.
+ * - Move Assignment: Allocators DO NOT propagate.
+ *   - Fast-Path: If `this->m_alloc == other.m_alloc`, the destination safely steals the memory
+ *     pointer from the source.
+ *   - Slow-Path: If `this->m_alloc != other.m_alloc`, the destination _cannot_ steal the
+ *     memory. It must keep its own allocator, clear its current contents, allocate new memory, and
+ *     perform an element-wise move from the source.
  */
 
 #pragma once
@@ -33,9 +74,10 @@ public:
      * @param sz Size in bytes.
      * @param alignment Alignment in bytes.
      * @return Pointer to allocated memory.
-     * @pre sz != 0.
-     * @pre alignment is a power of two.
-     * @note Aborts if allocation fails.
+     *
+     * @pre `sz != 0`.
+     * @pre `alignment` is a power of two.
+     * @note Asserts in debug when allocation fails. God only knows what happens in production.
      */
     [[nodiscard("Discarding the pointer may lead to memory leaks")]] void *
     allocate(USize sz, USize alignment) noexcept {
@@ -53,10 +95,11 @@ public:
      * @param new_sz New size in bytes.
      * @param alignment Alignment in bytes.
      * @return Pointer to reallocated memory.
-     * @pre ptr is non-null.
-     * @pre old_sz != 0 and new_sz != 0.
-     * @pre alignment is a power of two.
-     * @note Aborts if reallocation fails.
+     *
+     * @pre `ptr` is non-null.
+     * @pre `old_sz != 0` and `new_sz != 0`.
+     * @pre `alignment` is a power of two.
+     * @note Asserts in debug when reallocation fails. God only knows what happens in production.
      */
     [[nodiscard("Discarding the pointer may lead to memory leaks")]] void *
     reallocate(void *ptr, USize old_sz, USize new_sz, USize alignment) noexcept {
@@ -72,9 +115,10 @@ public:
      * @param sz Size in bytes.
      * @param alignment Alignment in bytes.
      * @return Pointer to allocated memory or nullptr.
-     * @pre sz != 0.
-     * @pre alignment is a power of two.
-     * @note Respects OOM handler and retry policy.
+     *
+     * @note Respects retry policy.
+     * @pre `sz != 0`.
+     * @pre `alignment` is a power of two.
      */
     [[nodiscard("Discarding the pointer may lead to memory leaks")]] void *
     try_allocate(USize sz, USize alignment) noexcept {
@@ -129,10 +173,11 @@ public:
      * @param new_sz New size in bytes.
      * @param alignment Alignment in bytes.
      * @return Pointer to reallocated memory or nullptr.
-     * @pre ptr is non-null.
-     * @pre old_sz != 0 and new_sz != 0.
-     * @pre alignment is a power of two.
-     * @note Respects OOM handler and retry policy.
+     *
+     * @note Respects retry policy.
+     * @pre `ptr` is non-null.
+     * @pre `old_sz != 0` and `new_sz != 0`.
+     * @pre `alignment` is a power of two.
      */
     [[nodiscard("Discarding the pointer may lead to memory leaks")]] void *
     try_reallocate(void *ptr, USize old_sz, USize new_sz, USize alignment) noexcept {
@@ -188,8 +233,9 @@ public:
      * @param ptr Allocation to free (may be null).
      * @param sz Size in bytes.
      * @param alignment Alignment in bytes.
-     * @pre If ptr is non-null, sz != 0.
-     * @pre alignment is a power of two.
+     *
+     * @pre If `ptr` is non-null, `sz != 0`.
+     * @pre `alignment` is a power of two.
      */
     void deallocate(void *ptr, USize sz, USize alignment) noexcept {
         if (!ptr) {
@@ -218,10 +264,10 @@ public:
     }
 
     /**
-     * @brief Check whether ptr is owned by this allocator.
+     * @brief Check whether a pointer is owned (has been allocated) by this allocator.
      *
      * @param ptr Pointer to check.
-     * @return OwnershipResult::Unknown by default.
+     * @return `OwnershipResult::Unknown` by default.
      */
     virtual OwnershipResult owns(void * /*ptr*/) const noexcept {
         return OwnershipResult::Unknown;
@@ -229,8 +275,7 @@ public:
 
     /**
      * @brief Human-readable allocator name for debugging.
-     *
-     * @return Allocator name.
+     * @return Allocator `tag`.
      */
     virtual const char *tag() const noexcept {
         return "UnnamedAllocator";
@@ -242,7 +287,7 @@ protected:
      *
      * @param sz Size in bytes.
      * @param alignment Alignment in bytes.
-     * @return Pointer to allocated memory or nullptr.
+     * @return Pointer to allocated memory or `nullptr`.
      */
     virtual void *do_try_allocate(USize sz, USize alignment) noexcept = 0;
 
@@ -253,9 +298,10 @@ protected:
      * @param old_sz Old size.
      * @param new_sz New size.
      * @param alignment Alignment.
-     * @return Pointer to reallocated memory or nullptr.
+     * @return Pointer to reallocated memory or `nullptr`.
+     *
      * @note Reallocates by allocating new memory, copying, then freeing old.
-     * @note Copies min(old_sz, new_sz) bytes.
+     * @note Copies `min(old_sz, new_sz)` bytes.
      */
     virtual void *do_try_reallocate(void *ptr, USize old_sz, USize new_sz,
                                     USize alignment) noexcept {
