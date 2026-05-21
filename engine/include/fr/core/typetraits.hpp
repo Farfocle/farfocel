@@ -1,15 +1,15 @@
 /**
  * @file typetraits.hpp
  * @author Kiju
- *
- * @brief Collection of useful type traits used across the core.
+ * @brief A collection of useful type traits used across the core.
  */
 
 #pragma once
 
-#include "fr/core/typedefs.hpp"
 #include <concepts>
 #include <type_traits>
+
+#include "fr/core/typedefs.hpp"
 
 namespace fr {
 template <typename T>
@@ -55,8 +55,7 @@ concept IsNothrowDestructible = std::is_nothrow_destructible_v<T>;
 
 /**
  * @brief Foundational requirements for most containers in the project.
- *
- * Ensures T can be safely moved and destroyed without throwing.
+ * @details Ensures T can be safely moved and destroyed without throwing.
  * Handles cases where T might be const-qualified or a reference (relevant for views like Slice).
  */
 template <typename T>
