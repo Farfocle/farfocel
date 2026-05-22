@@ -13,9 +13,11 @@
 
 namespace fr {
 
+// -------------------------------------------------------- Forward Declarations
 class Alloc;
 class AllocTracer;
 
+// ------------------------------------------------------------------ Ctx Struct
 struct Ctx {
     const char *tag{"@noname"};
     Alloc *alloc{nullptr};
@@ -24,12 +26,15 @@ struct Ctx {
     U8 oom_retries{2};
 };
 
+// ------------------------------------------------------------- Global Pointers
 namespace glob {
 FR_API extern AllocTracer *core_alloc_tracer_ptr;
 FR_API extern Alloc *core_heap_alloc_ptr;
 FR_API extern Ctx *core_ctx_ptr;
 FR_API extern thread_local Ctx *ambient_ctx_ptr;
 } // namespace glob
+
+// ------------------------------------------------------------------------- API
 
 FR_API void init_core_ctx() noexcept;
 FR_API void shutdown_core_ctx() noexcept;

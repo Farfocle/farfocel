@@ -4,6 +4,8 @@
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/format.hpp"
 #include "fr/core/slice.hpp"
+#include "fr/core/string.hpp"
+#include "fr/core/string_view.hpp"
 
 void print_slice(fr::Slice<const S32> s) {
     std::cout << fr::format("Viewing: {}\n", s);
