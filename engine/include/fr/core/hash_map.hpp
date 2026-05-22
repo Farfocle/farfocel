@@ -2,7 +2,8 @@
  * @file hash_map.hpp
  * @author Kiju
  *
- * @brief Dense hash table with linear probing. Utilizes the same design as fr::HashSet.
+ * @brief Hash map.
+ * @details
  */
 
 #pragma once

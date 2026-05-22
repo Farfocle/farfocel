@@ -4,6 +4,14 @@
  *
  * @brief Shape is a simple reflection/serializatian API inspired by Media Molecule's serialization
  * system.
+ *
+ * @details The shape system works by passing mutable archives into shape methods/functions
+ * implemented by/for arbitrary types. Archives  traverse through an implicit
+ * tree of reflected values. Every archive must satify the `IsArchive` concept. This approach is a
+ * templated version of the Media Molecule serialization system. Similar systems are also used in
+ * Unreal Engine.
+ *
+ * https://handmade.network/p/29/swedish-cubes-for-unity/blog/p/2723-how_media_molecule_does_serialization
  */
 
 #pragma once
