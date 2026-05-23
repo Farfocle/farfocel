@@ -34,7 +34,7 @@ class Array {
     FR_STATIC_ASSERT_NOTHROW_BASE(T);
 
 private:
-    T m_data[Size > 0 ? Size : 1];
+    T m_data[Size > 0 ? Size : 1]{};
 
 public:
     using iterator = T *;
@@ -412,9 +412,9 @@ public:
      * @tparam A Archive type.
      * @param archive Archive to use.
      */
-    template <typename A>
-    void shape(A &archive) {
-        if constexpr (A::kind == ArchiveKind::Serializer) {
+    template <typename Archive>
+    void shape(Archive &archive) {
+        if constexpr (Archive::action == ArchiveAction::Write) {
             USize sz = Size;
             archive.prop("@size", sz);
         } else {
@@ -423,7 +423,7 @@ public:
             FR_ASSERT(sz == Size, "deserialized size mismatch for fixed-size Array");
         }
 
-        archive.list("@items", [&](A &list_archive) {
+        archive.list("@items", [&](Archive &list_archive) {
             for (USize i = 0; i < Size; ++i) {
                 list_archive.prop("", m_data[i]);
             }

@@ -118,10 +118,14 @@ public:
         using ItemType = impl::pick_t<I, Ts...>;
         using LeafType = impl::TupleLeaf<I, ItemType>;
 
-        if constexpr (std::is_const_v<std::remove_reference_t<decltype(self)>>) {
-            return std::forward_like<decltype(self)>(static_cast<const LeafType &>(self).value);
+        if constexpr (std::is_reference_v<ItemType>) {
+            return static_cast<LeafType &>(self).value;
         } else {
-            return std::forward_like<decltype(self)>(static_cast<LeafType &>(self).value);
+            if constexpr (std::is_const_v<std::remove_reference_t<decltype(self)>>) {
+                return std::forward_like<decltype(self)>(static_cast<const LeafType &>(self).value);
+            } else {
+                return std::forward_like<decltype(self)>(static_cast<LeafType &>(self).value);
+            }
         }
     }
 

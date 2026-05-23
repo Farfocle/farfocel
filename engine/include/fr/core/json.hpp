@@ -49,7 +49,7 @@ namespace fr {
  * String json = writer.consume();
  * @endcode
  */
-class JsonSerializer {
+class JsonWriterArchive {
 public:
     /**
      * @brief Serialization configuration options.
@@ -64,29 +64,29 @@ public:
      */
     enum class State { Init, Serializing, Error };
 
-    static constexpr ArchiveKind kind = ArchiveKind::Serializer;
+    static constexpr ArchiveAction action = ArchiveAction::Write;
 
     /**
      * @brief Construct a serializer with default options.
      */
-    JsonSerializer()
-        : JsonSerializer(Options{}) {};
+    JsonWriterArchive()
+        : JsonWriterArchive(Options{}) {};
 
     /**
      * @brief Construct a serializer with specific options.
      * @param options Configuration for the serializer.
      */
-    JsonSerializer(Options options)
+    JsonWriterArchive(Options options)
         : m_options(options) {
         do_init_doc();
     }
 
-    JsonSerializer(const JsonSerializer &) = delete;
-    JsonSerializer &operator=(const JsonSerializer &) = delete;
-    JsonSerializer(JsonSerializer &&) = delete;
-    JsonSerializer &operator=(JsonSerializer &&) = delete;
+    JsonWriterArchive(const JsonWriterArchive &) = delete;
+    JsonWriterArchive &operator=(const JsonWriterArchive &) = delete;
+    JsonWriterArchive(JsonWriterArchive &&) = delete;
+    JsonWriterArchive &operator=(JsonWriterArchive &&) = delete;
 
-    ~JsonSerializer() {
+    ~JsonWriterArchive() {
         do_cleanup();
     }
 
@@ -186,7 +186,7 @@ public:
             } else {
                 do_add_value(name, yyjson_mut_null(m_doc));
             }
-        } else if constexpr (IsShape<JsonSerializer, V>) {
+        } else if constexpr (IsShape<JsonWriterArchive, V>) {
             yyjson_mut_val *obj = yyjson_mut_obj(m_doc);
             if (!obj) {
                 m_state = State::Error;
@@ -203,7 +203,7 @@ public:
                              yyjson_mut_strncpy(m_doc, k_typename.data(), k_typename.size()));
             }
 
-            call_shape<JsonSerializer, V>(*this, value);
+            call_shape<JsonWriterArchive, V>(*this, value);
             m_stack.pop_back();
         } else {
             FR_STATIC_ASSERT(false, "Object does not implement the shape protocol");
@@ -380,20 +380,20 @@ private:
  * }
  * @endcode
  */
-class JsonDeserializer {
+class JsonReaderArchive {
 public:
     /**
      * @brief Internal state of the deserializer.
      */
     enum class State { Init, Deserializing, Error };
 
-    static constexpr ArchiveKind kind = ArchiveKind::Deserializer;
+    static constexpr ArchiveAction action = ArchiveAction::Read;
 
     /**
      * @brief Construct a deserializer from a JSON string.
      * @param json JSON string to parse.
      */
-    JsonDeserializer(StringView json) {
+    JsonReaderArchive(StringView json) {
         m_json_doc = yyjson_read(json.data(), json.size(), 0);
         if (!m_json_doc) {
             m_state = State::Error;
@@ -411,12 +411,12 @@ public:
         m_state = State::Deserializing;
     }
 
-    JsonDeserializer(const JsonDeserializer &) = delete;
-    JsonDeserializer &operator=(const JsonDeserializer &) = delete;
-    JsonDeserializer(JsonDeserializer &&) = delete;
-    JsonDeserializer &operator=(JsonDeserializer &&) = delete;
+    JsonReaderArchive(const JsonReaderArchive &) = delete;
+    JsonReaderArchive &operator=(const JsonReaderArchive &) = delete;
+    JsonReaderArchive(JsonReaderArchive &&) = delete;
+    JsonReaderArchive &operator=(JsonReaderArchive &&) = delete;
 
-    ~JsonDeserializer() {
+    ~JsonReaderArchive() {
         if (m_json_doc) {
             yyjson_doc_free(m_json_doc);
         }
@@ -491,10 +491,10 @@ public:
             if (str) {
                 value = StringView(str, yyjson_get_len(val));
             }
-        } else if constexpr (IsShape<JsonDeserializer, V>) {
+        } else if constexpr (IsShape<JsonReaderArchive, V>) {
             m_stack.push_back(val);
             m_indices.push_back(0);
-            call_shape<JsonDeserializer, V>(*this, value);
+            call_shape<JsonReaderArchive, V>(*this, value);
             m_indices.pop_back();
             m_stack.pop_back();
         }

@@ -23,13 +23,14 @@
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
-enum class ArchiveKind : U8 { Serializer, Deserializer };
+enum class ArchiveKind : U8 { Json };
+enum class ArchiveAction : U8 { Write, Read };
 
 template <typename T>
 concept IsArchive =
     requires(T &archive, U32 &value) {
         { T::Options } -> std::same_as<typename T::Options>;
-        { T::kind } -> std::same_as<ArchiveKind>;
+        { T::action } -> std::same_as<ArchiveAction>;
         { archive.prop("@name", value) } -> std::same_as<void>;
         {
             archive.list("@items", [](T &) {})

@@ -1,5 +1,6 @@
 set(BENCH_SOURCES
     "array.cpp"
+    "bitset.cpp"
     "dynamic_array.cpp"
     "format.cpp"
     "hash_map.cpp"

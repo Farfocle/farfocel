@@ -394,11 +394,12 @@ public:
         return !is_nil();
     }
 
-    template <typename A>
-    void shape(A &archive) {
+    template <typename Archive>
+    void shape(Archive &archive) {
         bool has_value = is_some();
         archive.prop("@has_value", has_value);
-        if constexpr (A::kind == ArchiveKind::Serializer) {
+
+        if constexpr (Archive::action == ArchiveAction::Write) {
             if (has_value) {
                 archive.prop("@value", unwrap());
             }
