@@ -14,6 +14,7 @@ set(TEST_CORE_SOURCES
     "hash_set.cpp"
     "hash_map.cpp"
     "inline_any.cpp"
+    "inline_function.cpp"
     "serialization.cpp"
     "format.cpp"
 )

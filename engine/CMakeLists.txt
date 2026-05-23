@@ -14,6 +14,7 @@ set(ENGINE_HEADERS
     "include/fr/core/hash_map.hpp"
     "include/fr/core/hash_set.hpp"
     "include/fr/core/heap_alloc.hpp"
+    "include/fr/core/inline_function.hpp"
     "include/fr/core/macros.hpp"
     "include/fr/core/malloc_alloc.hpp"
     "include/fr/core/math.hpp"

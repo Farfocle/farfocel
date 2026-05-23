@@ -20,9 +20,9 @@ private:
     USize size{0};
     USize alignment{0};
     bool (*call_dispatch)(MetaDispatchAction, Byte *, Byte *){nullptr};
+bool()
 
-public:
-    static Meta nil() noexcept {
+    public : static Meta nil() noexcept {
         return Meta{};
     }
 
