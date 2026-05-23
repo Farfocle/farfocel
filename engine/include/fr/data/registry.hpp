@@ -120,7 +120,7 @@ public:
     // --------------------------------------------------------- Part Operations
 
     /**
-     * @brief Checks if a part pool of type T exists.
+     * @brief Checks if a part pool of type `T` exists.
      * @return True if the pool exists, false otherwise.
      */
     template <typename T>
@@ -130,7 +130,7 @@ public:
     }
 
     /**
-     * @brief Checks if a thing owns part T.
+     * @brief Checks if a thing owns part `T`.
      * @note Returns false if the pool is missing or the thing is dead.
      * @note Returns true for nil thing if the pool exists.
      */
@@ -153,10 +153,10 @@ public:
     }
 
     /**
-     * @brief Tries to emplace part T on a thing.
+     * @brief Tries to emplace part `T` on a thing.
      * @note Creates the part pool if missing.
      * @note Returns the stub for nil thing.
-     * @note Returns nullptr if the thing is dead or already owns T.
+     * @note Returns nullptr if the thing is dead or already owns `T`.
      */
     template <typename T, typename... Args>
     T *try_emplace(Thing thing, Args &&...args) noexcept {
@@ -184,8 +184,8 @@ public:
     }
 
     /**
-     * @brief Tries to insert part T on a thing by const reference.
-     * @note Same behavior as try_emplace_part.
+     * @brief Tries to insert part `T` on a thing by const reference.
+     * @note Same behavior as `try_emplace`.
      */
     template <typename T>
     T *try_insert(Thing thing, const T &part) noexcept {
@@ -202,10 +202,10 @@ public:
     }
 
     /**
-     * @brief Emplaces part T on a thing.
+     * @brief Emplaces part `T` on a thing.
      * @note Creates the part pool if missing.
      * @note Returns the stub for nil thing.
-     * @warning Asserts if the thing is dead or already owns T.
+     * @warning Asserts if the thing is dead or already owns `T`.
      */
     template <typename T, typename... Args>
     T &emplace(Thing thing, Args &&...args) noexcept {
@@ -246,7 +246,7 @@ public:
     }
 
     /**
-     * @brief Tries to destroy part T on a thing.
+     * @brief Tries to destroy part `T` on a thing.
      * @note Returns false if thing is nil, pool is missing, or the thing does not own T.
      */
     template <typename T>
@@ -275,7 +275,7 @@ public:
     /**
      * @brief Destroys part T on a thing.
      * @note Returns false if thing is nil.
-     * @warning Asserts if the pool is missing or the thing does not own T.
+     * @warning Asserts if the pool is missing or the thing does not have part `T`.
      */
     template <typename T>
     bool destroy(Thing thing) noexcept {
@@ -298,8 +298,8 @@ public:
     }
 
     /**
-     * @brief Tries to get the part owned by the thing.
-     * @note Returns nullptr if the pool is missing, the thing is dead, or the thing does not own T.
+     * @brief Tries to get the part `T` owned by the thing.
+     * @note Returns nullptr if the pool is missing, the thing is dead, or the thing does not own `T`.
      * @note Returns the stub pointer for nil thing if the pool exists.
      */
     template <typename T>
@@ -326,8 +326,8 @@ public:
     }
 
     /**
-     * @brief Returns a reference to the part owned by the thing.
-     * @warning Asserts if the thing is dead or does not own part T.
+     * @brief Returns a reference to the part `T` owned by the thing.
+     * @warning Asserts if the thing is dead or does not have a part `T`.
      */
     template <typename T>
     T &get(Thing thing) noexcept {

@@ -72,22 +72,22 @@ class InlineFunction<R(Args...), Capacity, Alignment> {
     };
 
 public:
-    InlineFunction() = default;
+    InlineFunction() noexcept = default;
 
     template <typename F>
         requires(!std::is_same_v<std::decay_t<F>, InlineFunction>)
-    InlineFunction(F &&callable) {
+    InlineFunction(F &&callable) noexcept {
         emplace(std::forward<F>(callable));
     }
 
-    InlineFunction(const InlineFunction &other) {
+    InlineFunction(const InlineFunction &other) noexcept {
         if (other.m_ops) {
             m_ops = other.m_ops;
             m_ops->copy(m_storage, other.m_storage);
         }
     }
 
-    InlineFunction(InlineFunction &&other) {
+    InlineFunction(InlineFunction &&other) noexcept {
         if (other.m_ops) {
             m_ops = other.m_ops;
             m_ops->move(m_storage, other.m_storage);
@@ -96,11 +96,11 @@ public:
         }
     }
 
-    ~InlineFunction() {
+    ~InlineFunction() noexcept {
         reset();
     }
 
-    InlineFunction &operator=(const InlineFunction &other) {
+    InlineFunction &operator=(const InlineFunction &other) noexcept {
         if (this == &other) {
             return *this;
         }
@@ -113,7 +113,7 @@ public:
         return *this;
     }
 
-    InlineFunction &operator=(InlineFunction &&other) {
+    InlineFunction &operator=(InlineFunction &&other) noexcept {
         if (this == &other) {
             return *this;
         }
@@ -130,7 +130,7 @@ public:
 
     template <typename F>
         requires(!std::is_same_v<std::decay_t<F>, InlineFunction>)
-    InlineFunction &operator=(F &&callable) {
+    InlineFunction &operator=(F &&callable) noexcept {
         emplace(std::forward<F>(callable));
         return *this;
     }
@@ -140,7 +140,7 @@ public:
      */
     template <typename F>
         requires(!std::is_same_v<std::decay_t<F>, InlineFunction>)
-    void emplace(F &&callable) {
+    void emplace(F &&callable) noexcept {
         using DF = std::decay_t<F>;
         FR_STATIC_ASSERT(sizeof(DF) <= Capacity, "callable is too large for InlineFunction");
         FR_STATIC_ASSERT(alignof(DF) <= Alignment, "alignment is too small for callable");
@@ -154,7 +154,7 @@ public:
     /**
      * @brief Clears the stored callable.
      */
-    void reset() {
+    void reset() noexcept {
         if (m_ops) {
             m_ops->destroy(m_storage);
             m_ops = nullptr;
@@ -176,7 +176,7 @@ public:
      * @brief Invokes the stored callable.
      * @warning Asserts if no callable is stored.
      */
-    R operator()(Args... args) {
+    R operator()(Args... args) noexcept {
         FR_ASSERT(m_ops != nullptr, "cannot call a nil InlineFunction");
         return m_ops->invoke(m_storage, std::forward<Args>(args)...);
     }
@@ -185,7 +185,7 @@ public:
      * @brief Invokes the stored callable.
      * @warning Asserts if no callable is stored.
      */
-    R operator()(Args... args) const {
+    R operator()(Args... args) const noexcept {
         FR_ASSERT(m_ops != nullptr, "cannot call a nil InlineFunction");
         return m_ops->invoke(const_cast<Byte *>(m_storage), std::forward<Args>(args)...);
     }
