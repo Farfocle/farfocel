@@ -120,8 +120,11 @@ public:
     template <typename Archive>
     void shape(Archive &archive) noexcept {
         if constexpr (Archive::action == ArchiveAction::Write) {
-            archive.prop("idx", idx());
-            archive.prop("gen", gen());
+            ThingIdx idx_value = idx();
+            ThingGen gen_value = gen();
+
+            archive.prop("idx", idx_value);
+            archive.prop("gen", gen_value);
         } else {
             ThingIdx idx{0};
             ThingGen gen{0};

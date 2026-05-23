@@ -5,13 +5,14 @@
  * @brief Example showcasing the basic functionality of the hidden ECS layer.
  */
 
+#include <iostream>
+
 #include "fr/core/ctx.hpp"
 #include "fr/core/format.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/registry.hpp"
 #include "fr/data/thing.hpp"
-#include <iostream>
 
 struct Pos {
     F32 x{0.0};

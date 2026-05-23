@@ -253,7 +253,7 @@ public:
      * @brief Creates a query for a set of parts.
      */
     template <typename... Include>
-    Query<Include...> query() noexcept {
+    auto query() noexcept {
         return m_registry.query<Include...>();
     }
 
@@ -262,8 +262,8 @@ public:
     /**
      * @brief Schedules a system for synchronous execution in the given stage.
      */
-    void schedule_sync(Stage stage) noexcept {
-        m_system_pool.schedule_sync(stage, *this);
+    void schedule_sync(Stage stage, const System& system) noexcept {
+        m_system_pool.schedule_sync(stage, system);
     }
 
     /**

@@ -100,6 +100,7 @@ String to_string_dispatch(const T &val, const FormatOptions &opts) {
     } else if constexpr (std::is_same_v<RawT, const char *> || std::is_same_v<RawT, char *> ||
                          (std::is_array_v<RawT> &&
                           std::is_same_v<std::remove_extent_t<RawT>, char>)) {
+
         return String::from_chars(val);
     } else if constexpr (IsPrimitive<RawT>) {
         if constexpr (IsF<RawT>) {
@@ -107,15 +108,18 @@ String to_string_dispatch(const T &val, const FormatOptions &opts) {
                 char buffer[128];
                 auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), val,
                                                std::chars_format::fixed, opts.float_precision);
+
                 if (ec == std::errc()) {
                     return String::from_sized_chars(buffer, static_cast<USize>(ptr - buffer));
                 }
             }
         }
+
         String s = primitive_to_string(val);
         if constexpr (IsF<RawT>) {
             trim_float_string(s);
         }
+
         return s;
     } else {
         if (!opts.serializer) {
@@ -123,11 +127,10 @@ String to_string_dispatch(const T &val, const FormatOptions &opts) {
         }
 
         JsonWriterArchive::Options jopts{.types = opts.types, .pretty = opts.pretty};
-        JsonWriterArchive serializer(jopts);
+        JsonWriterArchive writer(jopts);
 
-        call_shape(serializer, const_cast<RawT &>(val));
-
-        return serializer.consume();
+        call_shape(writer, const_cast<RawT &>(val));
+        return writer.consume();
     }
 }
 
@@ -171,6 +174,7 @@ String format_with_options(const FormatOptions &opts, StringView fmt, Ts &&...ar
         } else {
             result.append("{}");
         }
+
         pos = next + 2;
     }
 
