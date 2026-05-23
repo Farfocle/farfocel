@@ -41,7 +41,7 @@ S32 main() {
 
         std::cout << "\n--- Serialization ---\n";
 
-        fr::JsonSerializer serializer({.pretty = true});
+        fr::JsonWriterArchive serializer({.pretty = true});
         bs.shape(serializer);
 
         fr::String json = serializer.consume();

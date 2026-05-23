@@ -483,9 +483,9 @@ public:
         m_load = 0;
     }
 
-    template <typename A>
-    void shape(A &archive) {
-        if constexpr (A::kind == ArchiveKind::Serializer) {
+    template <typename Archive>
+    void shape(Archive &archive) {
+        if constexpr (Archive::action == ArchiveAction::Write) {
             USize l = m_load;
             archive.prop("@load", l);
 
@@ -499,8 +499,8 @@ public:
             archive.prop("@capacity", cap);
         }
 
-        archive.list("@items", [&](A &list_archive) {
-            if constexpr (A::kind == ArchiveKind::Serializer) {
+        archive.list("@items", [&](Archive &list_archive) {
+            if constexpr (Archive::action == ArchiveAction::Write) {
                 for (const Key &item : *this) {
                     list_archive.prop("", const_cast<Key &>(item));
                 }

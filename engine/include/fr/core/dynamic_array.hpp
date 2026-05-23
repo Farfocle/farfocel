@@ -868,9 +868,9 @@ public:
         m_size = new_size;
     }
 
-    template <typename A>
-    void shape(A &archive) {
-        if constexpr (A::kind == ArchiveKind::Serializer) {
+    template <typename Archive>
+    void shape(Archive &archive) {
+        if constexpr (Archive::action == ArchiveAction::Write) {
             USize sz = m_size;
             archive.prop("@size", sz);
 
@@ -893,7 +893,7 @@ public:
             }
         }
 
-        archive.list("@items", [&](A &list_archive) {
+        archive.list("@items", [&](Archive &list_archive) {
             for (T &item : *this) {
                 list_archive.prop("", item);
             }

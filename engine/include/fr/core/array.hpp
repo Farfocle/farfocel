@@ -123,8 +123,8 @@ public:
      * @pre slice.size() == Size.
      * @pre T must be nothrow default constructible and copy assignable.
      */
-    [[nodiscard]] static constexpr Array from_slice(
-        Slice<const std::remove_const_t<T>> slice) noexcept {
+    [[nodiscard]] static constexpr Array
+    from_slice(Slice<const std::remove_const_t<T>> slice) noexcept {
         FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
         FR_STATIC_ASSERT_NOTHROW_COPY_ASSIGNABLE(T);
         FR_ASSERT(slice.size() == Size, "slice size mismatch");
@@ -140,7 +140,6 @@ public:
     // ---------------------------------------------------------
     // Iterators
     // ---------------------------------------------------------
-
 
     /**
      * @brief Returns an iterator to the first element.
@@ -321,7 +320,6 @@ public:
         return slice_mut().slice_mut(from, to);
     }
 
-
     constexpr Slice<const T> slice(USize, USize) const && = delete;
     constexpr Slice<T> slice_mut(USize, USize) && = delete;
 
@@ -347,7 +345,6 @@ public:
         return slice_mut().slice_mut_from(from);
     }
 
-
     constexpr Slice<const T> slice_from(USize) const && = delete;
     constexpr Slice<T> slice_mut_from(USize) && = delete;
 
@@ -372,7 +369,6 @@ public:
     {
         return slice_mut().slice_mut_to(to);
     }
-
 
     constexpr Slice<const T> slice_to(USize) const && = delete;
     constexpr Slice<T> slice_mut_to(USize) && = delete;
@@ -434,9 +430,9 @@ public:
      * @tparam A Archive type.
      * @param archive Archive to use.
      */
-    template <typename A>
-    void shape(A &archive) {
-        if constexpr (A::kind == ArchiveKind::Serializer) {
+    template <typename Archive>
+    void shape(Archive &archive) {
+        if constexpr (Archive::action == ArchiveAction::Write) {
             USize sz = Size;
             archive.prop("@size", sz);
         } else {
@@ -445,7 +441,7 @@ public:
             FR_ASSERT(sz == Size, "deserialized size mismatch for fixed-size Array");
         }
 
-        archive.list("@items", [&](A &list_archive) {
+        archive.list("@items", [&](Archive &list_archive) {
             for (USize i = 0; i < Size; ++i) {
                 list_archive.prop("", m_data[i]);
             }

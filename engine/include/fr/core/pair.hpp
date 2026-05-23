@@ -98,8 +98,8 @@ public:
         return combine_hashes(call_hash(m_first), call_hash(m_second));
     }
 
-    template <typename A>
-    void shape(A &archive) {
+    template <typename Archive>
+    void shape(Archive &archive) {
         archive.prop("@first", m_first);
         archive.prop("@second", m_second);
     }

@@ -577,9 +577,9 @@ public:
         return m_slots[target].value;
     }
 
-    template <typename A>
-    void shape(A &archive) {
-        if constexpr (A::kind == ArchiveKind::Serializer) {
+    template <typename Archive>
+    void shape(Archive &archive) {
+        if constexpr (Archive::action == ArchiveAction::Write) {
             USize l = m_load;
             archive.prop("@load", l);
 
@@ -593,13 +593,13 @@ public:
             archive.prop("@capacity", cap);
         }
 
-        archive.list("@items", [&](A &list_archive) {
-            if constexpr (A::kind == ArchiveKind::Serializer) {
+        archive.list("@items", [&](Archive &list_archive) {
+            if constexpr (Archive::action == ArchiveAction::Write) {
                 for (auto pair : *this) {
                     auto &key = pair.first();
                     auto &val = pair.second();
 
-                    list_archive.dict("", [&](A &entry_archive) {
+                    list_archive.dict("", [&](Archive &entry_archive) {
                         entry_archive.prop("@key", const_cast<Key &>(key));
                         entry_archive.prop("@value", val);
                     });
@@ -609,7 +609,7 @@ public:
                 USize count = list_archive.current_list_size();
 
                 for (USize i = 0; i < count; ++i) {
-                    list_archive.dict("", [&](A &entry_archive) {
+                    list_archive.dict("", [&](Archive &entry_archive) {
                         Key key{};
                         Value val{};
                         entry_archive.prop("@key", key);

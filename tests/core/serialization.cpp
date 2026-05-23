@@ -38,7 +38,7 @@ struct Data {
 TEST_CASE("Serialization - Pair") {
     Pair<S32, String> value(7, String("seven"));
 
-    JsonSerializer writer;
+    JsonWriterArchive writer;
     writer.prop("pair", value);
     auto json = writer.consume();
 
@@ -49,7 +49,7 @@ TEST_CASE("Serialization - Pair") {
 TEST_CASE("Serialization - Tuple") {
     Tuple<S32, bool, String> value(4, true, String("ok"));
 
-    JsonSerializer writer;
+    JsonWriterArchive writer;
     writer.prop("tuple", value);
     auto json = writer.consume();
 
@@ -61,7 +61,7 @@ TEST_CASE("Serialization - Tuple") {
 TEST_CASE("Serialization - DynamicArray") {
     DynamicArray<S32> value = {1, 2, 3};
 
-    JsonSerializer writer;
+    JsonWriterArchive writer;
     writer.prop("array", value);
     auto json = writer.consume();
 
@@ -74,7 +74,7 @@ TEST_CASE("Serialization - HashSet") {
     value.insert(10);
     value.insert(20);
 
-    JsonSerializer writer;
+    JsonWriterArchive writer;
     writer.prop("set", value);
     auto json = writer.consume();
 
@@ -89,7 +89,7 @@ TEST_CASE("Serialization - HashMap") {
     value.insert(1, String("one"));
     value.insert(2, String("two"));
 
-    JsonSerializer writer;
+    JsonWriterArchive writer;
     writer.prop("map", value);
     auto json = writer.consume();
 
@@ -101,7 +101,7 @@ TEST_CASE("Serialization - HashMap") {
 
 TEST_CASE("Serialization - Optional") {
     Optional<S32> some_value(42);
-    JsonSerializer writer;
+    JsonWriterArchive writer;
 
     writer.prop("opt", some_value);
     auto json = writer.consume();
@@ -126,7 +126,7 @@ TEST_CASE("Serialization - Allocator Types") {
         .attempt = 1,
     };
 
-    JsonSerializer writer;
+    JsonWriterArchive writer;
     writer.prop("result", result);
     writer.prop("action", action);
     writer.prop("frame", frame);
@@ -143,7 +143,7 @@ TEST_CASE("Serialization - Slice") {
     S32 data[] = {10, 20, 30};
     Slice<S32> slice(data, 3);
 
-    JsonSerializer writer;
+    JsonWriterArchive writer;
     writer.prop("slice", slice);
     auto json = writer.consume();
 
@@ -154,7 +154,7 @@ TEST_CASE("Serialization - Slice") {
 TEST_CASE("Serialization - UniquePtr") {
     SUBCASE("Single object") {
         auto ptr = fr::make_unique<S32>(123);
-        JsonSerializer writer;
+        JsonWriterArchive writer;
         writer.prop("ptr", ptr);
         auto json = writer.consume();
 
@@ -167,7 +167,7 @@ TEST_CASE("Serialization - UniquePtr") {
         ptr[0] = 1;
         ptr[1] = 2;
 
-        JsonSerializer writer;
+        JsonWriterArchive writer;
         writer.prop("ptr_arr", ptr);
         auto json = writer.consume();
 
@@ -180,7 +180,7 @@ TEST_CASE("Serialization - Hash and Hash32") {
     Hash h = Hash::from_raw(123);
     Hash32 h32 = Hash32::from_raw(77);
 
-    JsonSerializer writer;
+    JsonWriterArchive writer;
     writer.prop("h", h);
     writer.prop("h32", h32);
     auto json = writer.consume();
@@ -193,7 +193,7 @@ TEST_CASE("Serialization - Hash and Hash32") {
 
 TEST_CASE("Deserialization - Basic Types") {
     String json = String::from_view("{\"b\":true,\"u\":42,\"s\":-10,\"f\":3.14,\"str\":\"hello\"}");
-    JsonDeserializer reader(json.view());
+    JsonReaderArchive reader(json.view());
 
     bool b = false;
     U32 u = 0;
@@ -224,12 +224,12 @@ TEST_CASE("Deserialization - Complex Structure") {
     original.ptr = make_unique<S32>(100);
     original.pair = Pair<S32, String>(7, String("seven"));
 
-    JsonSerializer writer;
+    JsonWriterArchive writer;
     writer.prop("data", original);
     String json = writer.consume();
 
     Data deserialized;
-    JsonDeserializer reader(json.view());
+    JsonReaderArchive reader(json.view());
     reader.prop("data", deserialized);
 
     CHECK(deserialized.arr.size() == 2);
@@ -254,7 +254,7 @@ TEST_CASE("Serialization - Bitset") {
     original.one_bit(3);
     original.one_bit(9);
 
-    JsonSerializer writer;
+    JsonWriterArchive writer;
     writer.prop("bitset", original);
     String json = writer.consume();
 
@@ -262,7 +262,7 @@ TEST_CASE("Serialization - Bitset") {
     CHECK(json.view().find("\"@value\":\"1001000001\"") != StringView::npos);
 
     Bitset<10> deserialized;
-    JsonDeserializer reader(json.view());
+    JsonReaderArchive reader(json.view());
     reader.prop("bitset", deserialized);
 
     CHECK(deserialized.count_ones() == 3);

@@ -119,7 +119,7 @@ public:
 
     template <typename Archive>
     void shape(Archive &archive) noexcept {
-        if constexpr (Archive::kind == ArchiveKind::Serializer) {
+        if constexpr (Archive::action == ArchiveAction::Write) {
             archive.prop("idx", idx());
             archive.prop("gen", gen());
         } else {

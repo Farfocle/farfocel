@@ -122,8 +122,8 @@ String to_string_dispatch(const T &val, const FormatOptions &opts) {
             return String::from_view("{Object}");
         }
 
-        JsonSerializer::Options jopts{.types = opts.types, .pretty = opts.pretty};
-        JsonSerializer serializer(jopts);
+        JsonWriterArchive::Options jopts{.types = opts.types, .pretty = opts.pretty};
+        JsonWriterArchive serializer(jopts);
 
         call_shape(serializer, const_cast<RawT &>(val));
 
