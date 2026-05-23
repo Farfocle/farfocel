@@ -1,7 +1,17 @@
 /**
  * @file nil.hpp
  * @author Kiju
- * @brief Traits and concepts for types that have a "nil" or "invalid" state.
+ * @brief The nil protocol.
+ *
+ * @details Why?
+ * Nil differs from null (or nullptr in C++ specifically) in that it is a value of some object, not
+ * the absance of it, and thus can be used in value contexts. Nil represents an empty and
+ * functionally useless value that is safe and valid to pass around. The inspiration for this
+ * concept came from newer programming languages (like Odin) and data-oriented programming. It is
+ * more of a formalized design pattern than anything else. Use cases in the farfocel engine include:
+ * - `fr::Optional` niche value optimization
+ * - Game object systems in which handles can formally have a nil value and use it to represent
+ *   stub handles
  */
 
 #pragma once
@@ -11,14 +21,8 @@
 
 namespace fr {
 
-/**
- * @brief Sentinel type for anything that is empty or devoid of data, but not in a unkown, invalid
- * state.
- */
-struct NilTag {
-    explicit constexpr NilTag() = default;
-};
 
+// -------------------------------------------------------------- Implementation
 namespace impl {
 
 template <typename T>
@@ -47,6 +51,12 @@ concept HasADLNil = requires {
 };
 
 } // namespace impl
+
+// ------------------------------------------------------------------ Public API
+
+struct NilTag {
+    explicit constexpr NilTag() = default;
+};
 
 /**
  * @brief Concept for types that have a defined nil value.
@@ -77,17 +87,17 @@ template <IsNillable T>
  * @brief Checks if a value is nil.
  *
  * @tparam T Nillable type.
- * @param v Value to check.
- * @return True if nil.
+ * @param value Value to check.
+ * @return `true` if nil.
  */
 template <IsNillable T>
-[[nodiscard]] constexpr bool call_is_nil(const T &v) noexcept {
+[[nodiscard]] constexpr bool call_is_nil(const T &value) noexcept {
     if constexpr (impl::HasMemberIsNil<T>) {
-        return v.is_nil();
+        return value.is_nil();
     } else if constexpr (impl::HasADLIsNil<T>) {
-        return is_nil(v);
+        return is_nil(value);
     } else if constexpr (std::is_pointer_v<T>) {
-        return v == nullptr;
+        return value == nullptr;
     }
 }
 } // namespace fr
