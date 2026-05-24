@@ -37,6 +37,7 @@ set(ENGINE_HEADERS
 #### renderer
     "include/fr/renderer/render_device.hpp"
     "include/fr/renderer/mesh_loader.hpp"
+    "include/fr/renderer/mesh.hpp"
     "include/fr/renderer/camera.hpp"
     "include/fr/renderer/render_queue.hpp"
     "include/fr/renderer/renderer.hpp"
@@ -50,6 +51,7 @@ set(ENGINE_SOURCES
 #### renderer
     "src/renderer/opengl/opengl_render_device.cpp"
     "src/renderer/mesh.cpp"
+    "src/renderer/mesh_loader.cpp"
 )
 
 
@@ -62,7 +64,7 @@ target_link_libraries(engine PUBLIC yyjson)
 
 target_link_libraries(engine PRIVATE glad)
 target_link_libraries(engine PUBLIC glm::glm)
-target_link_libraries(engine PRIVATE SDL3::SDL3-static)
+target_link_libraries(engine PUBLIC SDL3::SDL3-static)
 target_link_libraries(engine PRIVATE cgltf)
 
 target_include_directories(engine

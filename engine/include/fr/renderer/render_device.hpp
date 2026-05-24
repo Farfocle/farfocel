@@ -8,6 +8,8 @@
 #include "fr/core/string_view.hpp"
 #include "fr/core/typedefs.hpp"
 
+#include <glm/glm.hpp>
+
 namespace fr {
 struct BufferHandle {
     SlotKey key{};
@@ -112,6 +114,6 @@ public:
     virtual void submit_command_buffer(CommandBuffer *cmd_buffer) noexcept = 0;
 };
 
-FR_API RenderDevice *create_opengl_render_device() noexcept;
+FR_API RenderDevice *create_opengl_render_device(Alloc *alloc) noexcept;
 
 } // namespace fr

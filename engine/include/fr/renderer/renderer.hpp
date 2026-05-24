@@ -4,6 +4,8 @@
 #include "fr/renderer/render_device.hpp"
 #include "fr/renderer/render_queue.hpp"
 
+#include <iostream>
+
 namespace fr {
 class Renderer {
 public:
@@ -12,8 +14,18 @@ public:
         FR_ASSERT(device != nullptr, "Renderer requires valid RenderDevice");
     }
 
+    ~Renderer() noexcept {
+        if (m_device) {
+            if (m_transform_ssbo.is_valid())
+                m_device->destroy_buffer(m_transform_ssbo);
+            if (m_camera_ssbo.is_valid())
+                m_device->destroy_buffer(m_camera_ssbo);
+        }
+    }
+
     void render(const RenderQueue &queue, Slice<const TextureHandle> color_targets,
-                TextureHandle depth_target, U32 width, U32 height) noexcept {
+                TextureHandle depth_target, U32 width, U32 height,
+                const glm::mat4 &view_proj) noexcept {
         if (queue.is_empty())
             return;
 
@@ -37,10 +49,20 @@ public:
                                           transforms.size() * sizeof(glm::mat4));
         m_device->update_buffer(m_transform_ssbo, transform_bytes);
 
+        if (!m_camera_ssbo.is_valid())
+            m_camera_ssbo =
+                m_device->create_buffer(Slice<const Byte>(nullptr, sizeof(glm::mat4)), true);
+
+        m_device->update_buffer(
+            m_camera_ssbo,
+            Slice<const Byte>(reinterpret_cast<const Byte *>(&view_proj), sizeof(glm::mat4)));
+
         CommandBuffer *cmd = m_device->adopt_command_buffer();
         cmd->begin_render_pass(color_targets, depth_target);
         cmd->set_viewport(width, height);
+
         cmd->bind_storage_buffer(m_transform_ssbo, 0);
+        cmd->bind_storage_buffer(m_camera_ssbo, 1);
 
         RenderPipelineHandle curr_pipe{};
         BufferHandle curr_vbo{};
@@ -76,6 +98,7 @@ public:
 
             Slice<const Byte> push_bytes(reinterpret_cast<const Byte *>(&call.transform_index),
                                          sizeof(U32));
+            cmd->set_push_constants(push_bytes);
 
             cmd->draw_indexed(call.index_count, call.index_offset, call.vertex_offset);
         }
@@ -89,5 +112,7 @@ private:
 
     BufferHandle m_transform_ssbo{};
     U32 m_transform_capacity{0}; // the amount of matrixes
+                                 //
+    BufferHandle m_camera_ssbo{};
 };
 } // namespace fr

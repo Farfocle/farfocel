@@ -9,6 +9,7 @@
 
 #include <SDL3/SDL.h>
 #include <glad/gl.h>
+#include <iostream>
 #include <unistd.h>
 
 namespace fr {
@@ -27,11 +28,11 @@ enum class CommandType : U8 {
     EndRenderPass,
     SetViewport,
     SetPipeline,
+    SetPushConstants,
     BindVertexBuffer,
     BindStorageBuffer,
     BindIndexBuffer,
     BindTexture,
-    SetPushConstants,
     DrawIndexed
 };
 
@@ -193,11 +194,27 @@ public:
             FR_ASSERT(false, "Couldn't initialize GLAD... that sucks");
         }
 
+        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        // FR LOG would be nice to have
+        // this is so that the compiler doesn't cry bout the unused variables
+        glDebugMessageCallback(
+            [](GLenum /*source*/, GLenum /*type*/, GLuint /*id*/, GLenum severity,
+               GLsizei /*length*/, const GLchar *message, const void * /*userParam*/) {
+                if (severity == GL_DEBUG_SEVERITY_HIGH || severity == GL_DEBUG_SEVERITY_MEDIUM) {
+                    std::cerr << "[OpenGL ERROR]: " << message << "\n";
+                }
+            },
+            nullptr);
+
         glCreateFramebuffers(1, &m_fallback_fbo);
+        glGenVertexArrays(1, &m_vao);
+        glBindVertexArray(m_vao);
     }
 
     ~OpenGLRenderDevice() noexcept override {
         glDeleteFramebuffers(1, &m_fallback_fbo);
+        glDeleteVertexArrays(1, &m_vao);
     }
 
     BufferHandle create_buffer(Slice<const Byte> data, bool is_dynamic) noexcept override {
@@ -267,14 +284,36 @@ public:
         glShaderSource(vs, 1, &vert_ptr, nullptr);
         glCompileShader(vs);
 
+        GLint success;
+        glGetShaderiv(vs, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            char infoLog[1024];
+            glGetShaderInfoLog(vs, 1024, nullptr, infoLog);
+            FR_PANIC(infoLog);
+        }
+
         GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
         glShaderSource(fs, 1, &frag_ptr, nullptr);
         glCompileShader(fs);
+
+        glGetShaderiv(fs, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            char infoLog[1024];
+            glGetShaderInfoLog(fs, 1024, nullptr, infoLog);
+            FR_PANIC(infoLog);
+        }
 
         GLuint program = glCreateProgram();
         glAttachShader(program, vs);
         glAttachShader(program, fs);
         glLinkProgram(program);
+
+        glGetProgramiv(program, GL_LINK_STATUS, &success);
+        if (!success) {
+            char infoLog[1024];
+            glGetProgramInfoLog(program, 1024, nullptr, infoLog);
+            FR_PANIC(infoLog);
+        }
 
         glDeleteShader(vs);
         glDeleteShader(fs);
@@ -351,6 +390,7 @@ public:
                 if (cmd.payload.render_pass.num_colors == 0 &&
                     !cmd.payload.render_pass.depth_target.is_valid()) {
                     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                    glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
                     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 } else {
                     glBindFramebuffer(GL_FRAMEBUFFER, m_fallback_fbo);
@@ -368,8 +408,8 @@ public:
                     if (cmd.payload.render_pass.depth_target.is_valid()) {
                         GLuint gl_depth =
                             *m_textures.get_data_unsafe(cmd.payload.render_pass.depth_target.key);
-                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                                               GL_TEXTURE_2D, gl_depth, 0);
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
+                                               gl_depth, 0);
                     }
 
                     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -409,7 +449,24 @@ public:
 
             case CommandType::BindVertexBuffer: {
                 GLuint vbo = *m_buffers.get_data_unsafe(cmd.payload.vertex_buffer.vbo.key);
-                glBindVertexBuffer(0, vbo, 0, cmd.payload.vertex_buffer.stride);
+
+                glVertexArrayVertexBuffer(m_vao, 0, vbo, 0, cmd.payload.vertex_buffer.stride);
+
+                // position
+                glEnableVertexArrayAttrib(m_vao, 0);
+                glVertexArrayAttribFormat(m_vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+                glVertexArrayAttribBinding(m_vao, 0, 0);
+
+                // normals
+                glEnableVertexArrayAttrib(m_vao, 1);
+                glVertexArrayAttribFormat(m_vao, 1, 3, GL_FLOAT, GL_FALSE, 12);
+                glVertexArrayAttribBinding(m_vao, 1, 0);
+
+                // uv
+                glEnableVertexArrayAttrib(m_vao, 2);
+                glVertexArrayAttribFormat(m_vao, 2, 2, GL_FLOAT, GL_FALSE, 24);
+                glVertexArrayAttribBinding(m_vao, 2, 0);
+
                 break;
             }
             case CommandType::BindStorageBuffer: {
@@ -418,16 +475,21 @@ public:
                 break;
             }
 
-            // opengl does not support push constants, but this is a workaround, and more so, it
-            // will work fully properly when vulkan comes
+                // opengl does not support push constants, but this is a workaround, and more so, it
+                // will work fully properly when vulkan comes
             case CommandType::SetPushConstants: {
-                glUniform1ui(0, cmd.payload.push_constants.data[0]);
+                GLint current_program;
+                glGetIntegerv(GL_CURRENT_PROGRAM, &current_program);
+                GLint loc = glGetUniformLocation(current_program, "u_transform_idx");
+                if (loc != -1) {
+                    glUniform1ui(loc, cmd.payload.push_constants.data[0]);
+                }
                 break;
             }
 
             case CommandType::BindIndexBuffer: {
                 GLuint ibo = *m_buffers.get_data_unsafe(cmd.payload.index_buffer.ibo.key);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+                glVertexArrayElementBuffer(m_vao, ibo);
                 break;
             }
 
@@ -466,6 +528,7 @@ public:
 
 private:
     GLuint m_fallback_fbo{0};
+    GLuint m_vao{0};
     Alloc *m_alloc{nullptr};
 
     SlotMap<GLuint> m_buffers;

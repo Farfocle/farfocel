@@ -90,7 +90,7 @@ public:
     // moment
     [[nodiscard]] T *get_data_unsafe(SlotKey key) noexcept {
         FR_ASSERT(key.index < m_slots.size(), "index outside range");
-        return *reinterpret_cast<T *>(&m_slots[key.index].data);
+        return reinterpret_cast<T *>(&m_slots[key.index].data);
     }
 
     [[nodiscard]] const T *get_data(SlotKey key) const noexcept {

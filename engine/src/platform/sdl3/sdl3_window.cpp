@@ -87,6 +87,8 @@ bool Window::init(const WindowProperties &properties) noexcept {
         SDL_GL_SetSwapInterval(properties.vsync ? 1 : 0);
     }
 
+    SDL_SetWindowRelativeMouseMode(m_state->window, true);
+
     m_width = properties.width;
     m_height = properties.height;
 

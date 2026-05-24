@@ -5,7 +5,7 @@
 
 namespace fr {
 
-MeshData load_gltf(RenderDevice *device, StringView file_path) {
+MeshData load_mesh_gltf(RenderDevice *device, StringView file_path) {
     FR_ASSERT(device != nullptr, "mesh_loader requires valid RenderDevice");
 
     MeshData out_data{};
@@ -23,11 +23,23 @@ MeshData load_gltf(RenderDevice *device, StringView file_path) {
         return out_data;
     }
 
-    DynamicArray<Vertex> vertices;
-    DynamicArray<U32> indices;
+    DynamicArray<Vertex> vertices(get_ambient_ctx().alloc);
+    DynamicArray<U32> indices(get_ambient_ctx().alloc);
+
+    struct MeshRange {
+        U32 start_submesh;
+        U32 count;
+    };
+    DynamicArray<MeshRange> mesh_ranges(get_ambient_ctx().alloc);
+    DynamicArray<SubMesh> base_submeshes(get_ambient_ctx().alloc);
 
     for (cgltf_size i = 0; i < data->meshes_count; i++) {
         const cgltf_mesh &mesh = data->meshes[i];
+
+        MeshRange range;
+        range.start_submesh = static_cast<U32>(base_submeshes.size());
+        range.count = static_cast<U32>(mesh.primitives_count);
+        mesh_ranges.push_back(range);
 
         for (cgltf_size j = 0; j < mesh.primitives_count; ++j) {
             const cgltf_primitive &primitive = mesh.primitives[j];
@@ -36,7 +48,6 @@ MeshData load_gltf(RenderDevice *device, StringView file_path) {
             submesh.vertex_offset = static_cast<U32>(vertices.size());
             submesh.index_offset = static_cast<U32>(indices.size());
 
-            // INDEX
             if (primitive.indices != nullptr) {
                 const cgltf_accessor *acc = primitive.indices;
                 submesh.index_count = static_cast<U32>(acc->count);
@@ -47,7 +58,6 @@ MeshData load_gltf(RenderDevice *device, StringView file_path) {
                 }
             }
 
-            // VERTEX
             const cgltf_accessor *pos_acc = nullptr;
             const cgltf_accessor *norm_acc = nullptr;
             const cgltf_accessor *uv_acc = nullptr;
@@ -76,7 +86,25 @@ MeshData load_gltf(RenderDevice *device, StringView file_path) {
                     vertices.push_back(ver);
                 }
             }
-            out_data.submeshes.push_back(submesh);
+            base_submeshes.push_back(submesh);
+        }
+    }
+
+    for (cgltf_size i = 0; i < data->nodes_count; i++) {
+        cgltf_node *node = &data->nodes[i];
+        if (!node->mesh)
+            continue;
+
+        cgltf_size mesh_index = node->mesh - data->meshes;
+
+        glm::mat4 world_matrix;
+        cgltf_node_transform_world(node, &world_matrix[0][0]);
+
+        MeshRange range = mesh_ranges[mesh_index];
+        for (U32 j = 0; j < range.count; ++j) {
+            SubMesh instanced = base_submeshes[range.start_submesh + j];
+            instanced.transform = world_matrix;
+            out_data.submeshes.push_back(instanced);
         }
     }
 
@@ -92,5 +120,4 @@ MeshData load_gltf(RenderDevice *device, StringView file_path) {
 
     return out_data;
 }
-
 } // namespace fr
