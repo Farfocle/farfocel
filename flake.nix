@@ -24,6 +24,7 @@
               llvm.clang-tools
               llvm.lld
               llvm.lldb
+              llvm.llvm
 
               # Build Tooling
               pkgs.cmake
@@ -82,6 +83,14 @@
                   ]
                 )
               }:/run/opengl-driver/lib:/run/graphics/lib:$LD_LIBRARY_PATH"
+
+              export ASAN_SYMBOLIZER_PATH="${llvm.llvm}/bin/llvm-symbolizer"
+              export ASAN_OPTIONS="symbolize=1"
+
+              alias fr-build='cmake -B build; cmake --build build -j'
+              alias fr-debug='cmake --preset debug; cmake --build --preset debug -j'
+              alias fr-docs='cmake -B build; cmake --build build --target docs'
+              alias fr-asan-run='ASAN_SYMBOLIZER_PATH="${llvm.llvm}/bin/llvm-symbolizer" ASAN_OPTIONS=symbolize=1'
 
               echo "======== C++23 DevShell ========"
               echo "Compiler : $(clang++ --version | head -1)"
