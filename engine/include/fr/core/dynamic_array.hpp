@@ -868,9 +868,9 @@ public:
 
     // ---------------------------------------------------------- Shape Protocol
 
-    template <typename A>
-    void shape(A &archive) {
-        if constexpr (A::kind == ArchiveKind::Serializer) {
+    template <typename Archive>
+    void shape(Archive &archive) {
+        if constexpr (Archive::action == ArchiveAction::Write) {
             USize sz = m_size;
             archive.prop("@size", sz);
 
