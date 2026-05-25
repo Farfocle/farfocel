@@ -2,6 +2,7 @@
 
 set(TEST_CORE_SOURCES
     "main.cpp"
+    "algo.cpp"
     "alloc.cpp"
     "array.cpp"
     "bitset.cpp"
