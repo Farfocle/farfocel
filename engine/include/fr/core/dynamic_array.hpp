@@ -46,10 +46,10 @@ namespace fr {
  */
 template <typename T>
 class DynamicArray {
+private:
     // Ensuring the basic preconditions of `T`
     FR_STATIC_ASSERT_NOTHROW_BASE(T);
 
-private:
     // -------------------------------------------------------- Member Variables
     Alloc *m_alloc{get_ambient_ctx().alloc};
     T *m_data{nullptr};

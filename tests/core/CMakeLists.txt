@@ -9,6 +9,7 @@ set(TEST_CORE_SOURCES
     "optional.cpp"
     "pair.cpp"
     "slice.cpp"
+    "stack.cpp"
     "tuple.cpp"
     "string.cpp"
     "hash_set.cpp"
