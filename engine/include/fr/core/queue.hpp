@@ -2,6 +2,11 @@
  * @file queue.hpp
  * @author Kiju
  * @brief Dynamic queue.
+ *
+ * @brief This implementation is using a `fr::DynamicArray` unnder the good.
+ * @todo `fr::DynamicArray` is fine for now, but it causes extra work to happen on storage growth.
+ * It can be optimized by creating a custom storage system but I am too lazy to do it right now.
+ * Have fun :)
  */
 
 #pragma once

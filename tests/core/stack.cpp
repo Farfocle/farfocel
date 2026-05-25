@@ -1,6 +1,7 @@
 #include <doctest.h>
 
 #include "fr/core/stack.hpp"
+#include "fr/core/typedefs.hpp"
 
 namespace fr {
 
