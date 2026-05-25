@@ -7,6 +7,7 @@ set(BENCH_SOURCES
     "hash_set.cpp"
     "optional.cpp"
     "pair_tuple.cpp"
+    "radix_sort.cpp"
     "serialization.cpp"
     "slice.cpp"
     "unique_ptr.cpp"
