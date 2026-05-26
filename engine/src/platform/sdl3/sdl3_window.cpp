@@ -110,6 +110,8 @@ void Window::close() noexcept {
 
         m_state->~WindowState();
         get_ambient_ctx().alloc->deallocate(m_state, sizeof(WindowState), alignof(WindowState));
+
+        m_state = nullptr;
     }
 
     SDL_Quit();

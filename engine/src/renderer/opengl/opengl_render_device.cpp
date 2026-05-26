@@ -546,15 +546,17 @@ FR_API RenderDevice *create_opengl_render_device(Alloc *alloc) noexcept {
 }
 
 FR_API void destroy_opengl_render_device(RenderDevice *device) noexcept {
-    if (!device)
+    if (!device) {
+        // log
         return;
+    }
 
-    auto *gl_device = static_cast<OpenGLRenderDevice *>(device);
+    auto *opengl_device = static_cast<OpenGLRenderDevice *>(device);
 
-    Alloc *alloc = gl_device->get_allocator();
-    gl_device->~OpenGLRenderDevice();
+    Alloc *alloc = opengl_device->get_allocator();
 
-    alloc->deallocate(gl_device, sizeof(OpenGLRenderDevice), alignof(OpenGLRenderDevice));
+    opengl_device->~OpenGLRenderDevice();
+    alloc->deallocate(opengl_device, sizeof(OpenGLRenderDevice), alignof(OpenGLRenderDevice));
 }
 
 } // namespace fr

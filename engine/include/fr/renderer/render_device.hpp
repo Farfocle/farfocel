@@ -115,5 +115,6 @@ public:
 };
 
 FR_API RenderDevice *create_opengl_render_device(Alloc *alloc) noexcept;
+FR_API void destroy_opengl_render_device(RenderDevice *device) noexcept;
 
 } // namespace fr

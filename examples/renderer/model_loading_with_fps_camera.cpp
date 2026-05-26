@@ -168,6 +168,7 @@ void processInput(float deltaTime) {
 
 int main() {
     fr::init_core_ctx();
+
     {
         std::string paths;
         std::cout << "Enter path to a GLTF model: ";
@@ -178,7 +179,7 @@ int main() {
 
         fr::Window window;
         fr::WindowProperties windows_props{
-            .title = "Farfocel Renderer Example - Sponza Test (PRESS ESC TO CLOSE)",
+            .title = "Farfocel Renderer Example (WASD + MOUSE to move, ESC to quit)",
             .width = 1920,
             .height = 1080,
             .api = fr::GRAPHICS_API::OPENGL};
@@ -190,85 +191,88 @@ int main() {
 
         fr::RenderDevice *render_device =
             fr::create_opengl_render_device(fr::get_ambient_ctx().alloc);
-        fr::Renderer renderer(render_device);
-        fr::RenderQueue render_queue(fr::get_ambient_ctx_mut().alloc);
 
-        fr::ShaderHandle shader_handle = render_device->create_shader(
-            fr::StringView(VERTEX_SHADER), fr::StringView(FRAGMENT_SHADER));
-        fr::RenderPipelineProperties pipe_props{.shader = shader_handle,
-                                                .cull_mode = fr::CullMode::Back,
-                                                .depth_test = true,
-                                                .depth_write = true,
-                                                .wireframe = false};
-        fr::RenderPipelineHandle pipe = render_device->create_render_pipeline(pipe_props);
+        {
+            fr::Renderer renderer(render_device);
+            fr::RenderQueue render_queue(fr::get_ambient_ctx_mut().alloc);
 
-        fr::MeshData mesh = fr::load_mesh_gltf(render_device, path);
+            fr::ShaderHandle shader_handle = render_device->create_shader(
+                fr::StringView(VERTEX_SHADER), fr::StringView(FRAGMENT_SHADER));
 
-        if (!mesh.vbo.is_valid()) {
-            std::cout << "mesh error: tough luck\n";
-            return -1;
-        }
+            fr::RenderPipelineProperties pipe_props{.shader = shader_handle,
+                                                    .cull_mode = fr::CullMode::Back,
+                                                    .depth_test = true,
+                                                    .depth_write = true,
+                                                    .wireframe = false};
+            fr::RenderPipelineHandle pipe = render_device->create_render_pipeline(pipe_props);
 
-        U64 last_time = fr::time::get_steady_now_ns();
+            fr::MeshData mesh = fr::load_mesh_gltf(render_device, path);
 
-        bool running = true;
-        while (running) {
-            U64 current_time = fr::time::get_steady_now_ms();
-            float dt = static_cast<float>(current_time - last_time);
-            last_time = current_time;
-
-            SDL_Event event;
-            while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_EVENT_QUIT)
-                    running = false;
-                if (event.type == SDL_EVENT_KEY_DOWN) {
-                    if (event.key.key == SDLK_ESCAPE)
-                        running = true;
-                } else if (event.type == SDL_EVENT_MOUSE_MOTION)
-                    camera.ProcessMouseMovement(event.motion.xrel, -event.motion.yrel);
-            }
-            render_queue.clear_leftover();
-
-            processInput(dt);
-
-            // rotation += 1.0f;
-
-            glm::mat4 model = glm::mat4(1.0f);
-            model = glm::scale(model, glm::vec3(50.0f));
-            // model = glm::rotate(model, glm::radians(rotation), glm::vec3(0, 1, 0));
-
-            for (USize i = 0; i < mesh.submeshes.size(); ++i) {
-                const auto &submesh = mesh.submeshes[i];
-                fr::DrawCall call{};
-                call.key =
-                    fr::SortKey::create(fr::RenderPassType::Opaque, pipe, fr::TextureHandle{}, 10);
-                call.pipe = pipe;
-                call.vbo = mesh.vbo;
-                call.ibo = mesh.ibo;
-                call.index_count = submesh.index_count;
-                call.index_offset = submesh.index_offset;
-                call.vertex_offset = submesh.vertex_offset;
-                call.vbo_stride = sizeof(fr::Vertex);
-
-                render_queue.send_call(call, model * submesh.transform);
+            if (!mesh.vbo.is_valid()) {
+                std::cout << "mesh error: tough luck\n";
+                return -1;
             }
 
-            render_queue.sort();
+            U64 last_time = fr::time::get_steady_now_ms();
 
-            fr::TextureHandle depth_test{};
+            bool running = true;
+            while (running) {
+                U64 current_time = fr::time::get_steady_now_ms();
 
-            renderer.render(render_queue, fr::Slice<const fr::TextureHandle>(), depth_test,
-                            window.get_width(), window.get_height(), camera.get_view_proj_matrix());
-            window.swap_buffers();
+                float dt = static_cast<float>(current_time - last_time) / 1000.0f;
+                last_time = current_time;
+
+                SDL_Event event;
+                while (SDL_PollEvent(&event)) {
+                    if (event.type == SDL_EVENT_QUIT)
+                        running = false;
+
+                    if (event.type == SDL_EVENT_KEY_DOWN) {
+                        if (event.key.key == SDLK_ESCAPE)
+                            running = false;
+                    } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
+                        camera.ProcessMouseMovement(event.motion.xrel, -event.motion.yrel);
+                    }
+                }
+
+                render_queue.clear_leftover();
+                processInput(dt);
+
+                glm::mat4 model = glm::mat4(1.0f);
+                model = glm::scale(model, glm::vec3(50.0f));
+
+                for (USize i = 0; i < mesh.submeshes.size(); ++i) {
+                    const auto &submesh = mesh.submeshes[i];
+                    fr::DrawCall call{};
+                    call.key = fr::SortKey::create(fr::RenderPassType::Opaque, pipe,
+                                                   fr::TextureHandle{}, 10);
+                    call.pipe = pipe;
+                    call.vbo = mesh.vbo;
+                    call.ibo = mesh.ibo;
+                    call.index_count = submesh.index_count;
+                    call.index_offset = submesh.index_offset;
+                    call.vertex_offset = submesh.vertex_offset;
+                    call.vbo_stride = sizeof(fr::Vertex);
+
+                    render_queue.send_call(call, model * submesh.transform);
+                }
+
+                render_queue.sort();
+
+                fr::TextureHandle depth_test{};
+                renderer.render(render_queue, fr::Slice<const fr::TextureHandle>(), depth_test,
+                                window.get_width(), window.get_height(),
+                                camera.get_view_proj_matrix());
+                window.swap_buffers();
+            }
+
+            render_device->destory_pipeline(pipe);
+            render_device->destroy_shader(shader_handle);
+            render_device->destroy_buffer(mesh.vbo);
+            render_device->destroy_buffer(mesh.ibo);
         }
 
-        render_device->destory_pipeline(pipe);
-        render_device->destroy_shader(shader_handle);
-        render_device->destroy_buffer(mesh.vbo);
-        render_device->destroy_buffer(mesh.ibo);
-
-        // @fix This caused the double free. `Window` already calls `.close()` upon destruction.
-        // window.close();
+        fr::destroy_opengl_render_device(render_device);
     }
 
     fr::shutdown_core_ctx();
