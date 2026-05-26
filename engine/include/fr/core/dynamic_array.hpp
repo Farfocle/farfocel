@@ -900,6 +900,26 @@ public:
         });
     }
 
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            USize sz = m_size;
+            archive.prop("@size", sz);
+
+            USize cap = m_capacity;
+            archive.prop("@capacity", cap);
+
+            archive.list("@items", [&](Archive &list_archive) {
+                for (const T &item : *this) {
+                    list_archive.prop("", item);
+                }
+            });
+        } else {
+            FR_ASSERT(false, "cannot deserialize into const DynamicArray");
+        }
+    }
+
+
 private:
     // --------------------------------------------------------------- Internals
 

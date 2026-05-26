@@ -430,6 +430,22 @@ public:
         });
     }
 
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            USize sz = Size;
+            archive.prop("@size", sz);
+
+            archive.list("@items", [&](Archive &list_archive) {
+                for (USize i = 0; i < Size; ++i) {
+                    list_archive.prop("", m_data[i]);
+                }
+            });
+        } else {
+            FR_ASSERT(false, "cannot deserialize into const Array");
+        }
+    }
+
     // ----------------------------------------------------- Structured Bindings
 
     /**

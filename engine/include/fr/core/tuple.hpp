@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "fr/core/macros.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/core/typetraits.hpp"
 
@@ -195,8 +196,23 @@ public:
         });
     }
 
+    template <typename A>
+    void shape(A &archive) const {
+        if constexpr (A::action == ArchiveAction::Write) {
+            USize sz = size();
+
+            archive.prop("@size", sz);
+            archive.list("@items", [&](A &list_archive) {
+                impl::shape_tuple_items(list_archive, *this, std::index_sequence_for<Ts...>{});
+            });
+        } else {
+            FR_ASSERT(false, "cannot deserialize into const Tuple");
+        }
+    }
+
     template <USize I>
     friend constexpr auto &&get(Tuple &self) noexcept {
+
         return self.template at<I>();
     }
 

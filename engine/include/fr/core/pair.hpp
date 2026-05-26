@@ -14,6 +14,7 @@
 
 #include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/core/typetraits.hpp"
 
@@ -102,6 +103,14 @@ public:
     void shape(Archive &archive) {
         archive.prop("@first", m_first);
         archive.prop("@second", m_second);
+    }
+
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            archive.prop("@first", m_first);
+            archive.prop("@second", m_second);
+        }
     }
 
     /// @brief Structured binding protocol.

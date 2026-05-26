@@ -547,6 +547,26 @@ public:
         });
     }
 
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            USize l = m_load;
+            archive.prop("@load", l);
+
+            USize cap = m_capacity;
+            archive.prop("@capacity", cap);
+
+            archive.list("@items", [&](Archive &list_archive) {
+                for (const Key &item : *this) {
+                    list_archive.prop("", item);
+                }
+            });
+        } else {
+            FR_ASSERT(false, "cannot deserialize into const HashSet");
+        }
+    }
+
+
     // --------------------------------------------------------------- Internals
 
 private:

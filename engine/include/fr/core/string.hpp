@@ -951,11 +951,6 @@ public:
         return view().view_to(to);
     }
 
-    template <typename A>
-    void shape(A &archive) {
-        archive.prop("@value", view());
-    }
-
     /**
      * @brief Returns a hash of the string.
      *

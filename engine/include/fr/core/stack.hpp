@@ -570,5 +570,13 @@ public:
     void shape(Archive &archive) {
         m_array.shape(archive);
     }
+
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            m_array.shape(archive);
+        }
+    }
 };
 } // namespace fr
+
