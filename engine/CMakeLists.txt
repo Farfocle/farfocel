@@ -3,6 +3,7 @@ project(farfocel_engine)
 
 set(ENGINE_HEADERS
 #### core
+    "include/fr/core/algo.hpp"
     "include/fr/core/alloc.hpp"
     "include/fr/core/alloc_tracer.hpp"
     "include/fr/core/alloc_typedefs.hpp"
@@ -29,8 +30,10 @@ set(ENGINE_HEADERS
     "include/fr/core/nil.hpp"
     "include/fr/core/optional.hpp"
     "include/fr/core/pair.hpp"
+    "include/fr/core/queue.hpp"
     "include/fr/core/shape.hpp"
     "include/fr/core/slice.hpp"
+    "include/fr/core/stack.hpp"
     "include/fr/core/string.hpp"
     "include/fr/core/string_base.hpp"
     "include/fr/core/string_view.hpp"
