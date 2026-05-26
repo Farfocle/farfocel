@@ -273,6 +273,17 @@ public:
         return std::launder(reinterpret_cast<T *>(m_storage));
     }
 
+    /**
+     * @brief Destroys the type arased storage.
+     */
+    void clear() noexcept {
+        if (m_handler) [[likely]] {
+            m_handler(HandlerAction::Destroy, m_storage, nullptr);
+        }
+
+        m_handler = nullptr;
+    }
+
 private:
     enum class HandlerAction : U8 {
         Destroy,

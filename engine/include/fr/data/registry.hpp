@@ -299,7 +299,8 @@ public:
 
     /**
      * @brief Tries to get the part `T` owned by the thing.
-     * @note Returns nullptr if the pool is missing, the thing is dead, or the thing does not own `T`.
+     * @note Returns nullptr if the pool is missing, the thing is dead, or the thing does not own
+     * `T`.
      * @note Returns the stub pointer for nil thing if the pool exists.
      */
     template <typename T>
