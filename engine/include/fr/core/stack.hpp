@@ -9,6 +9,7 @@
  * `fr::Stack` is a thin wrapper around `fr::DynamicArray`. This implementation is quite lenghty,
  * but that is for a reason - it uses composition over inhertance. Because of this the API of
  * `fr::Stack` and `fr::DynamicArray` are decoupled, and thus easier to refactor if needed.
+ * `fr::Stack` forwards slicing opearations because it stores its data in a contiguous fashion.
  */
 
 #pragma once
