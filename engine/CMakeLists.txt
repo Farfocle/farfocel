@@ -40,7 +40,6 @@ set(ENGINE_HEADERS
     "include/fr/core/time.hpp"
     "include/fr/core/tuple.hpp"
     "include/fr/core/typedefs.hpp"
-    "include/fr/core/typeidx.hpp"
     "include/fr/core/typetraits.hpp"
     "include/fr/core/unique_ptr.hpp"
 
@@ -52,7 +51,6 @@ set(ENGINE_HEADERS
     "include/fr/data/signature_pool.hpp"
     "include/fr/data/thing.hpp"
     "include/fr/data/thing_pool.hpp"
-    "include/fr/data/typeidx.hpp"
     "include/fr/data/world.hpp"
 )
 

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <cstring>
+#include <limits>
 
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
@@ -17,14 +18,64 @@
 #include "fr/core/shape.hpp"
 #include "fr/core/slice.hpp"
 #include "fr/core/typedefs.hpp"
-#include "fr/core/typeidx.hpp"
 
 namespace fr {
+struct TypeIdx;
+
+template <typename T>
+TypeIdx lookup_tidx() noexcept;
+
+
+struct TypeIdx {
+    using IDX = U32;
+
+    TypeIdx() noexcept = default;
+    static TypeIdx from_idx(IDX idx) noexcept {
+        return TypeIdx(idx);
+    }
+
+    IDX idx() const noexcept {
+        return m_idx;
+    }
+
+    static TypeIdx nil() noexcept {
+        return TypeIdx(std::numeric_limits<IDX>::max());
+    }
+
+    bool is_nil() const noexcept {
+        return m_idx == std::numeric_limits<IDX>::max();
+    }
+
+    bool operator==(const TypeIdx &other) const noexcept {
+        return m_idx == other.m_idx;
+    }
+
+    template <typename T>
+    static TypeIdx from_type() noexcept {
+        static TypeIdx cached_tidx = TypeIdx::nil();
+
+        if (!cached_tidx.is_nil()) [[likely]] {
+            return cached_tidx;
+        }
+
+        cached_tidx = lookup_tidx<T>();
+        return cached_tidx;
+    }
+
+private:
+    explicit TypeIdx(IDX idx) noexcept
+        : m_idx(idx) {
+    }
+
+    IDX m_idx{nil().idx()};
+};
+
 struct TypeMeta {
-    TypeIdx tidx{0};
+    TypeIdx tidx{TypeIdx::nil()};
     USize size{0};
-    USize aligment{0};
+    USize alignment{0};
     const char *name{"@noname"};
+
 
     void (*construct)(void *) noexcept {nullptr};
     void (*destroy)(void *) noexcept {nullptr};
@@ -38,9 +89,7 @@ struct TypeInfo {
     FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
     FR_STATIC_ASSERT_NOTHROW_DESTRUCTIBLE(T);
     FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
-    FR_STATIC_ASSERT((impl::HasMemberShape<JsonWriterArchive, T> ||
-                      impl::HasADLShape<JsonWriterArchive, T>),
-                     "T has to implement shape protocol");
+
 
     static const char *name() noexcept {
         return typeid(T).name();
@@ -55,12 +104,23 @@ struct TypeInfo {
     }
 
     static void json_writer_shape(JsonWriterArchive &archive, void *ptr) noexcept {
-        call_shape(archive, *(static_cast<T *>(ptr)));
+        if constexpr (impl::HasMemberShape<JsonWriterArchive, T> ||
+                      impl::HasADLShape<JsonWriterArchive, T>) {
+            call_shape(archive, *(static_cast<T *>(ptr)));
+        } else {
+            FR_ASSERT(false, "T has to implement shape protocol");
+        }
     }
 
     static void json_reader_shape(JsonReaderArchive &archive, void *ptr) noexcept {
-        call_shape(archive, *(static_cast<T *>(ptr)));
+        if constexpr (impl::HasMemberShape<JsonReaderArchive, T> ||
+                      impl::HasADLShape<JsonReaderArchive, T>) {
+            call_shape(archive, *(static_cast<T *>(ptr)));
+        } else {
+            FR_ASSERT(false, "T has to implement shape protocol");
+        }
     }
+
 };
 
 class TypeRegistry {
@@ -72,14 +132,14 @@ public:
     }
 
     TypeIdx record(const TypeMeta &info) noexcept {
-        TypeIdx tidx = static_cast<TypeIdx>(m_metas.size());
+        TypeIdx tidx = TypeIdx::from_idx(m_metas.size());
         m_metas.push_back(info);
         return tidx;
     }
 
     const TypeMeta &meta(TypeIdx tidx) const noexcept {
-        FR_ASSERT(tidx < m_metas.size(), "invalid type index");
-        return m_metas[tidx];
+        FR_ASSERT(tidx.idx() < m_metas.size(), "invalid type index");
+        return m_metas[tidx.idx()];
     }
 
     USize size() const noexcept {
@@ -90,26 +150,33 @@ public:
     TypeIdx gen_tidx(TypeMeta meta) noexcept {
         const char *name = meta.name;
 
-        for (TypeMeta &m : m_metas) {
-            if (std::strcmp(meta.name, name) == 0) {
+        for (USize i = 0; i < m_metas.size(); ++i) {
+            TypeMeta &m = m_metas[i];
+            if (std::strcmp(m.name, name) == 0) {
+                if (m.tidx.is_nil()) {
+                    m.tidx = TypeIdx::from_idx(i);
+                }
                 return m.tidx;
             }
         }
 
-        TypeIdx tidx = static_cast<TypeIdx>(m_metas.size());
+        TypeIdx tidx = TypeIdx::from_idx(m_metas.size());
+        meta.tidx = tidx;
         m_metas.push_back(meta);
         return tidx;
     }
+
 
     Slice<const TypeMeta> storage() const noexcept {
         return m_metas.slice();
     }
 };
 
+namespace impl {
 template <typename T>
-TypeIdx type_idx_from_registry(TypeRegistry &registry) noexcept {
+TypeIdx lookup_tidx_from_registry(TypeRegistry &registry) noexcept {
     return registry.gen_tidx<T>({
-        .id = 0,
+        .tidx = TypeIdx::nil(),
         .size = sizeof(T),
         .alignment = alignof(T),
         .name = TypeInfo<T>::name(),
@@ -119,11 +186,12 @@ TypeIdx type_idx_from_registry(TypeRegistry &registry) noexcept {
         .json_reader_shape = TypeInfo<T>::json_reader_shape,
     });
 }
+} // namespace impl
 
 template <typename T>
-TypeIdx type_idx() noexcept {
+TypeIdx lookup_tidx() noexcept {
     FR_ASSERT(get_ambient_ctx().type_registry, "no type registry on ambient ctx");
-    return type_idx_from_registry<T>(*get_ambient_ctx().type_registry);
+    return impl::lookup_tidx_from_registry<T>(*get_ambient_ctx().type_registry);
 }
 } // namespace fr
 

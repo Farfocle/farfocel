@@ -7,11 +7,11 @@
 
 #pragma once
 
+#include "fr/core/meta.hpp"
 #include "fr/core/tuple.hpp"
 #include "fr/data/part.hpp"
 #include "fr/data/registry.hpp"
 #include "fr/data/thing.hpp"
-#include "fr/data/typeidx.hpp"
 
 namespace fr {
 
@@ -104,7 +104,7 @@ public:
      */
     template <typename... Exclude>
     Query &without() noexcept {
-        (m_exclude.insert(do_gen_tidx<Exclude>()), ...);
+        (m_exclude.insert(TypeIdx::from_type<Exclude>()), ...);
         return *this;
     }
 
@@ -121,7 +121,7 @@ public:
 private:
     // -------------------------------------------------------- Internal Helpers
     TypeIdx do_find_smallest_pool() const noexcept {
-        TypeIdx tids[] = {do_gen_tidx<Include>()...};
+        TypeIdx tids[] = {TypeIdx::from_type<Include>()...};
 
         TypeIdx smallest = tids[0];
         USize min = m_registry->do_part_count_by_tidx(smallest);
@@ -136,11 +136,6 @@ private:
         }
 
         return smallest;
-    }
-
-    template <typename T>
-    TypeIdx do_gen_tidx() const noexcept {
-        return impl::DataTypeIdxGen::gen<T>();
     }
 
     // -------------------------------------------------------- Member Variables

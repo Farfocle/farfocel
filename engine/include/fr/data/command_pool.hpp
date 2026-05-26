@@ -10,11 +10,10 @@
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/inline_any.hpp"
+#include "fr/core/meta.hpp"
 #include "fr/core/typedefs.hpp"
-#include "fr/core/typeidx.hpp"
 #include "fr/data/part.hpp"
 #include "fr/data/thing.hpp"
-#include "fr/data/typeidx.hpp"
 
 namespace fr {
 
@@ -65,28 +64,25 @@ public:
 private:
     template <typename T>
     void do_create_insert_part_pool(TypeIdx tidx) noexcept {
-        m_insert_part_pool[tidx].emplace<DynamicArray<InsertPartCmd<T>>>(m_alloc);
+        USize idx = tidx.idx();
+        m_insert_part_pool[idx].emplace<DynamicArray<InsertPartCmd<T>>>(m_alloc);
     }
 
     bool do_check_insert_part_pool(TypeIdx tidx) const noexcept {
-        return m_insert_part_pool[tidx].is_nil();
+        USize idx = tidx.idx();
+        return m_insert_part_pool[idx].is_nil();
     }
 
     template <typename T>
     void do_create_mutate_part_pool(TypeIdx tidx) noexcept {
-        m_mutate_part_pool[tidx].emplace<DynamicArray<MutatePartCmd<T>>>(m_alloc);
+        USize idx = tidx.idx();
+        m_mutate_part_pool[idx].emplace<DynamicArray<MutatePartCmd<T>>>(m_alloc);
     }
 
     bool do_check_mutate_part_pool(TypeIdx tidx) const noexcept {
-        return m_mutate_part_pool[tidx].is_nil();
+        USize idx = tidx.idx();
+        return m_mutate_part_pool[idx].is_nil();
     }
-
-    template <typename T>
-    TypeIdx do_gen_tidx() const noexcept {
-        TypeIdx tidx = DataTypeIdxGen::gen<T>();
-        FR_ASSERT(tidx < MAX_PARTS, "type index exceeds MAX_PARTS");
-        return tidx;
-    };
 
     Alloc *m_alloc{nullptr};
     DynamicArray<DestroyPartCmd> m_destroy_part_array{};

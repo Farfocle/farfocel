@@ -11,13 +11,12 @@
 
 #include "fr/core/inline_any.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/core/meta.hpp"
 #include "fr/core/typedefs.hpp"
-#include "fr/core/typeidx.hpp"
 #include "fr/data/part.hpp"
 #include "fr/data/part_pool.hpp"
 #include "fr/data/signature_pool.hpp"
 #include "fr/data/thing_pool.hpp"
-#include "fr/data/typeidx.hpp"
 
 namespace fr {
 template <typename... Include>
@@ -125,7 +124,7 @@ public:
      */
     template <typename T>
     bool check_part_pool() const noexcept {
-        TypeIdx tidx = do_gen_tidx<T>();
+        TypeIdx tidx = TypeIdx::from_type<T>();
         return !do_check_part_pool(tidx);
     }
 
@@ -136,7 +135,7 @@ public:
      */
     template <typename T>
     bool owns(Thing thing) const noexcept {
-        TypeIdx tidx = do_gen_tidx<T>();
+        TypeIdx tidx = TypeIdx::from_type<T>();
         if (do_check_part_pool(tidx)) [[unlikely]] {
             return false;
         }
@@ -160,13 +159,13 @@ public:
      */
     template <typename T, typename... Args>
     T *try_emplace(Thing thing, Args &&...args) noexcept {
-        TypeIdx tidx = do_gen_tidx<T>();
+        TypeIdx tidx = TypeIdx::from_type<T>();
 
         if (do_check_part_pool(tidx)) [[unlikely]] {
             do_create_part_pool<T>(tidx);
         }
 
-        PartPool<T> &pool = m_part_pools[tidx].cast_ref<PartPool<T>>();
+        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
         if (do_check_thing_nil(thing)) [[unlikely]] {
             return &pool.get_stub();
         }
@@ -209,12 +208,12 @@ public:
      */
     template <typename T, typename... Args>
     T &emplace(Thing thing, Args &&...args) noexcept {
-        TypeIdx tidx = do_gen_tidx<T>();
+        TypeIdx tidx = TypeIdx::from_type<T>();
         if (do_check_part_pool(tidx)) [[unlikely]] {
             do_create_part_pool<T>(tidx);
         }
 
-        PartPool<T> &pool = m_part_pools[tidx].cast_ref<PartPool<T>>();
+        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
         if (do_check_thing_nil(thing)) [[unlikely]] {
             return pool.get_stub();
         }
@@ -255,7 +254,7 @@ public:
             return false;
         }
 
-        TypeIdx tidx = do_gen_tidx<T>();
+        TypeIdx tidx = TypeIdx::from_type<T>();
 
         if (do_check_part_pool(tidx)) [[unlikely]] {
             return false;
@@ -265,7 +264,7 @@ public:
             return false;
         }
 
-        PartPool<T> &pool = m_part_pools[tidx].cast_ref<PartPool<T>>();
+        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
         m_signature_pool.destroy(thing, tidx);
         pool.destroy_unchecked(thing);
 
@@ -283,14 +282,14 @@ public:
             return false;
         }
 
-        TypeIdx tidx = do_gen_tidx<T>();
+        TypeIdx tidx = TypeIdx::from_type<T>();
 
         FR_ASSERT(!do_check_part_pool(tidx),
                   "cannot destroy part T; T is not registered as a part");
         FR_ASSERT(do_check_part(thing, tidx),
                   "cannot destroy part T if the thing does not own this part");
 
-        PartPool<T> &pool = m_part_pools[tidx].cast_ref<PartPool<T>>();
+        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
         m_signature_pool.destroy(thing, tidx);
         pool.destroy_unchecked(thing);
 
@@ -305,12 +304,12 @@ public:
      */
     template <typename T>
     T *try_get(Thing thing) noexcept {
-        TypeIdx tidx = do_gen_tidx<T>();
+        TypeIdx tidx = TypeIdx::from_type<T>();
         if (do_check_part_pool(tidx)) [[unlikely]] {
             return nullptr;
         }
 
-        PartPool<T> &pool = m_part_pools[tidx].cast_ref<PartPool<T>>();
+        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
         if (do_check_thing_nil(thing)) [[unlikely]] {
             return &pool.get_stub();
         }
@@ -332,18 +331,18 @@ public:
      */
     template <typename T>
     T &get(Thing thing) noexcept {
-        TypeIdx tidx = do_gen_tidx<T>();
+        TypeIdx tidx = TypeIdx::from_type<T>();
         FR_ASSERT(do_check_thing_alive(thing), "thing has to be alive");
         FR_ASSERT(!do_check_part_pool(tidx), "part pool missing");
         FR_ASSERT(do_check_part(thing, tidx), "thing does not own part");
 
-        return *m_part_pools[tidx].cast_ref<PartPool<T>>().get_unchecked(thing);
+        return *m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().get_unchecked(thing);
     }
 
     template <typename T>
     T &get_unchecked(Thing thing) noexcept {
-        TypeIdx tidx = do_gen_tidx<T>();
-        return *m_part_pools[tidx].cast_ref<PartPool<T>>().get_unchecked(thing);
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        return *m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().get_unchecked(thing);
     }
 
     /**
@@ -352,7 +351,7 @@ public:
     template <typename... Include>
     auto query() noexcept {
         Signature include;
-        (include.insert(do_gen_tidx<Include>()), ...);
+        (include.insert(TypeIdx::from_type<Include>()), ...);
         return fr::Query<Include...>(this, include);
     }
 
@@ -375,7 +374,7 @@ private:
         }
 
         // Layout of PartPool is same for all T.
-        return m_part_pools[tidx].cast_ref<PartPool<Byte>>().part_count();
+        return m_part_pools[tidx.idx()].cast_ref<PartPool<Byte>>().part_count();
     }
 
     /**
@@ -385,14 +384,7 @@ private:
         FR_ASSERT(!do_check_part_pool(tidx), "part pool missing");
 
         // Layout of PartPool is same for all T.
-        return m_part_pools[tidx].cast_ref<PartPool<Byte>>().part_to_thing_slice_with_stub();
-    }
-
-    template <typename T>
-    TypeIdx do_gen_tidx() const noexcept {
-        TypeIdx tidx = DataTypeIdxGen::gen<T>();
-        FR_ASSERT(tidx < MAX_PARTS, "type index exceeds MAX_PARTS");
-        return tidx;
+        return m_part_pools[tidx.idx()].cast_ref<PartPool<Byte>>().part_to_thing_slice_with_stub();
     }
 
     bool do_check_thing_nil(Thing thing) const noexcept {
@@ -404,17 +396,17 @@ private:
     }
 
     bool do_check_part_pool(TypeIdx tidx) const noexcept {
-        return m_part_pools[tidx].is_nil();
+        return m_part_pools[tidx.idx()].is_nil();
     }
 
     template <typename T>
     const PartPool<T> *do_part_pool() const noexcept {
-        TypeIdx tidx = do_gen_tidx<T>();
+        TypeIdx tidx = TypeIdx::from_type<T>();
         if (do_check_part_pool(tidx)) [[unlikely]] {
             return nullptr;
         }
 
-        return &m_part_pools[tidx].cast_ref<const PartPool<T>>();
+        return &m_part_pools[tidx.idx()].cast_ref<const PartPool<T>>();
     }
 
     bool do_check_part(Thing thing, TypeIdx tidx) const noexcept {
@@ -423,7 +415,7 @@ private:
 
     template <typename T>
     void do_create_part_pool(TypeIdx tidx) noexcept {
-        m_part_pools[tidx].template emplace<PartPool<T>>(m_alloc);
+        m_part_pools[tidx.idx()].template emplace<PartPool<T>>(m_alloc);
     }
 
     // -------------------------------------------------------- Member Variables

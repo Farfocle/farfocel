@@ -9,7 +9,7 @@
 
 #include "fr/core/bitset.hpp"
 #include "fr/core/macros.hpp"
-#include "fr/core/typeidx.hpp"
+#include "fr/core/meta.hpp"
 
 namespace fr {
 constexpr USize MAX_PARTS = 128;
@@ -40,8 +40,8 @@ public:
      * @param idx Type index of the part.
      */
     void insert(TypeIdx tidx) noexcept {
-        FR_ASSERT(tidx < MAX_PARTS, "type idx out of bounds");
-        m_bits.one_bit(static_cast<USize>(tidx));
+        FR_ASSERT(tidx.idx() < MAX_PARTS, "type idx out of bounds");
+        m_bits.one_bit(static_cast<USize>(tidx.idx()));
     }
 
     /**
@@ -49,8 +49,8 @@ public:
      * @param idx Type index of the part.
      */
     void destroy(TypeIdx tidx) noexcept {
-        FR_ASSERT(tidx < MAX_PARTS, "type idx out of bounds");
-        m_bits.zero_bit(static_cast<USize>(tidx));
+        FR_ASSERT(tidx.idx() < MAX_PARTS, "type idx out of bounds");
+        m_bits.zero_bit(static_cast<USize>(tidx.idx()));
     }
 
     /**
@@ -59,8 +59,8 @@ public:
      * @return True if attached, false otherwise.
      */
     bool owns(TypeIdx tidx) const noexcept {
-        FR_ASSERT(tidx < MAX_PARTS, "type idx out of bounds");
-        return m_bits.check_bit(static_cast<USize>(tidx));
+        FR_ASSERT(tidx.idx() < MAX_PARTS, "type idx out of bounds");
+        return m_bits.check_bit(static_cast<USize>(tidx.idx()));
     }
 
     /**

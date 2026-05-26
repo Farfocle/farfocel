@@ -12,8 +12,8 @@
 #include "fr/core/alloc.hpp"
 #include "fr/core/array.hpp"
 #include "fr/core/ctx.hpp"
+#include "fr/core/meta.hpp"
 #include "fr/core/typedefs.hpp"
-#include "fr/core/typeidx.hpp"
 #include "fr/data/part.hpp"
 #include "fr/data/thing.hpp"
 

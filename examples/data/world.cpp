@@ -5,13 +5,14 @@
  * @brief Example testing the basic capabilities of ECS.
  */
 
+#include <iostream>
+
 #include "fr/core/ctx.hpp"
 #include "fr/core/format.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/thing.hpp"
 #include "fr/data/world.hpp"
-#include <iostream>
 
 struct Pos {
     F32 x{0.0};

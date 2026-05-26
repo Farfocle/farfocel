@@ -45,6 +45,8 @@ void init_core_ctx() noexcept {
     glob::ambient_ctx_ptr = &core_ctx;
 
     glob::core_type_registry_ptr = new (core_type_registry_mem) TypeRegistry(core_ctx.alloc);
+    core_ctx.type_registry = glob::core_type_registry_ptr;
+
 }
 
 void shutdown_core_ctx() noexcept {
@@ -59,8 +61,10 @@ void shutdown_core_ctx() noexcept {
     static_cast<MallocAlloc *>(glob::core_heap_alloc_ptr)->~MallocAlloc();
     glob::core_heap_alloc_ptr = nullptr;
 
+    core_ctx.type_registry = nullptr;
     glob::core_ctx_ptr = nullptr;
     glob::ambient_ctx_ptr = nullptr;
+
 }
 
 const Ctx &get_ambient_ctx() noexcept {
