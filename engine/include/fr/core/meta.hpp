@@ -18,6 +18,7 @@
 #include "fr/core/shape.hpp"
 #include "fr/core/slice.hpp"
 #include "fr/core/typedefs.hpp"
+#include "fr/core/shape.hpp"
 
 namespace fr {
 struct TypeIdx;
@@ -61,16 +62,9 @@ struct TypeIdx {
         return cached_tidx;
     }
 
-    template <typename Archive>
-    void shape(Archive &archive) noexcept {
-        archive.prop("@tidx", m_idx);
-    }
-
-    template <typename Archive>
-    void shape(Archive &archive) const noexcept {
-        archive.prop("@tidx", m_idx);
-    }
-
+    FR_SHAPE(
+        FR_PROP("@tidx", m_idx);
+    )
 
 private:
     explicit TypeIdx(IDX idx) noexcept
@@ -92,22 +86,12 @@ struct TypeMeta {
     void (*json_writer_shape)(JsonWriterArchive &, void *) noexcept {nullptr};
     void (*json_reader_shape)(JsonReaderArchive &, void *) noexcept {nullptr};
 
-    template <typename Archive>
-    void shape(Archive &archive) noexcept {
-        archive.prop("tidx", tidx);
-        archive.prop("size", size);
-        archive.prop("alignment", alignment);
-        archive.prop("name", name);
-    }
-
-    template <typename Archive>
-    void shape(Archive &archive) const noexcept {
-        archive.prop("tidx", tidx);
-        archive.prop("size", size);
-        archive.prop("alignment", alignment);
-        archive.prop("name", name);
-    }
-
+    FR_SHAPE(
+        FR_PROP(tidx);
+        FR_PROP(size);
+        FR_PROP(alignment);
+        FR_PROP(name);
+    )
 };
 
 template <typename T>
