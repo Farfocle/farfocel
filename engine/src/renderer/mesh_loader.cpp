@@ -3,7 +3,10 @@
 #include "fr/core/string.hpp"
 #include <cgltf.h>
 
+#include <iostream>
+
 namespace fr {
+
 
 MeshData load_mesh_gltf(RenderDevice *device, StringView file_path) {
     FR_ASSERT(device != nullptr, "mesh_loader requires valid RenderDevice");
@@ -11,17 +14,51 @@ MeshData load_mesh_gltf(RenderDevice *device, StringView file_path) {
     MeshData out_data{};
     String fpath = String::from_view(file_path);
 
+    auto cgltf_result_to_string = [](cgltf_result result) {
+        switch (result) {
+        case cgltf_result_success:
+            return "success";
+        case cgltf_result_data_too_short:
+            return "data_too_short";
+        case cgltf_result_unknown_format:
+            return "unknown_format";
+        case cgltf_result_invalid_json:
+            return "invalid_json";
+        case cgltf_result_invalid_gltf:
+            return "invalid_gltf";
+        case cgltf_result_invalid_options:
+            return "invalid_options";
+        case cgltf_result_file_not_found:
+            return "file_not_found";
+        case cgltf_result_io_error:
+            return "io_error";
+        case cgltf_result_out_of_memory:
+            return "out_of_memory";
+        case cgltf_result_legacy_gltf:
+            return "legacy_gltf";
+        default:
+            return "unknown";
+        }
+    };
+
     cgltf_options options = {};
     cgltf_data *data = nullptr;
 
-    if (cgltf_parse_file(&options, fpath.data(), &data) != cgltf_result_success) {
+    cgltf_result parse_result = cgltf_parse_file(&options, fpath.data(), &data);
+    if (parse_result != cgltf_result_success) {
+        std::cerr << "[mesh_loader] cgltf_parse_file failed: "
+                  << cgltf_result_to_string(parse_result) << " (" << fpath.data() << ")\n";
         return out_data;
     }
 
-    if (cgltf_load_buffers(&options, data, fpath.data()) != cgltf_result_success) {
+    cgltf_result buffer_result = cgltf_load_buffers(&options, data, fpath.data());
+    if (buffer_result != cgltf_result_success) {
+        std::cerr << "[mesh_loader] cgltf_load_buffers failed: "
+                  << cgltf_result_to_string(buffer_result) << " (" << fpath.data() << ")\n";
         cgltf_free(data);
         return out_data;
     }
+
 
     DynamicArray<Vertex> vertices(get_ambient_ctx().alloc);
     DynamicArray<U32> indices(get_ambient_ctx().alloc);

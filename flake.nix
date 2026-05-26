@@ -20,26 +20,81 @@
           }
           {
             packages = [
+              # LLVM Tooling
               llvm.clang-tools
               llvm.lld
               llvm.lldb
+              llvm.llvm
 
+              # Build Tooling
               pkgs.cmake
               pkgs.ninja
               pkgs.pkg-config
               pkgs.neocmakelsp
               pkgs.cmake-format
 
+              # Libs
               pkgs.doctest
               pkgs.nanobench
               pkgs.doxygen
+
+              # SDL3 Dependecies
+              pkgs.wayland
+              pkgs.wayland-scanner
+              pkgs.wayland-protocols
+              pkgs.libxkbcommon
+              pkgs.libx11
+              pkgs.libxext
+              pkgs.libxcursor
+              pkgs.libxi
+              pkgs.libxfixes
+              pkgs.libxrandr
+              pkgs.libxscrnsaver
+              pkgs.libxtst
+              pkgs.alsa-lib
+
+              pkgs.pulseaudio
+              pkgs.pipewire
+              pkgs.libGL
+              pkgs.vulkan-loader
+              pkgs.vulkan-headers
+              pkgs.libxcb
+
             ];
 
             shellHook = ''
               export LD_LIBRARY_PATH="${llvm.libcxx}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${
+                pkgs.lib.makeLibraryPath (
+                  with pkgs;
+                  [
+                    wayland
+                    libxkbcommon
+                    libxcb
+                    libx11
+                    libxcursor
+                    libxext
+                    libxi
+                    libxfixes
+                    libxrandr
+                    libxscrnsaver
+                    libGL
+                    vulkan-loader
+                  ]
+                )
+              }:/run/opengl-driver/lib:/run/graphics/lib:$LD_LIBRARY_PATH"
+
+              export ASAN_SYMBOLIZER_PATH="${llvm.llvm}/bin/llvm-symbolizer"
+              export ASAN_OPTIONS="symbolize=1"
+
+              alias fr-build='cmake -B build; cmake --build build -j'
+              alias fr-debug='cmake --preset debug; cmake --build --preset debug -j'
+              alias fr-docs='cmake -B build; cmake --build build --target docs'
+              alias fr-asan-run='ASAN_SYMBOLIZER_PATH="${llvm.llvm}/bin/llvm-symbolizer" ASAN_OPTIONS=symbolize=1'
 
               echo "======== C++23 DevShell ========"
               echo "Compiler : $(clang++ --version | head -1)"
+
               echo "CMake    : $(cmake --version | head -1)"
               echo "Ninja    : $(ninja --version)"
               echo ""

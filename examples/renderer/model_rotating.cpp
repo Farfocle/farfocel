@@ -267,8 +267,10 @@ int main() {
         render_device->destroy_buffer(mesh.vbo);
         render_device->destroy_buffer(mesh.ibo);
 
-        window.close();
+        // @fix This caused the double free. `Window` already calls `.close()` upon destruction.
+        // window.close();
     }
+
     fr::shutdown_core_ctx();
     return 0;
 }

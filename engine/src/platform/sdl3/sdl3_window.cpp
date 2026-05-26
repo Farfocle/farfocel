@@ -46,8 +46,10 @@ Window &Window::operator=(Window &&other) noexcept {
 }
 
 bool Window::init(const WindowProperties &properties) noexcept {
-    if (!SDL_Init(SDL_INIT_VIDEO))
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_Init failed: %s", SDL_GetError());
         return false;
+    }
 
     U32 window_flags = SDL_WINDOW_RESIZABLE;
 
@@ -74,6 +76,7 @@ bool Window::init(const WindowProperties &properties) noexcept {
     m_state->window =
         SDL_CreateWindow(title.data(), properties.width, properties.height, window_flags);
     if (!m_state->window) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateWindow failed: %s", SDL_GetError());
         close();
         return false;
     }
@@ -81,9 +84,12 @@ bool Window::init(const WindowProperties &properties) noexcept {
     if (properties.api == GRAPHICS_API::OPENGL) {
         m_state->gl_context = SDL_GL_CreateContext(m_state->window);
         if (!m_state->gl_context) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_GL_CreateContext failed: %s",
+                         SDL_GetError());
             close();
             return false;
         }
+
         SDL_GL_SetSwapInterval(properties.vsync ? 1 : 0);
     }
 
