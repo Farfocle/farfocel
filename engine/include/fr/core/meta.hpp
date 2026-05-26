@@ -25,7 +25,6 @@ struct TypeIdx;
 template <typename T>
 TypeIdx lookup_tidx() noexcept;
 
-
 struct TypeIdx {
     using IDX = U32;
 
@@ -62,6 +61,17 @@ struct TypeIdx {
         return cached_tidx;
     }
 
+    template <typename Archive>
+    void shape(Archive &archive) noexcept {
+        archive.prop("@tidx", m_idx);
+    }
+
+    template <typename Archive>
+    void shape(Archive &archive) const noexcept {
+        archive.prop("@tidx", m_idx);
+    }
+
+
 private:
     explicit TypeIdx(IDX idx) noexcept
         : m_idx(idx) {
@@ -76,12 +86,28 @@ struct TypeMeta {
     USize alignment{0};
     const char *name{"@noname"};
 
-
     void (*construct)(void *) noexcept {nullptr};
     void (*destroy)(void *) noexcept {nullptr};
 
     void (*json_writer_shape)(JsonWriterArchive &, void *) noexcept {nullptr};
     void (*json_reader_shape)(JsonReaderArchive &, void *) noexcept {nullptr};
+
+    template <typename Archive>
+    void shape(Archive &archive) noexcept {
+        archive.prop("tidx", tidx);
+        archive.prop("size", size);
+        archive.prop("alignment", alignment);
+        archive.prop("name", name);
+    }
+
+    template <typename Archive>
+    void shape(Archive &archive) const noexcept {
+        archive.prop("tidx", tidx);
+        archive.prop("size", size);
+        archive.prop("alignment", alignment);
+        archive.prop("name", name);
+    }
+
 };
 
 template <typename T>
@@ -89,7 +115,6 @@ struct TypeInfo {
     FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
     FR_STATIC_ASSERT_NOTHROW_DESTRUCTIBLE(T);
     FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
-
 
     static const char *name() noexcept {
         return typeid(T).name();
@@ -120,7 +145,6 @@ struct TypeInfo {
             FR_ASSERT(false, "T has to implement shape protocol");
         }
     }
-
 };
 
 class TypeRegistry {
@@ -165,7 +189,6 @@ public:
         m_metas.push_back(meta);
         return tidx;
     }
-
 
     Slice<const TypeMeta> storage() const noexcept {
         return m_metas.slice();

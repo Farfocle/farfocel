@@ -9,6 +9,7 @@
 
 #include "fr/core/ctx.hpp"
 #include "fr/core/format.hpp"
+#include "fr/core/meta.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/registry.hpp"
@@ -64,6 +65,11 @@ S32 main() {
         for (auto [thing, pos] : registry.query<Pos>().without<Sprite>()) {
             std::cout << fr::format("pos: {}", pos) << "\n";
         }
+
+        const fr::TypeRegistry &type_registry = *fr::get_ambient_ctx().type_registry;
+        std::cout << "---- Type Registry\n"
+                  << fr::format_with_options({.pretty = true}, "{}", type_registry.storage())
+                  << "\n";
     }
 
     fr::shutdown_core_ctx();
