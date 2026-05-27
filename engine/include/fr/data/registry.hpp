@@ -351,29 +351,74 @@ public:
     // ---------------------------------------------------------------- Commands
 
     /**
-     * @brief Record a destroy command for part T on a thing.
+     * @brief Record a destroy command for part `T` on a thing.
+     * @note If thing is nil or not alive; does nothing.
+     * @note If the thing does not own the part `T`; does nothing.
      * @note Creates the part pool if missing.
      */
     template <typename T>
     void record_destroy(Thing thing) noexcept {
+        if (thing.is_nil()) [[unlikely]] {
+            return;
+        }
+
+        if (!do_check_thing_alive(thing)) [[unlikely]] {
+            return;
+        }
+
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        if (!do_check_part(thing, tidx)) [[unlikely]] {
+            return;
+        }
+
         do_ensure_part_pool<T>().record_destroy(thing);
     }
 
     /**
-     * @brief Record an insert command for part T on a thing.
+     * @brief Record an insert command for part `T` on a thing.
+     * @note If thing is nil or not alive; does nothing.
+     * @note If the does own a part `T`; does nothing.
      * @note Creates the part pool if missing.
      */
     template <typename T>
     void record_insert(Thing thing, const T &part) noexcept {
+        if (thing.is_nil()) [[unlikely]] {
+            return;
+        }
+
+        if (!do_check_thing_alive(thing)) [[unlikely]] {
+            return;
+        }
+
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        if (do_check_part(thing, tidx)) [[unlikely]] {
+            return;
+        }
+
         do_ensure_part_pool<T>().record_insert(thing, part);
     }
 
     /**
-     * @brief Record a mutate command for part T on a thing.
+     * @brief Record a mutate command for part `T` on a thing.
+     * @note If thing is nil or not alive; does nothing.
+     * @note If the thing does no own the part `T`; does nothing.
      * @note Creates the part pool if missing.
      */
     template <typename T>
     void record_mutate(Thing thing, const T &prev, const T &next) noexcept {
+        if (thing.is_nil()) [[unlikely]] {
+            return;
+        }
+
+        if (!do_check_thing_alive(thing)) [[unlikely]] {
+            return;
+        }
+
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        if (do_check_part(thing, tidx)) [[unlikely]] {
+            return;
+        }
+
         do_ensure_part_pool<T>().record_mutate(thing, prev, next);
     }
 

@@ -157,7 +157,7 @@ public:
      * @note Returns nullptr if the thing is dead or already has `T`.
      */
     template <typename T, typename... Args>
-    T *try_emplace(Thing thing, Args &&...args) noexcept {
+    T *try_emplace_now(Thing thing, Args &&...args) noexcept {
         return m_registry.try_emplace<T>(thing, std::forward<Args>(args)...);
     }
 
@@ -166,7 +166,7 @@ public:
      * @note Same behavior as `try_emplace`.
      */
     template <typename T>
-    T *try_insert(Thing thing, const T &part) noexcept {
+    T *try_insert_now(Thing thing, const T &part) noexcept {
         return m_registry.try_insert<T>(thing, part);
     }
 
@@ -175,7 +175,7 @@ public:
      * @note Same behavior as `try_emplace`.
      */
     template <typename T>
-    T *try_insert(Thing thing, T &&part) noexcept {
+    T *try_insert_now(Thing thing, T &&part) noexcept {
         return m_registry.try_insert<T>(thing, std::forward<T>(part));
     }
 
@@ -186,7 +186,7 @@ public:
      * @warning Asserts if the thing is dead or already owns `T`.
      */
     template <typename T, typename... Args>
-    T &emplace(Thing thing, Args &&...args) noexcept {
+    T &emplace_now(Thing thing, Args &&...args) noexcept {
         return m_registry.emplace<T>(thing, std::forward<Args>(args)...);
     }
 
@@ -195,7 +195,7 @@ public:
      * @note Same behavior as `emplace`.
      */
     template <typename T>
-    T &insert(Thing thing, const T &part) noexcept {
+    T &insert_now(Thing thing, const T &part) noexcept {
         return m_registry.insert<T>(thing, part);
     }
 
@@ -204,7 +204,7 @@ public:
      * @note Same behavior as `emplace`.
      */
     template <typename T>
-    T &insert(Thing thing, T &&part) noexcept {
+    T &insert_now(Thing thing, T &&part) noexcept {
         return m_registry.insert<T>(thing, std::forward<T>(part));
     }
 
@@ -213,7 +213,7 @@ public:
      * @note Returns false if thing is nil, pool is missing, or the thing does not have part `T`.
      */
     template <typename T>
-    bool try_destroy(Thing thing) noexcept {
+    bool try_destroy_now(Thing thing) noexcept {
         return m_registry.try_destroy<T>(thing);
     }
 
@@ -223,8 +223,74 @@ public:
      * @warning Asserts if the pool is missing or the thing does not have part `T`.
      */
     template <typename T>
-    bool destroy(Thing thing) noexcept {
+    bool destroy_now(Thing thing) noexcept {
         return m_registry.destroy<T>(thing);
+    }
+
+    // ------------------------------------------------- Command Part Operations
+
+    /**
+     * @brief Apply all recorded insert commands across all part pools.
+     */
+    void commit_insert_part_cmds() noexcept {
+        m_registry.commit_insert_all();
+    }
+
+    /**
+     * @brief Apply all recorded mutate commands across all part pools.
+     */
+    void commit_mutate_part_cmds() noexcept {
+        m_registry.commit_mutate_all();
+    }
+
+    /**
+     * @brief Apply all recorded destroy commands across all part pools.
+     */
+    void commit_destroy_part_cmds() noexcept {
+        m_registry.commit_destroy_all();
+    }
+
+    /**
+     * @brief Applies all recorded part commands across all part pools.
+     * @note The order of operations is as following:
+     * 1. mutate commands
+     * 2. destroy commands
+     * 3. insert commands
+     */
+    void commit_part_cmds() noexcept {
+        commit_mutate_part_cmds();
+        commit_destroy_part_cmds();
+        commit_insert_part_cmds();
+    }
+
+    /**
+     * @brief Records an insert command for part `T` on a thing.
+     * @note If thing is nil or dead; does nothing.
+     * @note If the does own a part `T`; does nothing.
+     */
+    template <typename T>
+    void insert(Thing thing, const T &part) noexcept {
+        m_registry.record_insert(thing, part);
+    }
+
+    /**
+     * @brief Records an insert command for part `T` on a thing.
+     * @note If thing is nil or dead; does nothing.
+     * @note If the does own a part `T`; does nothing.
+     */
+    template <typename T>
+    void insert(Thing thing, T &&part) noexcept {
+        m_registry.record_insert(thing, std::move(part));
+    }
+
+    /**
+     * @brief Record a destroy command for part `T` on a thing.
+     * @note If thing is nil or dead; does nothing.
+     * @note If the thing does not own the part `T`; does nothing.
+     */
+    template <typename T>
+    void destroy(Thing thing) noexcept {
+        m_registry.record_destroy<T>(thing);
     }
 
     // ------------------------------------------------------------------- Query

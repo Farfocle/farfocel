@@ -9,7 +9,6 @@
 
 #include "fr/core/ctx.hpp"
 #include "fr/core/format.hpp"
-#include "fr/core/meta.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
@@ -20,7 +19,10 @@ struct Pos {
     F32 x{0.0};
     F32 y{0.0};
 
-    FR_SHAPE(FR_PROP(x); FR_PROP(y);)
+    FR_SHAPE({
+        FR_PROP(x);
+        FR_PROP(y);
+    })
 };
 
 struct Sprite {
@@ -28,7 +30,11 @@ struct Sprite {
     U32 height{0};
     fr::String path{"default"};
 
-    FR_SHAPE(FR_PROP(width); FR_PROP(height), FR_PROP(path));
+    FR_SHAPE({
+        FR_PROP(width);
+        FR_PROP(height);
+        FR_PROP(path);
+    });
 };
 
 void system_a(fr::World &world) {
@@ -37,9 +43,6 @@ void system_a(fr::World &world) {
         std::cout << fr::format("thing: {}; pos: {}", thing, pos) << "\n";
     }
 }
-
-FR_TYPE(Pos);
-FR_TYPE(Sprite);
 
 void system_b(fr::World &world) {
     std::cout << "---- system_b: \n";
@@ -58,15 +61,15 @@ S32 main() {
         world.schedule_sync(fr::Stage::PostUpdate, system_b);
 
         fr::Thing a = world.handout();
-        world.emplace<Pos>(a, Pos{1.0, 2.0});
-        world.emplace<Sprite>(a, Sprite{1, 2, "a.png"});
+        world.emplace_now<Pos>(a, Pos{1.0, 2.0});
+        world.emplace_now<Sprite>(a, Sprite{1, 2, "a.png"});
 
         fr::Thing b = world.handout();
-        world.emplace<Pos>(b, Pos{3.0, 4.0});
-        world.emplace<Sprite>(b, Sprite{3, 4, "b.png"});
+        world.emplace_now<Pos>(b, Pos{3.0, 4.0});
+        world.emplace_now<Sprite>(b, Sprite{3, 4, "b.png"});
 
         fr::Thing c = world.handout();
-        world.emplace<Pos>(c, Pos{5.0, 6.0});
+        world.emplace_now<Pos>(c, Pos{5.0, 6.0});
 
         world.run_stage_sync(fr::Stage::PreUpdate);
         world.run_stage_sync(fr::Stage::PostUpdate);
