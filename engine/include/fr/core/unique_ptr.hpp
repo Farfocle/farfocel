@@ -207,11 +207,12 @@ public:
         return m_alloc;
     }
 
-    template <typename A>
-    void shape(A &archive) {
+    template <typename Archive>
+    void shape(Archive &archive) {
         bool has_value = (m_ptr != nullptr);
         archive.prop("@has_value", has_value);
-        if constexpr (A::kind == ArchiveKind::Serializer) {
+
+        if constexpr (Archive::action == ArchiveAction::Write) {
             if (has_value) {
                 archive.prop("@value", *m_ptr);
             }
@@ -362,11 +363,12 @@ public:
         return m_alloc;
     }
 
-    template <typename A>
-    void shape(A &archive) {
+    template <typename Archive>
+    void shape(Archive &archive) {
         USize sz = m_size;
         archive.prop("@size", sz);
-        if constexpr (A::kind == ArchiveKind::Deserializer) {
+
+        if constexpr (Archive::action == ArchiveAction::Read) {
             if (sz != m_size) {
                 this->clear();
                 if (sz > 0) {
@@ -374,7 +376,7 @@ public:
                 }
             }
         }
-        archive.list("@items", [&](A &list_archive) {
+        archive.list("@items", [&](Archive &list_archive) {
             for (USize i = 0; i < m_size; ++i) {
                 list_archive.prop("", m_ptr[i]);
             }

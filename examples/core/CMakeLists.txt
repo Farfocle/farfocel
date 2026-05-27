@@ -1,11 +1,13 @@
 set(BENCH_SOURCES
     "array.cpp"
+    "bitset.cpp"
     "dynamic_array.cpp"
     "format.cpp"
     "hash_map.cpp"
     "hash_set.cpp"
     "optional.cpp"
     "pair_tuple.cpp"
+    "radix_sort.cpp"
     "serialization.cpp"
     "slice.cpp"
     "unique_ptr.cpp"

@@ -1,14 +1,15 @@
 /**
- * @file alloc_types.hpp
+ * @file alloc_typedefs.hpp
  * @author Kiju
- *
- * @brief Common types for allocators.
+ * @brief Shared allocator system types.
  */
 #pragma once
 
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
+
+// --------------------------------------------------------- Out of Memory - OOM
 
 /**
  * @brief Action requested by an out-of-memory handler.
@@ -39,14 +40,13 @@ enum class OwnershipResult : U8 {
     Owns,
 
     /**
-     * @brief Allocator does NOT own this pointer.
+     * @brief Allocator does not own this pointer.
      */
     DoesNotOwn,
 
     /**
      * @brief Allocator cannot determine ownership of this pointer.
-     *
-     * Often the case when dealing with general purpose heap allocators.
+     * @note Often the case when dealing with general purpose heap allocators.
      */
     Unknown,
 };
@@ -63,6 +63,8 @@ void shape(A &a, OwnershipResult &value) {
 
     a.prop("@value", str);
 }
+
+// ----------------------------------------------------------------------- Debug
 
 /**
  * @brief Recorded allocator action for debugging.
@@ -88,6 +90,8 @@ void shape(A &a, AllocAction &value) {
 
 /**
  * @brief Recorded allocation frame for debugging.
+ * @note Because `AllocFrame` stores raw pointers, serialization and deserialization results may
+ * be invalid.
  */
 struct AllocFrame {
     U64 timestamp{0};

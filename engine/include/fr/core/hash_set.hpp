@@ -2,7 +2,27 @@
  * @file hash_set.hpp
  * @author Kiju
  *
- * @brief Dense hash set with linear probing utilizing swiss table architecture.
+ * @brief Hash set.
+ * @details This hash set is implemented as a dense hash set with linear probing. Its architecture
+ * is heavily inpisred by Google's swiss table design. Under the hood it utilizes two arrays (in the
+ * same allocation), the first one stores slots (keys and their hashes), the second one stores meta
+ * data (one byte per slot). As of now there are no template specializations for trivial
+ * types, thus the performance for trivial keys (especially for find operations) is worse than
+ * `std::unordered_set`. For complex keys (such as strings) there is a significant speed up,
+ * especially in insert and remove operations. The most important characterisics of this
+ * implementation:
+ * - Dense storage - no separate chaining, improved cache locality.
+ * - Lack of pointer stability - because of the inline storage of slots, inserted keys do not have
+ *   stable pointers/references.
+ * - Custom hash function as a template argument.
+ * - Custom equality function as a template argument.
+ *
+ * Google's swiss table repository:
+ * https://github.com/google/cwisstable
+ *
+ * Talks about the swiss table design:
+ * https://www.youtube.com/watch?v=ncHmEUmJZf4&t=2510s
+ * https://www.youtube.com/watch?v=JZE3_0qvrMg&t=2303s
  */
 
 #pragma once
@@ -21,6 +41,8 @@
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
+
+// --------------------------------------------------- Hash Set Template Helpers
 
 namespace impl {
 /**
@@ -54,20 +76,23 @@ struct HashSetDeafultEq {
 
 } // namespace impl
 
+// -------------------------------------------------------------- Hash Set Class
+
 /**
  * @brief Swiss-table inspired hash set.
  * @tparam Key Element type.
  * @tparam HashFn Hash function type.
  * @tparam CmpFn Equality comparison function type.
  *
- * This implementation uses a flat memory layout with control bytes (Swiss Table)
- * to speed up lookups and minimize cache misses.
- *
- * @note Foundational requirements for Key are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
+ * @pre `Key` must be nothrow destructible.
+ * @pre `Key` must be nothrow move constructible.
+ * @pre `Key` must be nothrow move assignable.
  */
 template <typename Key, typename HashFn = impl::HashSetDeafultHashFnTag,
           typename EqFn = impl::HashSetDeafultEqFnTag>
 class HashSet {
+    // ------------------------------------------------------------ Type Definitions
+
     FR_STATIC_ASSERT_NOTHROW_BASE(Key);
 
     using ActualHashFn = std::conditional_t<std::is_same_v<HashFn, impl::HashSetDeafultHashFnTag>,
@@ -97,6 +122,8 @@ private:
             return value < -1;
         }
     };
+
+    // ---------------------------------------------------------------- Iterator
 
 public:
     /**
@@ -181,9 +208,10 @@ public:
         friend class HashSet;
     };
 
-public:
     using iterator = Iter;
     using const_iterator = Iter;
+
+    // ----------------------------------- Constructors & Factories & Destructor
 
     /**
      * @brief Constructs an empty HashSet using the default allocator.
@@ -205,8 +233,7 @@ public:
      * @note Performs a deep copy of all elements.
      * @pre Key must be nothrow copy constructible.
      */
-    HashSet(const HashSet &other) noexcept
-        : m_alloc(other.m_alloc) {
+    HashSet(const HashSet &other) noexcept {
         FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(Key);
 
         if (other.m_capacity == 0) {
@@ -267,17 +294,25 @@ public:
             return *this;
         }
 
-        do_destroy_storage();
-        m_alloc = other.m_alloc;
-        m_capacity = other.m_capacity;
-        m_load = other.m_load;
-        m_slots = other.m_slots;
-        m_ctrls = other.m_ctrls;
+        if (m_alloc == other.m_alloc) {
+            do_destroy_storage();
+            m_capacity = other.m_capacity;
+            m_load = other.m_load;
+            m_slots = other.m_slots;
+            m_ctrls = other.m_ctrls;
 
-        other.m_slots = nullptr;
-        other.m_ctrls = nullptr;
-        other.m_capacity = 0;
-        other.m_load = 0;
+            other.m_slots = nullptr;
+            other.m_ctrls = nullptr;
+            other.m_capacity = 0;
+            other.m_load = 0;
+        } else {
+            clear();
+            for (const Key &key : other) {
+                insert(std::move(const_cast<Key &>(key)));
+            }
+
+            other.clear();
+        }
 
         return *this;
     }
@@ -296,7 +331,7 @@ public:
      * @return A new empty HashSet instance.
      * @pre alloc must not be null.
      */
-    static HashSet with_allocator(Alloc *alloc) noexcept {
+    static HashSet with_alloc(Alloc *alloc) noexcept {
         FR_ASSERT(alloc, "allocator must be non-null");
         return HashSet(alloc);
     }
@@ -325,6 +360,8 @@ public:
     static HashSet with_capacity(USize capacity) noexcept {
         return with_capacity(get_ambient_ctx().alloc, capacity);
     }
+
+    // ----------------------------------------------------------------- Methods
 
     /**
      * @brief Returns the number of elements currently in the set.
@@ -476,9 +513,9 @@ public:
         m_load = 0;
     }
 
-    template <typename A>
-    void shape(A &archive) {
-        if constexpr (A::kind == ArchiveKind::Serializer) {
+    template <typename Archive>
+    void shape(Archive &archive) {
+        if constexpr (Archive::action == ArchiveAction::Write) {
             USize l = m_load;
             archive.prop("@load", l);
 
@@ -492,8 +529,8 @@ public:
             archive.prop("@capacity", cap);
         }
 
-        archive.list("@items", [&](A &list_archive) {
-            if constexpr (A::kind == ArchiveKind::Serializer) {
+        archive.list("@items", [&](Archive &list_archive) {
+            if constexpr (Archive::action == ArchiveAction::Write) {
                 for (const Key &item : *this) {
                     list_archive.prop("", const_cast<Key &>(item));
                 }
@@ -509,6 +546,8 @@ public:
             }
         });
     }
+
+    // --------------------------------------------------------------- Internals
 
 private:
     std::ptrdiff_t do_find_idx(const Key &key) const noexcept {

@@ -1,10 +1,12 @@
 /**
- * @file allocator_debug.hpp
+ * @file alloc_tracer.hpp
  * @author Kiju
  *
- * @brief Helpers for debugging allocators. For now only AllocationStack is implemented, but
- * propably it is more than enough for our needs. AllocationStack is ment to be held in a global
- * context where allocators can access it to record allocations.
+ * @brief Thread-safe allocation tracer that records allocations, rellocations and deallocations.
+ * Used to view and debug memory usage.
+ *
+ * @details Under the hood `AllocTracer` uses a fixed-sized buffer that functions like a ring
+ * buffer.
  */
 
 #pragma once
@@ -21,17 +23,16 @@
 namespace fr {
 
 /**
- * @brief Allocation tracer is used to record allocations, rellocations and deallocations.
- *
- * It uses a raw memory buffer allocated at construction. If the buffer is full recordining of the
- * frames wraps around.
+ * @brief Thread-safe allocation tracer that records allocations, rellocations and deallocations.
+ * Used to view and debug memory usage.
  */
 class AllocTracer {
 public:
+    // ----------------------------------------------- Constructors & Destructor
     AllocTracer() = delete;
+
     /**
      * @brief Construct an allocation tracer.
-     *
      * @param capacity Number of frames to store.
      */
     AllocTracer(USize capacity) noexcept {
@@ -45,10 +46,10 @@ public:
         delete[] m_frames;
     }
 
+    // ----------------------------------------------------------------- Methods
+
     /**
      * @brief Returns the current number of frames in the buffer.
-     *
-     * @return Buffer size.
      */
     USize size() const noexcept {
         return (m_size < m_capacity) ? m_size : m_capacity;
@@ -56,8 +57,6 @@ public:
 
     /**
      * @brief Returns the number of all recorded frames.
-     *
-     * @return Count of recorded frames.
      * @note Because the buffer wraps around once full, the actual number of recorded frames may
      * differ from the saturation of the buffer.
      */
@@ -67,8 +66,6 @@ public:
 
     /**
      * @brief Returns the capacity of the tracer.
-     *
-     * @return Capacity in frames.
      */
     USize capacity() const noexcept {
         return m_capacity;
@@ -76,8 +73,6 @@ public:
 
     /**
      * @brief Checks if the tracer is empty.
-     *
-     * @return True if no frames recorded.
      */
     bool is_empty() const noexcept {
         return m_size == 0;
@@ -85,8 +80,6 @@ public:
 
     /**
      * @brief Checks if the tracer buffer is full.
-     *
-     * @return True if buffer is full.
      */
     bool is_full() const noexcept {
         return m_size >= m_capacity;
@@ -94,8 +87,6 @@ public:
 
     /**
      * @brief Returns a slice of recorded frames.
-     *
-     * @return Slice of AllocFrame.
      */
     Slice<const AllocFrame> frames() const noexcept {
         return Slice(m_frames, size());
@@ -103,8 +94,6 @@ public:
 
     /**
      * @brief Records an allocation frame.
-     *
-     * @param frame Frame to record.
      */
     void record(AllocFrame &&frame) noexcept {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -114,6 +103,7 @@ public:
     }
 
 private:
+    // -------------------------------------------------------- Member Variables
     AllocFrame *m_frames{nullptr};
     USize m_capacity{0};
     USize m_size{0};

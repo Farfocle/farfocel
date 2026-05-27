@@ -1,5 +1,5 @@
 {
-  description = "C++23 Minimal Template";
+  description = "Farfocel Game Engine flake";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -92,7 +92,11 @@
               alias fr-docs='cmake -B build; cmake --build build --target docs'
               alias fr-asan-run='ASAN_SYMBOLIZER_PATH="${llvm.llvm}/bin/llvm-symbolizer" ASAN_OPTIONS=symbolize=1'
 
-              echo "======== C++23 DevShell ========"
+              alias fr-build='cmake -B build; cmake --build build -j'
+              alias fr-debug='cmake --preset debug; cmake --build --preset debug -j'
+              alias fr-docs='cmake -B build; cmake --build build --target docs'
+
+              echo "======== Farfocel DevShell ========"
               echo "Compiler : $(clang++ --version | head -1)"
 
               echo "CMake    : $(cmake --version | head -1)"
@@ -100,6 +104,7 @@
               echo ""
               echo "Presets  : cmake --preset <debug|release|msan|tsan>"
               echo "Build    : cmake --build --preset <debug|release|msan|tsan>"
+              echo "Aliases  : fr-build, fr-debug, fr-docs"
             '';
           };
     };

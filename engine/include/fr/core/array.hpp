@@ -2,7 +2,7 @@
  * @file array.hpp
  * @author Kiju
  *
- * @brief Fixed-size, stack-allocated array.
+ * @brief Fixed-size.
  */
 
 #pragma once
@@ -27,8 +27,6 @@ namespace fr {
  * @tparam T Element type.
  * @tparam Size Number of elements.
  *
- * Array provides a fixed-size container that is allocated on the stack.
- *
  * @note Foundational requirements for T are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
  */
 template <typename T, USize Size>
@@ -36,7 +34,7 @@ class Array {
     FR_STATIC_ASSERT_NOTHROW_BASE(T);
 
 private:
-    T m_data[Size > 0 ? Size : 1];
+    T m_data[Size > 0 ? Size : 1]{};
 
 public:
     using iterator = T *;
@@ -49,9 +47,7 @@ public:
     using reference = T &;
     using const_reference = const T &;
 
-    // ---------------------------------------------------------
-    // Constructors
-    // ---------------------------------------------------------
+    // ----------------------------------- Constructors & Factories & Destructor
 
     /**
      * @brief Construct an array with zero-initialized elements.
@@ -95,10 +91,6 @@ public:
         }
     }
 
-    // ---------------------------------------------------------
-    // Static Constructors
-    // ---------------------------------------------------------
-
     /**
      * @brief Create an array filled with a specific value.
      * @param value Value to copy into every element.
@@ -123,8 +115,8 @@ public:
      * @pre slice.size() == Size.
      * @pre T must be nothrow default constructible and copy assignable.
      */
-    [[nodiscard]] static constexpr Array from_slice(
-        Slice<const std::remove_const_t<T>> slice) noexcept {
+    [[nodiscard]] static constexpr Array
+    from_slice(Slice<const std::remove_const_t<T>> slice) noexcept {
         FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
         FR_STATIC_ASSERT_NOTHROW_COPY_ASSIGNABLE(T);
         FR_ASSERT(slice.size() == Size, "slice size mismatch");
@@ -137,10 +129,7 @@ public:
         return arr;
     }
 
-    // ---------------------------------------------------------
-    // Iterators
-    // ---------------------------------------------------------
-
+    // --------------------------------------------------------------- Iterators
 
     /**
      * @brief Returns an iterator to the first element.
@@ -190,9 +179,7 @@ public:
         return m_data + Size;
     }
 
-    // ---------------------------------------------------------
-    // Element Access
-    // ---------------------------------------------------------
+    // ---------------------------------------------------------- Element Access
 
     /**
      * @brief Access element at index with bounds checking in debug.
@@ -272,9 +259,7 @@ public:
         return m_data;
     }
 
-    // ---------------------------------------------------------
-    // Slices
-    // ---------------------------------------------------------
+    // ------------------------------------------------------------------ Slices
 
     /**
      * @brief Create a constant slice view over the entire array.
@@ -321,7 +306,6 @@ public:
         return slice_mut().slice_mut(from, to);
     }
 
-
     constexpr Slice<const T> slice(USize, USize) const && = delete;
     constexpr Slice<T> slice_mut(USize, USize) && = delete;
 
@@ -346,7 +330,6 @@ public:
     {
         return slice_mut().slice_mut_from(from);
     }
-
 
     constexpr Slice<const T> slice_from(USize) const && = delete;
     constexpr Slice<T> slice_mut_from(USize) && = delete;
@@ -373,13 +356,10 @@ public:
         return slice_mut().slice_mut_to(to);
     }
 
-
     constexpr Slice<const T> slice_to(USize) const && = delete;
     constexpr Slice<T> slice_mut_to(USize) && = delete;
 
-    // ---------------------------------------------------------
-    // Capacity
-    // ---------------------------------------------------------
+    // ---------------------------------------------------------------  Capacity
 
     /**
      * @brief Get the number of elements in the array.
@@ -413,9 +393,7 @@ public:
         return true;
     }
 
-    // ---------------------------------------------------------
-    // Protocols
-    // ---------------------------------------------------------
+    // --------------------------------------------------------------- Protocols
 
     /**
      * @brief Compute the hash of the array.
@@ -434,9 +412,9 @@ public:
      * @tparam A Archive type.
      * @param archive Archive to use.
      */
-    template <typename A>
-    void shape(A &archive) {
-        if constexpr (A::kind == ArchiveKind::Serializer) {
+    template <typename Archive>
+    void shape(Archive &archive) {
+        if constexpr (Archive::action == ArchiveAction::Write) {
             USize sz = Size;
             archive.prop("@size", sz);
         } else {
@@ -445,16 +423,14 @@ public:
             FR_ASSERT(sz == Size, "deserialized size mismatch for fixed-size Array");
         }
 
-        archive.list("@items", [&](A &list_archive) {
+        archive.list("@items", [&](Archive &list_archive) {
             for (USize i = 0; i < Size; ++i) {
                 list_archive.prop("", m_data[i]);
             }
         });
     }
 
-    // ---------------------------------------------------------
-    // Structured Bindings
-    // ---------------------------------------------------------
+    // ----------------------------------------------------- Structured Bindings
 
     /**
      * @brief Access item at index I for structured bindings.
@@ -493,7 +469,8 @@ public:
 
 } // namespace fr
 
-// std specializations for structured bindings
+// --------------------------------------------------------- std Specializations
+
 namespace std {
 template <typename T, USize Size>
 struct tuple_size<fr::Array<T, Size>> : std::integral_constant<USize, Size> {};

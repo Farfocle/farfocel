@@ -5,8 +5,8 @@
  * @brief Definition of global storage for core.
  */
 
-#include "fr/core/ctx.hpp"
 #include "fr/core/alloc_tracer.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/heap_alloc.hpp"
 #include "fr/core/macros.hpp"
 
@@ -26,7 +26,6 @@ thread_local Ctx *ambient_ctx_ptr{nullptr};
 
 void init_core_ctx() noexcept {
     glob::core_alloc_tracer_ptr = new (core_alloc_tracer_mem) AllocTracer(1 << 12);
-
     glob::core_heap_alloc_ptr = new (core_heap_alloc_mem) MallocAlloc();
 
     core_ctx.tag = "core";

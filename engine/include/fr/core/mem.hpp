@@ -110,7 +110,7 @@ inline void copy_raw_range(const T *src, USize sz, T *dst) noexcept {
  * @pre If sz > 0, ptr points to valid storage.
  */
 template <typename T>
-inline void set_raw_range(T *ptr, int value, USize sz) noexcept {
+inline void set_raw_range(T *ptr, USize value, USize sz) noexcept {
     FR_STATIC_ASSERT(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
     FR_ASSERT(sz == 0 || ptr != nullptr, "pointer must be non-null");
 
@@ -307,8 +307,9 @@ inline void zero_init_range(T *ptr, USize sz) noexcept {
     } else {
         FR_STATIC_ASSERT(std::is_nothrow_default_constructible_v<T>,
                          "T must be nothrow constructible");
-        for (USize i = 0; i < sz; ++i)
+        for (USize i = 0; i < sz; ++i) {
             std::construct_at(ptr + i);
+        }
     }
 }
 

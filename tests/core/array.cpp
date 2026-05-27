@@ -9,7 +9,7 @@ namespace fr {
 
 TEST_CASE("Array - Serialization") {
     Array<S32, 3> arr = {1, 2, 3};
-    JsonSerializer writer;
+    JsonWriterArchive writer;
 
     writer.prop("arr", arr);
     String json = writer.consume();
@@ -18,7 +18,7 @@ TEST_CASE("Array - Serialization") {
     CHECK(json.contains("\"@items\":[1,2,3]"));
 
     Array<S32, 3> deserialized;
-    JsonDeserializer reader(json.view());
+    JsonReaderArchive reader(json.view());
     reader.prop("arr", deserialized);
     CHECK(reader.consume());
 

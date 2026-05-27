@@ -1,0 +1,22 @@
+# Data test suite
+
+set(TEST_DATA_SOURCES
+    "main.cpp"
+    "thing_pool.cpp"
+    "part_pool.cpp"
+    "registry.cpp"
+    "query.cpp"
+)
+
+
+add_executable(farfocel_test_data ${TEST_DATA_SOURCES})
+
+target_link_libraries(farfocel_test_data
+    PRIVATE
+        engine
+        farfocel_compiler_options
+        doctest
+)
+
+include(CTest)
+add_test(NAME test_data COMMAND farfocel_test_data)
