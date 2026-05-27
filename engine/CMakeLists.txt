@@ -53,6 +53,8 @@ set(ENGINE_HEADERS
     "include/fr/data/thing.hpp"
     "include/fr/data/thing_pool.hpp"
     "include/fr/data/world.hpp"
+    "include/fr/data/common.hpp"
+    "include/fr/data/script.hpp"
 )
 
 set(ENGINE_SOURCES
