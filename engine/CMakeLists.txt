@@ -43,6 +43,20 @@ set(ENGINE_HEADERS
     "include/fr/core/typeidx.hpp"
     "include/fr/core/typetraits.hpp"
     "include/fr/core/unique_ptr.hpp"
+    "include/fr/core/slot_map.hpp"
+    
+#### platform
+    "include/fr/platform/window.hpp"
+    "include/fr/platform/keycode.hpp"
+    "include/fr/platform/input.hpp"
+
+#### renderer
+    "include/fr/renderer/render_device.hpp"
+    "include/fr/renderer/mesh_loader.hpp"
+    "include/fr/renderer/mesh.hpp"
+    "include/fr/renderer/camera.hpp"
+    "include/fr/renderer/render_queue.hpp"
+    "include/fr/renderer/renderer.hpp"
 
 ### data
     "include/fr/data/part.hpp"
@@ -59,6 +73,13 @@ set(ENGINE_HEADERS
 set(ENGINE_SOURCES
 #### core
     "src/core/ctx.cpp"
+#### platform
+    "src/platform/sdl3/sdl_window.cpp"
+    
+#### renderer
+    "src/renderer/opengl/opengl_render_device.cpp"
+    "src/renderer/mesh.cpp"
+    "src/renderer/mesh_loader.cpp"
 )
 
 
@@ -66,12 +87,19 @@ add_library(engine ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
 set_target_properties(engine PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(engine PRIVATE farfocel_compiler_options)
+# should this be public?
 target_link_libraries(engine PUBLIC yyjson)
+
+target_link_libraries(engine PRIVATE glad)
+target_link_libraries(engine PUBLIC glm::glm)
+target_link_libraries(engine PUBLIC SDL3::SDL3-static)
+target_link_libraries(engine PRIVATE cgltf)
 
 target_include_directories(engine
     PUBLIC "include"
     PRIVATE "src"
-
+    # this is quite ugly, but i couldn't get aliases to work properly
+    PRIVATE "${CMAKE_SOURCE_DIR}/3rdparty/glad/include"
 )
 
 if(BUILD_SHARED_LIBS)
