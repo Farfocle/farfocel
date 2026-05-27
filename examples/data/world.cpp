@@ -9,6 +9,7 @@
 
 #include "fr/core/ctx.hpp"
 #include "fr/core/format.hpp"
+#include "fr/core/meta.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
@@ -36,6 +37,9 @@ void system_a(fr::World &world) {
         std::cout << fr::format("thing: {}; pos: {}", thing, pos) << "\n";
     }
 }
+
+FR_TYPE(Pos);
+FR_TYPE(Sprite);
 
 void system_b(fr::World &world) {
     std::cout << "---- system_b: \n";

@@ -209,6 +209,11 @@ public:
         return m_metas.size();
     }
 
+    /// @brief Check if a type index if valid.
+    bool check(TypeIdx tidx) const noexcept {
+        return tidx.idx() < m_metas.size();
+    }
+
     /**
      * @brief Generate or fetch a stable type index for T.
      */

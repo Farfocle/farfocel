@@ -38,6 +38,9 @@ struct Sprite {
     })
 };
 
+FR_TYPE(Pos);
+FR_TYPE(Sprite);
+
 S32 main() {
     fr::init_core_ctx();
 

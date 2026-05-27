@@ -104,7 +104,7 @@ public:
     World &operator=(const World &) = delete;
     World &operator=(World &&) = delete;
 
-    // ------------------------------------------------------ Thing Operations
+    // -------------------------------------------------------- Thing Operations
 
     /**
      * @brief Returns a fresh, non-nil thing.
