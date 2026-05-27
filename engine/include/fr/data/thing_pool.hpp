@@ -153,8 +153,9 @@ public:
         archive.prop("things", m_things->slice_to(m_alive_count + m_free_count));
     }
 
-private:
     // -------------------------------------------------------- Internal Helpers
+
+private:
     Thing do_handout_from_back() noexcept {
         auto &things = *m_things;
 

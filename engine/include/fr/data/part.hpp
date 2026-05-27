@@ -11,7 +11,6 @@
 #pragma once
 
 #include "fr/core/bitset.hpp"
-#include "fr/core/macros.hpp"
 #include "fr/core/meta.hpp"
 
 namespace fr {
@@ -28,6 +27,8 @@ class Signature {
 public:
     // ------------------------------------ Typedefs & Constructors & Destructor
     using Storage = Bitset<MAX_PARTS>;
+
+    // ------------------------------------------------------------ Operatations
 
     /**
      * @brief Returns the underlying bitset.
@@ -97,6 +98,7 @@ public:
     }
 
 private:
+    // -------------------------------------------------------- Member Variables
     Storage m_bits{};
 };
 } // namespace fr

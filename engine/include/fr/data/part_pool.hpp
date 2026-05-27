@@ -1,7 +1,6 @@
 /**
  * @file part_pool.hpp
  * @author Kiju
- *
  * @brief PartPool is a data structure responsible for storing and managing parts.
  */
 
@@ -24,17 +23,27 @@ namespace fr::impl {
  * @tparam T The type of part to store.
  * @pre T must be default constructible (stub).
  *
- * @note Implementation: PartPool consists of three dynamic arrays: m_parts, m_thing_to_part, and
- * m_part_to_thing.
+ * @details Implementation: `PartPool` consists of three dynamic arrays: `m_parts`,
+ * `m_thing_to_part`, and `m_part_to_thing`.
  */
 template <typename T>
     requires std::is_default_constructible_v<T>
 class PartPool {
 public:
+    // ----------------------------------------------- Constructors & Destructor
+
+    /**
+     * @brief Constructs a `PartPool` with the ambient allocator.
+     */
     PartPool() noexcept
         : PartPool(get_ambient_ctx().alloc) {
     }
 
+    /**
+     * @brief Constructs a `PartPool` with the specified allocator.
+     * @param alloc The allocator to use for memory operations.
+     * @pre `alloc` must be non-null.
+     */
     explicit PartPool(Alloc *alloc) noexcept {
         m_alloc = alloc;
         m_parts = DynamicArray<T>::with_alloc(alloc);
@@ -56,6 +65,8 @@ public:
     PartPool &operator=(PartPool &&) = delete;
 
     ~PartPool() noexcept = default;
+
+    // --------------------------------------------------------- Part Operations
 
     /**
      * @brief Reserves space for parts array and part -> thing lookup array.
@@ -82,6 +93,8 @@ public:
     USize part_count() const noexcept {
         return m_parts.size();
     }
+
+    // ------------------------------------------------------ Internal Accessors
 
     /**
      * @brief Returns a slice of parts including the stub.
@@ -125,6 +138,8 @@ public:
         return m_part_to_thing.slice_from(1);
     }
 
+    // ------------------------------------------------------------ Part Getters
+
     /**
      * @brief Returns a reference to the stub.
      */
@@ -134,7 +149,9 @@ public:
 
     /**
      * @brief Returns a pointer to the part owned by the thing.
-     * @note If thing is nil, returns a reference to the stub.
+     * @param thing The thing to get the part of.
+     * @return A pointer to the part owned by the thing.
+     *
      * @warning Caller must ensure the thing is alive and DOES own part T.
      */
     T *get_unchecked(Thing thing) noexcept {
@@ -142,10 +159,15 @@ public:
         return &m_parts[m_thing_to_part[thing.idx()]];
     }
 
+    // -------------------------------------------------------- Part Mutatations
+
     /**
      * @brief Emplace a part to a thing.
+     * @param thing The thing to emplace the part to.
+     * @param args The arguments to construct the part with.
      * @return A reference to the emplaced part.
-     * @warning Caller must ensure the thing is alive and DOES NOT own part T.
+     *
+     * @warning Caller must ensure the thing is alive and DOES NOT have part `T`.
      */
     template <typename... Args>
     T &emplace_unchecked(Thing thing, Args &&...args) noexcept {
@@ -164,8 +186,11 @@ public:
 
     /**
      * @brief Insert a part to a thing.
+     * @param thing The thing to insert the part to.
+     * @param part The part to insert.
      * @return A reference to the inserted part.
-     * @warning Caller must ensure the thing is alive and DOES NOT own part T.
+     *
+     * @warning Caller must ensure the thing is alive and DOES NOT have part `T`.
      */
     T &insert_unchecked(Thing thing, T &&part) noexcept {
         return emplace_unchecked(thing, std::forward<T>(part));
@@ -173,8 +198,11 @@ public:
 
     /**
      * @brief Insert a part to a thing.
+     * @param thing The thing to insert the part to.
+     * @param part The part to insert.
      * @return A reference to the inserted part.
-     * @warning Caller must ensure the thing is alive and DOES NOT own part T.
+     *
+     * @warning Caller must ensure the thing is alive and DOES NOT have part `T`.
      */
     T &insert_unchecked(Thing thing, const T &part) noexcept {
         return emplace_unchecked(thing, part);
@@ -182,8 +210,9 @@ public:
 
     /**
      * @brief Destroy a part owned by a thing.
-     * @note If thing is nil, does nothing.
-     * @warning Caller must ensure the thing is alive and DOES own part T.
+     * @note If thing is nil; does nothing.
+     *
+     * @warning Caller must ensure the thing is alive and DOES have part `T`.
      */
     void destroy_unchecked(Thing thing) noexcept {
         if (thing.is_nil()) [[unlikely]] {
@@ -225,6 +254,8 @@ private:
     // A dense index array for looking the original thing index of the part.
     DynamicArray<Thing> m_part_to_thing{};
 };
+
+// ----------------------------------------------------------- Static Assertions
 
 FR_STATIC_ASSERT(sizeof(PartPool<Byte>) == sizeof(PartPool<U64>),
                  "part pools must have the same size regardless of the element type");
