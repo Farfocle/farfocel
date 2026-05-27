@@ -268,9 +268,10 @@ public:
      */
     void commit_mutate() noexcept {
         for (auto &cmd : m_mutate_cmds) {
-            auto &part = get_unchecked(cmd.thing);
-            part = cmd.next;
+            T *part = get_unchecked(cmd.thing);
+            *part = cmd.next;
         }
+
 
         m_mutate_cmds.clear();
     }
