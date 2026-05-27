@@ -15,7 +15,6 @@
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/slice.hpp"
-#include "fr/data/cmd.hpp"
 #include "fr/data/thing.hpp"
 
 namespace fr::impl {
@@ -41,10 +40,6 @@ public:
         m_parts = DynamicArray<T>::with_alloc(alloc);
         m_thing_to_part = DynamicArray<USize>::with_alloc(alloc);
         m_part_to_thing = DynamicArray<Thing>::with_alloc(alloc);
-
-        m_destroy_cmds = DynamicArray<DestroyPartCmd<T>>::with_alloc(alloc);
-        m_insert_cmds = DynamicArray<InsertPartCmd<T>>::with_alloc(alloc);
-        m_mutate_cmds = DynamicArray<MutatePartCmd<T>>::with_alloc(alloc);
 
         m_parts.push_back(T());
 
@@ -218,78 +213,6 @@ public:
         m_parts.pop_back();
     }
 
-    // ---------------------------------------------------------------- Commands
-
-    /**
-     * @brief Record a destroy command for a thing.
-     */
-    void record_destroy(Thing thing) noexcept {
-        m_destroy_cmds.push_back(DestroyPartCmd<T>{.thing = thing});
-    }
-
-    /**
-     * @brief Record an insert command for a thing.
-     */
-    void record_insert(Thing thing, const T &part) noexcept {
-        m_insert_cmds.push_back(InsertPartCmd<T>{.thing = thing, .part = part});
-    }
-
-    /**
-     * @brief Record a mutate command for a thing.
-     */
-    void record_mutate(Thing thing, const T &prev, const T &next) noexcept {
-        m_mutate_cmds.push_back(MutatePartCmd<T>{.thing = thing, .prev = prev, .next = next});
-    }
-
-    /**
-     * @brief Returns a read-only view of destroy commands.
-     */
-    Slice<const DestroyPartCmd<T>> destroy_cmds() const noexcept {
-        return m_destroy_cmds.slice();
-    }
-
-    /**
-     * @brief Returns a read-only view of insert commands.
-     */
-    Slice<const InsertPartCmd<T>> insert_cmds() const noexcept {
-        return m_insert_cmds.slice();
-    }
-
-    /**
-     * @brief Apply all recorded destroy commands.
-     */
-    void commit_destroy() noexcept {
-
-        for (auto &cmd : m_destroy_cmds) {
-            destroy_unchecked(cmd.thing);
-        }
-
-        m_destroy_cmds.clear();
-    }
-
-    /**
-     * @brief Apply all recorded insert commands.
-     */
-    void commit_insert() noexcept {
-        for (auto &cmd : m_insert_cmds) {
-            insert_unchecked(cmd.thing, cmd.part);
-        }
-
-        m_insert_cmds.clear();
-    }
-
-    /**
-     * @brief Apply all recorded mutate commands.
-     */
-    void commit_mutate() noexcept {
-        for (auto &cmd : m_mutate_cmds) {
-            T *part = get_unchecked(cmd.thing);
-            *part = cmd.next;
-        }
-
-        m_mutate_cmds.clear();
-    }
-
 private:
     // -------------------------------------------------------- Member Variables
     Alloc *m_alloc{get_ambient_ctx().alloc};
@@ -301,10 +224,6 @@ private:
 
     // A dense index array for looking the original thing index of the part.
     DynamicArray<Thing> m_part_to_thing{};
-
-    DynamicArray<DestroyPartCmd<T>> m_destroy_cmds{};
-    DynamicArray<InsertPartCmd<T>> m_insert_cmds{};
-    DynamicArray<MutatePartCmd<T>> m_mutate_cmds{};
 };
 
 FR_STATIC_ASSERT(sizeof(PartPool<Byte>) == sizeof(PartPool<U64>),

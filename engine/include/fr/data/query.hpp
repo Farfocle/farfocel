@@ -109,11 +109,19 @@ public:
     }
 
     Iter begin() noexcept {
+        if (m_registry->do_check_part_pool(m_iter_tidx)) {
+            return Iter(m_registry, m_include, m_exclude, Slice<const Thing>{}, 0);
+        }
+
         Slice<const Thing> part_to_thing = m_registry->do_part_to_thing_slice_by_tidx(m_iter_tidx);
         return Iter(m_registry, m_include, m_exclude, part_to_thing, 1);
     }
 
     Iter end() noexcept {
+        if (m_registry->do_check_part_pool(m_iter_tidx)) {
+            return Iter(m_registry, m_include, m_exclude, Slice<const Thing>{}, 0);
+        }
+
         Slice<const Thing> part_to_thing = m_registry->do_part_to_thing_slice_by_tidx(m_iter_tidx);
         return Iter(m_registry, m_include, m_exclude, part_to_thing, part_to_thing.size());
     }

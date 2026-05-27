@@ -10,7 +10,7 @@
 #include "fr/core/format.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
-#include "fr/data/registry.hpp"
+#include "fr/data/world.hpp"
 #include "fr/data/thing.hpp"
 #include <iostream>
 
@@ -28,28 +28,28 @@ S32 main() {
     fr::init_core_ctx();
 
     {
-        fr::impl::Registry registry;
+        fr::World world;
 
-        fr::Thing a = registry.handout();
-        registry.record_insert<Pos>(a, Pos{42.0, 67.0});
+        fr::Thing a = world.handout();
+        world.insert<Pos>(a, Pos{42.0, 67.0});
 
-        registry.commit_insert_all();
+        world.commit_insert_part_cmds();
 
-        fr::Thing b = registry.handout();
-        registry.record_insert<Pos>(b, Pos{42.0, 69.0});
+        fr::Thing b = world.handout();
+        world.insert<Pos>(b, Pos{42.0, 69.0});
 
-        fr::Thing c = registry.handout();
-        registry.record_insert<Pos>(c, Pos{13.0, 12.0});
+        fr::Thing c = world.handout();
+        world.insert<Pos>(c, Pos{13.0, 12.0});
 
         std::cout << "--- commit 0\n";
-        for (auto [thing, pos] : registry.query<Pos>()) {
+        for (auto [thing, pos] : world.query<Pos>()) {
             std::cout << fr::format("thing: {}; pos: {}", thing, pos) << "\n";
         }
 
-        registry.commit_insert_all();
+        world.commit_insert_part_cmds();
 
         std::cout << "--- commit 1\n";
-        for (auto [thing, pos] : registry.query<Pos>()) {
+        for (auto [thing, pos] : world.query<Pos>()) {
             std::cout << fr::format("thing: {}; pos: {}", thing, pos) << "\n";
         }
     }
