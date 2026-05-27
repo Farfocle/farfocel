@@ -12,6 +12,7 @@
 #include "fr/core/meta.hpp"
 
 namespace fr {
+
 constexpr USize MAX_PARTS = 128;
 
 /**
