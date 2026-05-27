@@ -1,7 +1,11 @@
-// to-do: documentation, faster iteration
-// thanks: https://electrp.com/posts/slotmap/
-//         https://web.archive.org/web/20241104070731/https://seanmiddleditch.github.io/2013-01-05-data-structures-for-game-developers-the-slot-map/
-//
+/**
+ * @file slot_map.hpp
+ * @author Tfoedy
+ *
+ * @brief Farfocel's SlotMap!
+ *
+ *
+ */
 
 #pragma once
 #include "fr/core/dynamic_array.hpp"

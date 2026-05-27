@@ -1,3 +1,9 @@
+/**
+ * @file render_queue.hpp
+ * @author Tfoedy
+ *
+ * @brief Collects and sorts draw calls before they are seent to the GPU.
+ */
 #pragma once
 
 #include "fr/core/alloc.hpp"
@@ -12,6 +18,9 @@
 
 namespace fr {
 
+/**
+ * @brief Determines the general category of the render pass for sorting purposes.
+ */
 enum class RenderPassType : U8 {
     Opaque = 0, // regular models
     Masked = 1, // leaves, vegetation
@@ -21,10 +30,20 @@ enum class RenderPassType : U8 {
     UI = 5,
 };
 
-// 64-bit key for optimal sorting for reducing the amount of GPU state changes
+/**
+ * @brief 64-bit key for optimal sorting, used to minimize GPU state changes.
+ */
 struct SortKey {
     U64 value{0};
 
+    /**
+     * @brief Creates a 64-bit sorting key based on bit hierarchy.
+     * * @param pass Render pass type.
+     * @param pipe Handle to the render pipeline.
+     * @param texture Handle to the main texture.
+     * @param depth Depth value for Z-sorting.
+     * @return A composed SortKey.
+     */
     static constexpr SortKey create(RenderPassType pass, RenderPipelineHandle pipe,
                                     TextureHandle texture, U32 depth) noexcept {
         // BIT HIERARCHY
@@ -46,7 +65,9 @@ struct SortKey {
     }
 };
 
-// drawing call sent from ECS to RENDERER
+/**
+ * @brief Drawing call packet sent from the ECS to the RENDERER.
+ */
 struct alignas(8) DrawCall {
     SortKey key;
     RenderPipelineHandle pipe;
@@ -69,6 +90,10 @@ FR_STATIC_ASSERT(sizeof(DrawCall) == 64, "DrawCall must be exactly 64B of size")
 
 class RenderQueue {
 public:
+    /**
+     * @brief Constructs a new RenderQueue.
+     * * @param alloc Allocator used for the internal dynamic arrays.
+     */
     explicit RenderQueue(Alloc *alloc = get_ambient_ctx().alloc) noexcept
         : m_alloc(alloc),
           m_packets(m_alloc),
@@ -82,12 +107,19 @@ public:
     RenderQueue(RenderQueue &&) noexcept = default;
     RenderQueue &operator=(RenderQueue &&) noexcept = default;
 
-    // *from last frame
+    /**
+     * @brief Clears the accumulated data from the last frame.
+     */
     void clear_leftover() noexcept {
         m_packets.clear();
         m_transforms.clear();
     }
 
+    /**
+     * @brief Submits a draw call alongside its world transformation matrix.
+     * * @param packet The draw call configuration.
+     * @param transform The world space transformation matrix.
+     */
     void send_call(const DrawCall &packet, const glm::mat4 &transform) noexcept {
         U32 transform_index = static_cast<U32>(m_transforms.size());
         m_transforms.push_back(transform);
@@ -97,17 +129,32 @@ public:
         m_packets.push_back(p);
     }
 
-    // to-do: radix sort
+    /**
+     * @brief Sorts the queued draw calls to minimize state changes.
+     * @note Future enhancement: Radix sort.
+     */
     void sort() noexcept {
         std::sort(m_packets.begin(), m_packets.end());
     }
 
+    /**
+     * @brief Retrieves a read-only slice of the queued draw calls.
+     * * @return Slice of DrawCall objects.
+     */
     Slice<const DrawCall> get_calls() const noexcept {
         return m_packets.slice();
     }
+    /**
+     * @brief Retrieves a read-only slice of the transform matrices.
+     * * @return Slice of glm::mat4 objects.
+     */
     Slice<const glm::mat4> get_transforms() const noexcept {
         return m_transforms.slice();
     }
+    /**
+     * @brief Checks if the render queue is empty.
+     * * @return true if no draw calls are queued.
+     */
     bool is_empty() const noexcept {
         return m_packets.is_empty();
     }

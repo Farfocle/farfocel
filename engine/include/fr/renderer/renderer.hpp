@@ -1,3 +1,9 @@
+/**
+ * @file renderer.hpp
+ * @author Tfoedy
+ *
+ * @brief High-level renderer implementation.
+ */
 #pragma once
 
 #include "fr/core/macros.hpp"
@@ -9,6 +15,10 @@
 namespace fr {
 class Renderer {
 public:
+    /**
+     * @brief Constructs the Renderer utilizing the provided RenderDevice.
+     * * @param device Pointer to an initialized RenderDevice.
+     */
     explicit Renderer(RenderDevice *device) noexcept
         : m_device(device) {
         FR_ASSERT(device != nullptr, "Renderer requires valid RenderDevice");
@@ -22,7 +32,15 @@ public:
                 m_device->destroy_buffer(m_camera_ssbo);
         }
     }
-
+    /**
+     * @brief Executes the rendering pipeline for the current frame.
+     * * @param queue The sorted render queue containing all draw calls.
+     * @param color_targets A slice of color targets for the render pass.
+     * @param depth_target The depth target for the render pass.
+     * @param width Viewport width.
+     * @param height Viewport height.
+     * @param view_proj The combined View-Projection matrix from the active camera.
+     */
     void render(const RenderQueue &queue, Slice<const TextureHandle> color_targets,
                 TextureHandle depth_target, U32 width, U32 height,
                 const glm::mat4 &view_proj) noexcept {
@@ -75,7 +93,7 @@ public:
         // meaning that if two models do not require two different shaders or textures, then there's
         // no opengl state change
         for (const DrawCall &call : queue.get_calls()) {
-            // changed only when it's of different material
+            // changed only when it's of different material...
             if (call.pipe.key != curr_pipe.key) {
                 cmd->set_pipeline(call.pipe);
                 curr_pipe = call.pipe;
@@ -111,7 +129,7 @@ private:
     RenderDevice *m_device{nullptr};
 
     BufferHandle m_transform_ssbo{};
-    U32 m_transform_capacity{0}; // the amount of matrixes
+    U32 m_transform_capacity{0}; // the amount of matrixes reserved
                                  //
     BufferHandle m_camera_ssbo{};
 };

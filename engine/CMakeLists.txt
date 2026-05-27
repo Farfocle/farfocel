@@ -33,6 +33,8 @@ set(ENGINE_HEADERS
     "include/fr/core/slot_map.hpp"
 #### platform
     "include/fr/platform/window.hpp"
+    "include/fr/platform/keycode.hpp"
+    "include/fr/platform/input.hpp"
 
 #### renderer
     "include/fr/renderer/render_device.hpp"
@@ -47,7 +49,8 @@ set(ENGINE_SOURCES
 #### core
     "src/core/ctx.cpp"
 #### platform
-    "src/platform/sdl3/sdl3_window.cpp"
+    "src/platform/sdl3/sdl_window.cpp"
+    
 #### renderer
     "src/renderer/opengl/opengl_render_device.cpp"
     "src/renderer/mesh.cpp"

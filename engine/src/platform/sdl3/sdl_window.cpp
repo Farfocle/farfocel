@@ -24,9 +24,7 @@ Window::Window(Window &&other) noexcept
       m_width(other.m_width),
       m_height(other.m_height),
       m_minimized(other.m_minimized),
-      m_focused(other.m_focused),
-      m_resize_callback(std::move(other.m_resize_callback)),
-      m_minimize_callback(std::move(other.m_minimize_callback)) {
+      m_focused(other.m_focused) {
     other.m_state = nullptr;
 }
 
@@ -38,8 +36,6 @@ Window &Window::operator=(Window &&other) noexcept {
         m_height = other.m_height;
         m_minimized = other.m_minimized;
         m_focused = other.m_focused;
-        m_resize_callback = std::move(other.m_resize_callback);
-        m_minimize_callback = std::move(other.m_minimize_callback);
         other.m_state = nullptr;
     }
     return *this;
@@ -117,80 +113,68 @@ void Window::close() noexcept {
     SDL_Quit();
 }
 
-bool Window::poll_events() noexcept {
+bool Window::poll_events(WindowInput &out_input) noexcept {
+    out_input.reset();
+    m_resized_this_frame = false;
+
     SDL_Event evnt;
     while (SDL_PollEvent(&evnt)) {
         switch (evnt.type) {
         case SDL_EVENT_QUIT:
             return false;
 
-        case SDL_EVENT_WINDOW_RESIZED: {
-
+        // WINDOW STATE
+        case SDL_EVENT_WINDOW_RESIZED:
             m_width = static_cast<U32>(evnt.window.data1);
             m_height = static_cast<U32>(evnt.window.data2);
-            if (m_resize_callback)
-                m_resize_callback(m_width, m_height);
+            m_resized_this_frame = true;
             break;
-        }
 
-        case SDL_EVENT_WINDOW_MINIMIZED: {
-
+        case SDL_EVENT_WINDOW_MINIMIZED:
             m_minimized = true;
-            if (m_minimize_callback)
-                m_minimize_callback(true);
             break;
-        }
 
-        case SDL_EVENT_WINDOW_RESTORED: {
-
+        case SDL_EVENT_WINDOW_RESTORED:
             m_minimized = false;
-            if (m_minimize_callback)
-                m_minimize_callback(false);
             break;
-        }
 
-        case SDL_EVENT_WINDOW_FOCUS_GAINED: {
-
+        case SDL_EVENT_WINDOW_FOCUS_GAINED:
             m_focused = true;
             break;
-        }
 
-        case SDL_EVENT_WINDOW_FOCUS_LOST: {
-
+        case SDL_EVENT_WINDOW_FOCUS_LOST:
             m_focused = false;
             break;
-        }
+
+        // INPUT STATE
+        case SDL_EVENT_KEY_DOWN:
+            if (evnt.key.scancode < 512) {
+                if (!out_input.keys_down[evnt.key.scancode]) {
+                    out_input.keys_pressed[evnt.key.scancode] = true;
+                }
+                out_input.keys_down[evnt.key.scancode] = true;
+            }
+            break;
+
+        case SDL_EVENT_KEY_UP:
+            if (evnt.key.scancode < 512) {
+                out_input.keys_down[evnt.key.scancode] = false;
+            }
+            break;
+
+        case SDL_EVENT_MOUSE_MOTION:
+            out_input.mouse_x = evnt.motion.x;
+            out_input.mouse_y = evnt.motion.y;
+            out_input.mouse_delta_x += evnt.motion.xrel;
+            out_input.mouse_delta_y += evnt.motion.yrel;
+            break;
         }
     }
-
     return true;
 }
-
 void Window::swap_buffers() noexcept {
     FR_ASSERT(m_state && m_state->window, "Window must be initialized");
     if (m_state->gl_context)
         SDL_GL_SwapWindow(m_state->window);
 }
-
-U32 Window::get_width() const noexcept {
-    return m_width;
-}
-U32 Window::get_height() const noexcept {
-    return m_height;
-}
-bool Window::is_minimized() const noexcept {
-    return m_minimized;
-}
-bool Window::is_focused() const noexcept {
-    return m_focused;
-}
-
-void Window::set_resize_callback(ResizeCallback callback) noexcept {
-    m_resize_callback = std::move(callback);
-}
-
-void Window::set_minimize_callback(MinimizeCallback callback) noexcept {
-    m_minimize_callback = std::move(callback);
-}
-
 } // namespace fr

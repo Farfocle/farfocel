@@ -48,3 +48,18 @@ minimal, pragmatic and probably not very robust. Examples are placed in
 - [ ] File system helpers
 - [ ] Logger
 - [ ] Custom function wrappers and delegates - alternatives to `std::function`
+
+## Renderer
+#### Goals
+* Deferred rendering with PBR
+* Data-Oriented Design powered by our great ECS
+* Complete abstraction over low-level graphics API code
+* Sorted render call queue with minimized state changes
+
+#### Modules
+* RenderDevice - low-level virtual class (currently implemented by OpenGLRenderDevice) that manages GPU operations.
+* CommandBuffer - list of low-level GPU instructions
+* RenderQueue - stores sorted list of draw calls and a SSBO buffer of mesh transforms
+* Renderer - high-level class for managing rendering
+
+#### Rendering pipeline

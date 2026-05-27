@@ -1,3 +1,10 @@
+/**
+ * @file renderer.hpp
+ * @author Tfoedy
+ *
+ * @brief The main OpenGL hardware interface implementing RenderDevice.
+ */
+
 #include "fr/core/alloc.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
@@ -14,6 +21,9 @@
 
 namespace fr {
 
+/**
+ * @brief Representation of a OpenGL Pipeline.
+ */
 struct OpenGLPipeline {
     GLuint program_id{0};
     GLenum cull_mode{GL_BACK};
@@ -23,6 +33,9 @@ struct OpenGLPipeline {
     bool use_culling{true};
 };
 
+/**
+ * @brief Identifiers for recorded hardware commands.
+ */
 enum class CommandType : U8 {
     BeginRenderPass,
     EndRenderPass,
@@ -36,6 +49,9 @@ enum class CommandType : U8 {
     DrawIndexed
 };
 
+/**
+ * @brief Union-based struct storing a single OpenGL execution command.
+ */
 struct OpenGLCommand {
     CommandType type;
     union {
@@ -87,14 +103,24 @@ struct OpenGLCommand {
     } payload;
 };
 
+/**
+ * @brief OpenGL implementation of the CommandBuffer interface.
+ */
 class OpenGLCommandBuffer : public CommandBuffer {
 public:
     OpenGLCommandBuffer() = default;
 
+    /**
+     * @brief Clears the internal command array without reallocating.
+     */
     void clear_commands() noexcept {
         m_commands.clear();
     }
 
+    /**
+     * @brief Gets a reference to the recorded commands.
+     * @return Dynamic array of OpenGLCommand.
+     */
     const DynamicArray<OpenGLCommand> &get_commands() const noexcept {
         return m_commands;
     }
@@ -188,6 +214,10 @@ private:
 
 class OpenGLRenderDevice : public RenderDevice {
 public:
+    /**
+     * @brief Constructs the OpenGL rendering device.
+     * * @param alloc Allocator to use for internal state.
+     */
     explicit OpenGLRenderDevice(Alloc *alloc) noexcept
         : m_alloc(alloc) {
         if (!gladLoadGL(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress))) {
@@ -517,11 +547,15 @@ public:
             return;
         GLuint *id =
             m_buffers.get_data(handle.key); // cannot use unsafe version, since not a drawing loow
-        // this sucks
+        // this sucks but will be optimized later?
         if (id)
             glNamedBufferSubData(*id, offset, data.size(), data.data());
     }
 
+    /**
+     * @brief Returns the allocator associated with this device.
+     * * @return Pointer to the Alloc instance.
+     */
     Alloc *get_allocator() const noexcept {
         return m_alloc;
     }

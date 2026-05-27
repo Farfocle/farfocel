@@ -2,6 +2,7 @@
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/time.hpp"
+#include "fr/platform/input.hpp"
 #include "fr/platform/window.hpp"
 #include "fr/renderer/mesh.hpp"
 #include "fr/renderer/mesh_loader.hpp"
@@ -12,8 +13,6 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/trigonometric.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <glm/glm.hpp>
 #include <iostream>
 
@@ -21,9 +20,9 @@ enum Camera_Movement { FORWARD, BACKWARD, LEFT, RIGHT };
 
 const float YAW = -90.0f;
 const float PITCH = 0.0f;
-const float SPEED = 300.f;
-const float SENSITIVITY = 0.1f;
-const float ZOOM = 45.0f;
+const float SPEED = 400.f;
+const float SENSITIVITY = 0.35f;
+const float ZOOM = 60.0f;
 
 class Camera {
 public:
@@ -38,7 +37,7 @@ public:
     float MouseSensitivity;
     float Zoom;
 
-    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f),
+    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 3.0f),
            glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = YAW, float pitch = PITCH)
         : Front(glm::vec3(0.0f, 0.0f, -1.0f)),
           MovementSpeed(SPEED),
@@ -49,23 +48,6 @@ public:
         Yaw = yaw;
         Pitch = pitch;
         updateCameraVectors();
-    }
-
-    Camera(float posX, float posY, float posZ, float upX, float upY, float upZ, float yaw,
-           float pitch)
-        : Front(glm::vec3(0.0f, 0.0f, -1.0f)),
-          MovementSpeed(SPEED),
-          MouseSensitivity(SENSITIVITY),
-          Zoom(ZOOM) {
-        Position = glm::vec3(posX, posY, posZ);
-        WorldUp = glm::vec3(upX, upY, upZ);
-        Yaw = yaw;
-        Pitch = pitch;
-        updateCameraVectors();
-    }
-
-    glm::mat4 GetViewMatrix() {
-        return glm::lookAt(Position, Position + Front, Up);
     }
 
     void ProcessKeyboard(Camera_Movement direction, float deltaTime) {
@@ -100,14 +82,6 @@ public:
         updateCameraVectors();
     }
 
-    void ProcessMouseScroll(float yoffset) {
-        Zoom -= static_cast<float>(yoffset);
-        if (Zoom < 1.0f)
-            Zoom = 1.0f;
-        if (Zoom > 200.0f)
-            Zoom = 200.0f;
-    }
-
 private:
     void updateCameraVectors() {
         glm::vec3 front;
@@ -134,7 +108,7 @@ layout(std430, binding = 1) readonly buffer CameraBuffer {
     mat4 u_view_proj;
 };
 
-layout(location = 0) uniform uint u_transform_idx;
+uniform uint u_transform_idx;
 
 out vec3 v_normal;
 void main() {
@@ -143,6 +117,7 @@ void main() {
     gl_Position = u_view_proj * model_matrix * vec4(a_position, 1.0);
 }
 )";
+
 const char *FRAGMENT_SHADER = R"(
 #version 450 core
 in vec3 v_normal;
@@ -154,21 +129,19 @@ void main() {
 
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 
-void processInput(float deltaTime) {
-    const bool *state = SDL_GetKeyboardState(NULL);
-    if (state[SDL_SCANCODE_W])
+void processInput(const fr::WindowInput &input, float deltaTime) {
+    if (input.is_key_down(fr::Key::W))
         camera.ProcessKeyboard(FORWARD, deltaTime);
-    if (state[SDL_SCANCODE_S])
+    if (input.is_key_down(fr::Key::S))
         camera.ProcessKeyboard(BACKWARD, deltaTime);
-    if (state[SDL_SCANCODE_A])
+    if (input.is_key_down(fr::Key::A))
         camera.ProcessKeyboard(LEFT, deltaTime);
-    if (state[SDL_SCANCODE_D])
+    if (input.is_key_down(fr::Key::D))
         camera.ProcessKeyboard(RIGHT, deltaTime);
 }
 
 int main() {
     fr::init_core_ctx();
-
     {
         std::string paths;
         std::cout << "Enter path to a GLTF model: ";
@@ -180,8 +153,8 @@ int main() {
         fr::Window window;
         fr::WindowProperties windows_props{
             .title = "Farfocel Renderer Example (WASD + MOUSE to move, ESC to quit)",
-            .width = 1920,
-            .height = 1080,
+            .width = 1280,
+            .height = 720,
             .api = fr::GRAPHICS_API::OPENGL};
 
         if (!window.init(windows_props)) {
@@ -191,14 +164,12 @@ int main() {
 
         fr::RenderDevice *render_device =
             fr::create_opengl_render_device(fr::get_ambient_ctx().alloc);
-
         {
             fr::Renderer renderer(render_device);
             fr::RenderQueue render_queue(fr::get_ambient_ctx_mut().alloc);
 
             fr::ShaderHandle shader_handle = render_device->create_shader(
                 fr::StringView(VERTEX_SHADER), fr::StringView(FRAGMENT_SHADER));
-
             fr::RenderPipelineProperties pipe_props{.shader = shader_handle,
                                                     .cull_mode = fr::CullMode::Back,
                                                     .depth_test = true,
@@ -213,30 +184,31 @@ int main() {
                 return -1;
             }
 
-            U64 last_time = fr::time::get_steady_now_ms();
+            fr::WindowInput global_input;
 
+            U64 last_time = fr::time::get_steady_now_ms();
             bool running = true;
+
             while (running) {
                 U64 current_time = fr::time::get_steady_now_ms();
-
                 float dt = static_cast<float>(current_time - last_time) / 1000.0f;
                 last_time = current_time;
 
-                SDL_Event event;
-                while (SDL_PollEvent(&event)) {
-                    if (event.type == SDL_EVENT_QUIT)
-                        running = false;
-
-                    if (event.type == SDL_EVENT_KEY_DOWN) {
-                        if (event.key.key == SDLK_ESCAPE)
-                            running = false;
-                    } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
-                        camera.ProcessMouseMovement(event.motion.xrel, -event.motion.yrel);
-                    }
+                if (!window.poll_events(global_input)) {
+                    running = false;
                 }
 
+                if (global_input.is_key_pressed(fr::Key::Escape)) {
+                    running = false;
+                }
+
+                if (global_input.mouse_delta_x != 0.0f || global_input.mouse_delta_y != 0.0f) {
+                    camera.ProcessMouseMovement(global_input.mouse_delta_x,
+                                                -global_input.mouse_delta_y);
+                }
+                processInput(global_input, dt);
+
                 render_queue.clear_leftover();
-                processInput(dt);
 
                 glm::mat4 model = glm::mat4(1.0f);
                 model = glm::scale(model, glm::vec3(50.0f));
@@ -271,10 +243,8 @@ int main() {
             render_device->destroy_buffer(mesh.vbo);
             render_device->destroy_buffer(mesh.ibo);
         }
-
         fr::destroy_opengl_render_device(render_device);
     }
-
     fr::shutdown_core_ctx();
     return 0;
 }

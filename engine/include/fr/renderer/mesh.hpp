@@ -1,3 +1,5 @@
+// THIS IS A TEMPORARY CLASS
+// IT WILL BE REPLACED WITH A PROPER ECS ONE
 #pragma once
 
 #include "fr/core/dynamic_array.hpp"

@@ -1,3 +1,6 @@
+// THIS IS A TEMPORARY CAMERA CLASS
+// TO BE REPLACED WITH A PROPER ECS ONE
+
 #pragma once
 
 #include "fr/core/typedefs.hpp"

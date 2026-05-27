@@ -1,3 +1,5 @@
+// THIS IS LIKELY A TEMPORARY CLASS
+// IT WILL LIKELY BE REPLACED
 #pragma once
 
 #include "fr/core/string_view.hpp"
