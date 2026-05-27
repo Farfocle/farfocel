@@ -290,7 +290,6 @@ public:
         m_mutate_cmds.clear();
     }
 
-
 private:
     // -------------------------------------------------------- Member Variables
     Alloc *m_alloc{get_ambient_ctx().alloc};

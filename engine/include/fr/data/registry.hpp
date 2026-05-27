@@ -160,12 +160,8 @@ public:
     template <typename T, typename... Args>
     T *try_emplace(Thing thing, Args &&...args) noexcept {
         TypeIdx tidx = TypeIdx::from_type<T>();
+        PartPool<T> &pool = do_ensure_part_pool<T>(tidx);
 
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            do_create_part_pool<T>(tidx);
-        }
-
-        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
         if (do_check_thing_nil(thing)) [[unlikely]] {
             return &pool.get_stub();
         }
@@ -209,11 +205,8 @@ public:
     template <typename T, typename... Args>
     T &emplace(Thing thing, Args &&...args) noexcept {
         TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            do_create_part_pool<T>(tidx);
-        }
+        PartPool<T> &pool = do_ensure_part_pool<T>(tidx);
 
-        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
         if (do_check_thing_nil(thing)) [[unlikely]] {
             return pool.get_stub();
         }
@@ -227,8 +220,8 @@ public:
     }
 
     /**
-     * @brief Inserts part T on a thing by const reference.
-     * @note Same behavior as emplace_part.
+     * @brief Inserts part `T` on a thing by const reference.
+     * @note Same behavior as `emplace_part`.
      */
     template <typename T>
     T &insert(Thing thing, const T &part) noexcept {
@@ -236,7 +229,7 @@ public:
     }
 
     /**
-     * @brief Inserts part T on a thing by rvalue.
+     * @brief Inserts part `T` on a thing by rvalue.
      * @note Same behavior as emplace_part.
      */
     template <typename T>
@@ -246,15 +239,15 @@ public:
 
     /**
      * @brief Tries to destroy part `T` on a thing.
-     * @note Returns false if thing is nil, pool is missing, or the thing does not own T.
+     * @note Returns false if thing is nil, pool is missing, or the thing does not own `T`.
      */
     template <typename T>
     bool try_destroy(Thing thing) noexcept {
+        TypeIdx tidx = TypeIdx::from_type<T>();
+
         if (do_check_thing_nil(thing)) [[unlikely]] {
             return false;
         }
-
-        TypeIdx tidx = TypeIdx::from_type<T>();
 
         if (do_check_part_pool(tidx)) [[unlikely]] {
             return false;
@@ -272,7 +265,7 @@ public:
     }
 
     /**
-     * @brief Destroys part T on a thing.
+     * @brief Destroys part `T` on a thing.
      * @note Returns false if thing is nil.
      * @warning Asserts if the pool is missing or the thing does not have part `T`.
      */
@@ -363,12 +356,7 @@ public:
      */
     template <typename T>
     void record_destroy(Thing thing) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            do_create_part_pool<T>(tidx);
-        }
-
-        m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().record_destroy(thing);
+        do_ensure_part_pool<T>().record_destroy(thing);
     }
 
     /**
@@ -377,12 +365,7 @@ public:
      */
     template <typename T>
     void record_insert(Thing thing, const T &part) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            do_create_part_pool<T>(tidx);
-        }
-
-        m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().record_insert(thing, part);
+        do_ensure_part_pool<T>().record_insert(thing, part);
     }
 
     /**
@@ -391,12 +374,7 @@ public:
      */
     template <typename T>
     void record_mutate(Thing thing, const T &prev, const T &next) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            do_create_part_pool<T>(tidx);
-        }
-
-        m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().record_mutate(thing, prev, next);
+        do_ensure_part_pool<T>().record_mutate(thing, prev, next);
     }
 
     /**
@@ -405,18 +383,17 @@ public:
     template <typename T>
     void commit_destroy() noexcept {
         TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            return;
-        }
+        PartPool<T> pool = do_ensure_part_pool<T>(tidx);
 
-        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
         for (const auto &cmd : pool.destroy_cmds()) {
             if (do_check_thing_nil(cmd.thing)) [[unlikely]] {
                 continue;
             }
+
             if (!do_check_thing_alive(cmd.thing)) [[unlikely]] {
                 continue;
             }
+
             m_signature_pool.destroy(cmd.thing, tidx);
         }
 
@@ -429,15 +406,13 @@ public:
     template <typename T>
     void commit_insert() noexcept {
         TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            return;
-        }
+        PartPool<T> pool = do_ensure_part_pool<T>(tidx);
 
-        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
         for (const auto &cmd : pool.insert_cmds()) {
             if (do_check_thing_nil(cmd.thing)) [[unlikely]] {
                 continue;
             }
+
             if (!do_check_thing_alive(cmd.thing)) [[unlikely]] {
                 continue;
             }
@@ -453,14 +428,8 @@ public:
      */
     template <typename T>
     void commit_mutate() noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            return;
-        }
-
-        m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().commit_mutate();
+        do_ensure_part_pool<T>().commit_mutate();
     }
-
 
     /**
      * @brief Apply all recorded destroy commands across all part pools.
@@ -507,10 +476,7 @@ public:
         }
     }
 
-
 private:
-
-
     // -------------------------------------------------------- Internal Helpers
 
     /**
@@ -557,11 +523,36 @@ private:
     template <typename T>
     const PartPool<T> *do_part_pool() const noexcept {
         TypeIdx tidx = TypeIdx::from_type<T>();
+        FR_ASSERT(tidx.idx() < MAX_PARTS, "invalid part type index");
+
         if (do_check_part_pool(tidx)) [[unlikely]] {
             return nullptr;
         }
 
         return &m_part_pools[tidx.idx()].cast_ref<const PartPool<T>>();
+    }
+
+    template <typename T>
+    PartPool<T> &do_ensure_part_pool() noexcept {
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        FR_ASSERT(tidx.idx() < MAX_PARTS, "invalid part type index");
+
+        if (do_check_part_pool(tidx)) [[unlikely]] {
+            do_create_part_pool<T>(tidx);
+        }
+
+        return m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
+    }
+
+    template <typename T>
+    PartPool<T> &do_ensure_part_pool(TypeIdx tidx) noexcept {
+        FR_ASSERT(tidx.idx() < MAX_PARTS, "invalid part type index");
+
+        if (do_check_part_pool(tidx)) [[unlikely]] {
+            do_create_part_pool<T>(tidx);
+        }
+
+        return m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
     }
 
     bool do_check_part(Thing thing, TypeIdx tidx) const noexcept {
@@ -577,17 +568,19 @@ private:
     }
 
     template <typename T>
-    static void do_commit_destroy_pool(Registry *registry, AnyPartPool &pool) noexcept {
+    static void do_commit_destroy_pool(Registry *registry, AnyPartPool &any_pool) noexcept {
         TypeIdx tidx = TypeIdx::from_type<T>();
-        PartPool<T> &typed_pool = pool.cast_ref<PartPool<T>>();
+        PartPool<T> &typed_pool = any_pool.cast_ref<PartPool<T>>();
 
         for (const auto &cmd : typed_pool.destroy_cmds()) {
             if (registry->do_check_thing_nil(cmd.thing)) [[unlikely]] {
                 continue;
             }
+
             if (!registry->do_check_thing_alive(cmd.thing)) [[unlikely]] {
                 continue;
             }
+
             registry->m_signature_pool.destroy(cmd.thing, tidx);
         }
 
@@ -603,9 +596,11 @@ private:
             if (registry->do_check_thing_nil(cmd.thing)) [[unlikely]] {
                 continue;
             }
+
             if (!registry->do_check_thing_alive(cmd.thing)) [[unlikely]] {
                 continue;
             }
+
             registry->m_signature_pool.insert(cmd.thing, tidx);
         }
 
@@ -631,7 +626,6 @@ private:
     Array<PartPoolCommitFn, MAX_PARTS> m_commit_insert_fns{};
     Array<PartPoolCommitFn, MAX_PARTS> m_commit_mutate_fns{};
 };
-
 
 } // namespace fr::impl
 
