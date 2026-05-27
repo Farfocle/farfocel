@@ -1,5 +1,6 @@
 set(BENCH_SOURCES
     "registry.cpp"
+    "registry_cmd.cpp"
     "world.cpp"
 )
 

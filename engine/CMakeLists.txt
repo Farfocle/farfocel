@@ -44,6 +44,7 @@ set(ENGINE_HEADERS
     "include/fr/core/unique_ptr.hpp"
 
 ### data
+    "include/fr/data/cmd.hpp"
     "include/fr/data/part.hpp"
     "include/fr/data/part_pool.hpp"
     "include/fr/data/query.hpp"

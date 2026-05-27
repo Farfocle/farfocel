@@ -1,0 +1,59 @@
+/**
+ * @file registry.cpp
+ * @author Kiju
+ *
+ * @brief Example showcasing the basic functionality of the hidden ECS layer with commands.
+ * @details Commands offer a lazy way to modify the registry state (insert and destroy parts).
+ */
+
+#include "fr/core/ctx.hpp"
+#include "fr/core/format.hpp"
+#include "fr/core/shape.hpp"
+#include "fr/core/typedefs.hpp"
+#include "fr/data/registry.hpp"
+#include "fr/data/thing.hpp"
+#include <iostream>
+
+struct Pos {
+    F32 x{0.0};
+    F32 y{0.0};
+
+    FR_SHAPE({
+        FR_PROP(x);
+        FR_PROP(y);
+    })
+};
+
+S32 main() {
+    fr::init_core_ctx();
+
+    {
+        fr::impl::Registry registry;
+
+        fr::Thing a = registry.handout();
+        registry.record_insert<Pos>(a, Pos{42.0, 67.0});
+
+        registry.commit_insert_all();
+
+        fr::Thing b = registry.handout();
+        registry.record_insert<Pos>(b, Pos{42.0, 69.0});
+
+        fr::Thing c = registry.handout();
+        registry.record_insert<Pos>(c, Pos{13.0, 12.0});
+
+        std::cout << "--- commit 0\n";
+        for (auto [thing, pos] : registry.query<Pos>()) {
+            std::cout << fr::format("thing: {}; pos: {}", thing, pos) << "\n";
+        }
+
+        registry.commit_insert_all();
+
+        std::cout << "--- commit 1\n";
+        for (auto [thing, pos] : registry.query<Pos>()) {
+            std::cout << fr::format("thing: {}; pos: {}", thing, pos) << "\n";
+        }
+    }
+
+    fr::shutdown_core_ctx();
+    return 0;
+}

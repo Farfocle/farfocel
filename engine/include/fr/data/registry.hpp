@@ -409,7 +409,18 @@ public:
             return;
         }
 
-        m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().commit_destroy();
+        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
+        for (const auto &cmd : pool.destroy_cmds()) {
+            if (do_check_thing_nil(cmd.thing)) [[unlikely]] {
+                continue;
+            }
+            if (!do_check_thing_alive(cmd.thing)) [[unlikely]] {
+                continue;
+            }
+            m_signature_pool.destroy(cmd.thing, tidx);
+        }
+
+        pool.commit_destroy();
     }
 
     /**
@@ -422,7 +433,19 @@ public:
             return;
         }
 
-        m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().commit_insert();
+        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
+        for (const auto &cmd : pool.insert_cmds()) {
+            if (do_check_thing_nil(cmd.thing)) [[unlikely]] {
+                continue;
+            }
+            if (!do_check_thing_alive(cmd.thing)) [[unlikely]] {
+                continue;
+            }
+
+            m_signature_pool.insert(cmd.thing, tidx);
+        }
+
+        pool.commit_insert();
     }
 
     /**
@@ -438,6 +461,7 @@ public:
         m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().commit_mutate();
     }
 
+
     /**
      * @brief Apply all recorded destroy commands across all part pools.
      */
@@ -448,7 +472,7 @@ public:
             }
 
             if (m_commit_destroy_fns[i]) {
-                m_commit_destroy_fns[i](m_part_pools[i]);
+                m_commit_destroy_fns[i](this, m_part_pools[i]);
             }
         }
     }
@@ -463,7 +487,7 @@ public:
             }
 
             if (m_commit_insert_fns[i]) {
-                m_commit_insert_fns[i](m_part_pools[i]);
+                m_commit_insert_fns[i](this, m_part_pools[i]);
             }
         }
     }
@@ -478,10 +502,11 @@ public:
             }
 
             if (m_commit_mutate_fns[i]) {
-                m_commit_mutate_fns[i](m_part_pools[i]);
+                m_commit_mutate_fns[i](this, m_part_pools[i]);
             }
         }
     }
+
 
 private:
 
@@ -552,23 +577,49 @@ private:
     }
 
     template <typename T>
-    static void do_commit_destroy_pool(AnyPartPool &pool) noexcept {
-        pool.cast_ref<PartPool<T>>().commit_destroy();
+    static void do_commit_destroy_pool(Registry *registry, AnyPartPool &pool) noexcept {
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        PartPool<T> &typed_pool = pool.cast_ref<PartPool<T>>();
+
+        for (const auto &cmd : typed_pool.destroy_cmds()) {
+            if (registry->do_check_thing_nil(cmd.thing)) [[unlikely]] {
+                continue;
+            }
+            if (!registry->do_check_thing_alive(cmd.thing)) [[unlikely]] {
+                continue;
+            }
+            registry->m_signature_pool.destroy(cmd.thing, tidx);
+        }
+
+        typed_pool.commit_destroy();
     }
 
     template <typename T>
-    static void do_commit_insert_pool(AnyPartPool &pool) noexcept {
-        pool.cast_ref<PartPool<T>>().commit_insert();
+    static void do_commit_insert_pool(Registry *registry, AnyPartPool &pool) noexcept {
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        PartPool<T> &typed_pool = pool.cast_ref<PartPool<T>>();
+
+        for (const auto &cmd : typed_pool.insert_cmds()) {
+            if (registry->do_check_thing_nil(cmd.thing)) [[unlikely]] {
+                continue;
+            }
+            if (!registry->do_check_thing_alive(cmd.thing)) [[unlikely]] {
+                continue;
+            }
+            registry->m_signature_pool.insert(cmd.thing, tidx);
+        }
+
+        typed_pool.commit_insert();
     }
 
     template <typename T>
-    static void do_commit_mutate_pool(AnyPartPool &pool) noexcept {
+    static void do_commit_mutate_pool(Registry *, AnyPartPool &pool) noexcept {
         pool.cast_ref<PartPool<T>>().commit_mutate();
     }
 
     // -------------------------------------------------------- Member Variables
 
-    using PartPoolCommitFn = void (*)(AnyPartPool &) noexcept;
+    using PartPoolCommitFn = void (*)(Registry *, AnyPartPool &) noexcept;
 
     Alloc *m_alloc{nullptr};
     Array<AnyPartPool, MAX_PARTS> m_part_pools{};
@@ -580,6 +631,7 @@ private:
     Array<PartPoolCommitFn, MAX_PARTS> m_commit_insert_fns{};
     Array<PartPoolCommitFn, MAX_PARTS> m_commit_mutate_fns{};
 };
+
 
 } // namespace fr::impl
 
