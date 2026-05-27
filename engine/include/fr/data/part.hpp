@@ -2,7 +2,10 @@
  * @file part.hpp
  * @author Kiju
  *
- * @brief MAX_PARTS. Interface for a bitset representation of parts owned by a thing.
+ * @brief Part is an intergral part of the hidden ECS system. Normal people call it a component, but
+ * it is too wordy for my taste. So part it is.
+ * @details This file defines the Signature class, which is a bitset representation of parts
+ * attached to a thing.
  */
 
 #pragma once
@@ -13,13 +16,17 @@
 
 namespace fr {
 
+// ==================================================================== Typedefs
 constexpr USize MAX_PARTS = 128;
+
+// =================================================================== Signature
 
 /**
  * @brief Interface for a bitset representation of parts owned by a thing.
  */
 class Signature {
 public:
+    // ------------------------------------ Typedefs & Constructors & Destructor
     using Storage = Bitset<MAX_PARTS>;
 
     /**
@@ -41,7 +48,6 @@ public:
      * @param idx Type index of the part.
      */
     void insert(TypeIdx tidx) noexcept {
-        FR_ASSERT(tidx.idx() < MAX_PARTS, "type idx out of bounds");
         m_bits.one_bit(static_cast<USize>(tidx.idx()));
     }
 
@@ -50,7 +56,6 @@ public:
      * @param idx Type index of the part.
      */
     void destroy(TypeIdx tidx) noexcept {
-        FR_ASSERT(tidx.idx() < MAX_PARTS, "type idx out of bounds");
         m_bits.zero_bit(static_cast<USize>(tidx.idx()));
     }
 
@@ -59,8 +64,7 @@ public:
      * @param idx Type index of the part.
      * @return True if attached, false otherwise.
      */
-    bool owns(TypeIdx tidx) const noexcept {
-        FR_ASSERT(tidx.idx() < MAX_PARTS, "type idx out of bounds");
+    bool has(TypeIdx tidx) const noexcept {
         return m_bits.check_bit(static_cast<USize>(tidx.idx()));
     }
 
