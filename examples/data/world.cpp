@@ -37,14 +37,14 @@ struct Sprite {
     });
 };
 
-void system_a(fr::World &world) {
+void system_a(fr::Scope &world) {
     std::cout << "---- system_a: \n";
     for (auto [thing, pos] : world.query<Pos>()) {
         std::cout << fr::format("thing: {}; pos: {}", thing, pos) << "\n";
     }
 }
 
-void system_b(fr::World &world) {
+void system_b(fr::Scope &world) {
     std::cout << "---- system_b: \n";
     for (auto [thing, sprite] : world.query<Sprite>()) {
         std::cout << fr::format("thing: {}; sprite: {}", thing, sprite) << "\n";

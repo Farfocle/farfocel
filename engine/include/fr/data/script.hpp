@@ -6,4 +6,6 @@
  * @details Karol Szypula would despise that definition.
  */
 
+#pragma once
+
 namespace fr {}

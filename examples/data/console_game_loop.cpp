@@ -51,7 +51,7 @@ struct Minion {
     })
 };
 
-void player_update(fr::World &world) {
+void player_update(fr::Scope &world) {
     for (auto [thing, player, health, transform] : world.query<Player, Health, Transform>()) {
         fr::Thing minion = world.handout();
         world.insert(minion, Transform{});
@@ -66,13 +66,13 @@ void player_update(fr::World &world) {
     }
 }
 
-void minion_update(fr::World &world) {
+void minion_update(fr::Scope &world) {
     for (auto [thing, minion, health] : world.query<Minion, Health>()) {
         health.health -= 3;
     }
 }
 
-void clear_dead(fr::World &world) {
+void clear_dead(fr::Scope &world) {
     for (auto [thing, health] : world.query<Health>()) {
         if (health.health <= 0) {
             world.kill(thing);
@@ -80,14 +80,14 @@ void clear_dead(fr::World &world) {
     }
 }
 
-void print_player(fr::World &world) {
+void print_player(fr::Scope &world) {
     for (auto [thing, transform, health, player] : world.query<Transform, Health, Player>()) {
         std::cout << fr::format("[PLAYER]\nthing: {}\nplayer: {}\ntransform: {}\nhealth: {}\n",
                                 thing, player, transform, health);
     }
 }
 
-void print_minions(fr::World &world) {
+void print_minions(fr::Scope &world) {
     for (auto [thing, transform, health, minion] : world.query<Transform, Health, Minion>()) {
         std::cout << fr::format("[MINION]\nthing: {}\nminion: {}\ntransform: {}\nhealth: {}\n",
                                 thing, minion, transform, health);
