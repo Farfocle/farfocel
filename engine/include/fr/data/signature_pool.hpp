@@ -80,7 +80,7 @@ public:
 
     bool owns(Thing thing, TypeIdx tidx) const noexcept {
         const Storage &signatures = *m_signatures;
-        return signatures[thing.idx()].owns(tidx);
+        return signatures[thing.idx()].has(tidx);
     }
 
     void insert(Thing thing, TypeIdx tidx) noexcept {

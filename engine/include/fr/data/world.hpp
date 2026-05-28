@@ -13,6 +13,7 @@
 #include "fr/core/array.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/inline_function.hpp"
+#include "fr/data/cmd.hpp"
 #include "fr/data/registry.hpp"
 #include "fr/data/thing.hpp"
 
@@ -97,6 +98,7 @@ public:
     World(const Options &opt) noexcept
         : m_options(opt),
           m_registry(opt.registry_alloc),
+          m_cmd_pool(opt.registry_alloc),
           m_system_pool(opt.system_pool_alloc) {
     }
 
@@ -148,7 +150,7 @@ public:
      */
     template <typename T>
     bool has(Thing thing) const noexcept {
-        return m_registry.owns<T>(thing);
+        return m_registry.has<T>(thing);
     }
 
     /**
@@ -234,21 +236,21 @@ public:
      * @brief Apply all recorded insert commands across all part pools.
      */
     void commit_insert_part_cmds() noexcept {
-        m_registry.commit_insert_all();
+        m_cmd_pool.commit_insert_all(&m_registry);
     }
 
     /**
      * @brief Apply all recorded mutate commands across all part pools.
      */
     void commit_mutate_part_cmds() noexcept {
-        m_registry.commit_mutate_all();
+        m_cmd_pool.commit_mutate_all(&m_registry);
     }
 
     /**
      * @brief Apply all recorded destroy commands across all part pools.
      */
     void commit_destroy_part_cmds() noexcept {
-        m_registry.commit_destroy_all();
+        m_cmd_pool.commit_destroy_all(&m_registry);
     }
 
     /**
@@ -271,7 +273,7 @@ public:
      */
     template <typename T>
     void insert(Thing thing, const T &part) noexcept {
-        m_registry.record_insert(thing, part);
+        m_cmd_pool.record_insert<T>(m_registry, thing, part);
     }
 
     /**
@@ -281,7 +283,7 @@ public:
      */
     template <typename T>
     void insert(Thing thing, T &&part) noexcept {
-        m_registry.record_insert(thing, std::move(part));
+        m_cmd_pool.record_insert<T>(m_registry, thing, std::forward<T>(part));
     }
 
     /**
@@ -291,7 +293,7 @@ public:
      */
     template <typename T>
     void destroy(Thing thing) noexcept {
-        m_registry.record_destroy<T>(thing);
+        m_cmd_pool.record_destroy<T>(m_registry, thing);
     }
 
     // ------------------------------------------------------------------- Query
@@ -348,6 +350,7 @@ public:
 private:
     Options m_options{};
     impl::Registry m_registry{};
+    impl::CmdPool m_cmd_pool{};
     impl::SystemPool m_system_pool{};
 };
 

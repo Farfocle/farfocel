@@ -134,7 +134,7 @@ public:
      * @note Returns true for nil thing if the pool exists.
      */
     template <typename T>
-    bool owns(Thing thing) const noexcept {
+    bool has(Thing thing) const noexcept {
         TypeIdx tidx = TypeIdx::from_type<T>();
         if (do_check_part_pool(tidx)) [[unlikely]] {
             return false;
@@ -348,179 +348,6 @@ public:
         return fr::Query<Include...>(this, include);
     }
 
-    // ---------------------------------------------------------------- Commands
-
-    /**
-     * @brief Record a destroy command for part `T` on a thing.
-     * @note If thing is nil or not alive; does nothing.
-     * @note If the thing does not own the part `T`; does nothing.
-     * @note Creates the part pool if missing.
-     */
-    template <typename T>
-    void record_destroy(Thing thing) noexcept {
-        if (thing.is_nil()) [[unlikely]] {
-            return;
-        }
-
-        if (!do_check_thing_alive(thing)) [[unlikely]] {
-            return;
-        }
-
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        if (!do_check_part(thing, tidx)) [[unlikely]] {
-            return;
-        }
-
-        do_ensure_part_pool<T>().record_destroy(thing);
-    }
-
-    /**
-     * @brief Record an insert command for part `T` on a thing.
-     * @note If thing is nil or not alive; does nothing.
-     * @note If the does own a part `T`; does nothing.
-     * @note Creates the part pool if missing.
-     */
-    template <typename T>
-    void record_insert(Thing thing, const T &part) noexcept {
-        if (thing.is_nil()) [[unlikely]] {
-            return;
-        }
-
-        if (!do_check_thing_alive(thing)) [[unlikely]] {
-            return;
-        }
-
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part(thing, tidx)) [[unlikely]] {
-            return;
-        }
-
-        do_ensure_part_pool<T>().record_insert(thing, part);
-    }
-
-    /**
-     * @brief Record a mutate command for part `T` on a thing.
-     * @note If thing is nil or not alive; does nothing.
-     * @note If the thing does no own the part `T`; does nothing.
-     * @note Creates the part pool if missing.
-     */
-    template <typename T>
-    void record_mutate(Thing thing, const T &prev, const T &next) noexcept {
-        if (thing.is_nil()) [[unlikely]] {
-            return;
-        }
-
-        if (!do_check_thing_alive(thing)) [[unlikely]] {
-            return;
-        }
-
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part(thing, tidx)) [[unlikely]] {
-            return;
-        }
-
-        do_ensure_part_pool<T>().record_mutate(thing, prev, next);
-    }
-
-    /**
-     * @brief Apply all recorded destroy commands for part T.
-     */
-    template <typename T>
-    void commit_destroy() noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        PartPool<T> pool = do_ensure_part_pool<T>(tidx);
-
-        for (const auto &cmd : pool.destroy_cmds()) {
-            if (do_check_thing_nil(cmd.thing)) [[unlikely]] {
-                continue;
-            }
-
-            if (!do_check_thing_alive(cmd.thing)) [[unlikely]] {
-                continue;
-            }
-
-            m_signature_pool.destroy(cmd.thing, tidx);
-        }
-
-        pool.commit_destroy();
-    }
-
-    /**
-     * @brief Apply all recorded insert commands for part T.
-     */
-    template <typename T>
-    void commit_insert() noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        PartPool<T> pool = do_ensure_part_pool<T>(tidx);
-
-        for (const auto &cmd : pool.insert_cmds()) {
-            if (do_check_thing_nil(cmd.thing)) [[unlikely]] {
-                continue;
-            }
-
-            if (!do_check_thing_alive(cmd.thing)) [[unlikely]] {
-                continue;
-            }
-
-            m_signature_pool.insert(cmd.thing, tidx);
-        }
-
-        pool.commit_insert();
-    }
-
-    /**
-     * @brief Apply all recorded mutate commands for part T.
-     */
-    template <typename T>
-    void commit_mutate() noexcept {
-        do_ensure_part_pool<T>().commit_mutate();
-    }
-
-    /**
-     * @brief Apply all recorded destroy commands across all part pools.
-     */
-    void commit_destroy_all() noexcept {
-        for (USize i = 0; i < MAX_PARTS; ++i) {
-            if (m_part_pools[i].is_nil()) {
-                continue;
-            }
-
-            if (m_commit_destroy_fns[i]) {
-                m_commit_destroy_fns[i](this, m_part_pools[i]);
-            }
-        }
-    }
-
-    /**
-     * @brief Apply all recorded insert commands across all part pools.
-     */
-    void commit_insert_all() noexcept {
-        for (USize i = 0; i < MAX_PARTS; ++i) {
-            if (m_part_pools[i].is_nil()) {
-                continue;
-            }
-
-            if (m_commit_insert_fns[i]) {
-                m_commit_insert_fns[i](this, m_part_pools[i]);
-            }
-        }
-    }
-
-    /**
-     * @brief Apply all recorded mutate commands across all part pools.
-     */
-    void commit_mutate_all() noexcept {
-        for (USize i = 0; i < MAX_PARTS; ++i) {
-            if (m_part_pools[i].is_nil()) {
-                continue;
-            }
-
-            if (m_commit_mutate_fns[i]) {
-                m_commit_mutate_fns[i](this, m_part_pools[i]);
-            }
-        }
-    }
-
 private:
     // -------------------------------------------------------- Internal Helpers
 
@@ -607,69 +434,14 @@ private:
     template <typename T>
     void do_create_part_pool(TypeIdx tidx) noexcept {
         m_part_pools[tidx.idx()].template emplace<PartPool<T>>(m_alloc);
-        m_commit_destroy_fns[tidx.idx()] = &Registry::do_commit_destroy_pool<T>;
-        m_commit_insert_fns[tidx.idx()] = &Registry::do_commit_insert_pool<T>;
-        m_commit_mutate_fns[tidx.idx()] = &Registry::do_commit_mutate_pool<T>;
-    }
-
-    template <typename T>
-    static void do_commit_destroy_pool(Registry *registry, AnyPartPool &any_pool) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        PartPool<T> &typed_pool = any_pool.cast_ref<PartPool<T>>();
-
-        for (const auto &cmd : typed_pool.destroy_cmds()) {
-            if (registry->do_check_thing_nil(cmd.thing)) [[unlikely]] {
-                continue;
-            }
-
-            if (!registry->do_check_thing_alive(cmd.thing)) [[unlikely]] {
-                continue;
-            }
-
-            registry->m_signature_pool.destroy(cmd.thing, tidx);
-        }
-
-        typed_pool.commit_destroy();
-    }
-
-    template <typename T>
-    static void do_commit_insert_pool(Registry *registry, AnyPartPool &pool) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        PartPool<T> &typed_pool = pool.cast_ref<PartPool<T>>();
-
-        for (const auto &cmd : typed_pool.insert_cmds()) {
-            if (registry->do_check_thing_nil(cmd.thing)) [[unlikely]] {
-                continue;
-            }
-
-            if (!registry->do_check_thing_alive(cmd.thing)) [[unlikely]] {
-                continue;
-            }
-
-            registry->m_signature_pool.insert(cmd.thing, tidx);
-        }
-
-        typed_pool.commit_insert();
-    }
-
-    template <typename T>
-    static void do_commit_mutate_pool(Registry *, AnyPartPool &pool) noexcept {
-        pool.cast_ref<PartPool<T>>().commit_mutate();
     }
 
     // -------------------------------------------------------- Member Variables
-
-    using PartPoolCommitFn = void (*)(Registry *, AnyPartPool &) noexcept;
 
     Alloc *m_alloc{nullptr};
     Array<AnyPartPool, MAX_PARTS> m_part_pools{};
     ThingPool m_thing_pool{};
     SignaturePool m_signature_pool{};
-
-    // Those are needed to call commit methods on type-erased part pools.
-    Array<PartPoolCommitFn, MAX_PARTS> m_commit_destroy_fns{};
-    Array<PartPoolCommitFn, MAX_PARTS> m_commit_insert_fns{};
-    Array<PartPoolCommitFn, MAX_PARTS> m_commit_mutate_fns{};
 };
 
 } // namespace fr::impl
