@@ -13,6 +13,8 @@
 
 namespace fr {
 
+// ======================================================== Typedefs & Constants
+
 using ThingRaw = U32;
 using ThingIdx = U32;
 using ThingGen = U32;
@@ -26,6 +28,8 @@ constexpr USize MAX_THINGS = 1 << THING_IDX_BITS;
 
 FR_STATIC_ASSERT(sizeof(ThingRaw) * 2 <= sizeof(ThingIdx) + sizeof(ThingGen),
                  "ThingRaw is too large for the index and generation fields");
+
+// ======================================================================= Thing
 
 /**
  * @brief Thing represents a universal handle to all game objects. By default, it is 32 bits wide.
