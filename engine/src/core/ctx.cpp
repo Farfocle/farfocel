@@ -9,17 +9,20 @@
 #include "fr/core/ctx.hpp"
 #include "fr/core/heap_alloc.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/logger/logger.hpp"
 
 namespace fr {
 namespace {
 alignas(MallocAlloc) Byte core_heap_alloc_mem[sizeof(MallocAlloc)];
 alignas(AllocTracer) Byte core_alloc_tracer_mem[sizeof(AllocTracer)];
+alignas(Logger) Byte logger_mem[sizeof(Logger)];
 Ctx core_ctx{};
 } // namespace
 
 namespace glob {
 AllocTracer *core_alloc_tracer_ptr{nullptr};
 Alloc *core_heap_alloc_ptr{nullptr};
+Logger *logger_ptr{nullptr};
 Ctx *core_ctx_ptr{nullptr};
 thread_local Ctx *ambient_ctx_ptr{nullptr};
 } // namespace glob
@@ -27,10 +30,14 @@ thread_local Ctx *ambient_ctx_ptr{nullptr};
 void init_core_ctx() noexcept {
     glob::core_alloc_tracer_ptr = new (core_alloc_tracer_mem) AllocTracer(1 << 12);
     glob::core_heap_alloc_ptr = new (core_heap_alloc_mem) MallocAlloc();
+    glob::logger_ptr = new (logger_mem) Logger();
 
     core_ctx.tag = "core";
+
     core_ctx.alloc = glob::core_heap_alloc_ptr;
     core_ctx.alloc_tracer = glob::core_alloc_tracer_ptr;
+    core_ctx.logger = glob::logger_ptr;
+
     core_ctx.oom_handler = nullptr;
     core_ctx.oom_retries = 2;
 
@@ -47,6 +54,9 @@ void shutdown_core_ctx() noexcept {
 
     glob::core_alloc_tracer_ptr->~AllocTracer();
     glob::core_alloc_tracer_ptr = nullptr;
+
+    glob::logger_ptr->~Logger();
+    glob::logger_ptr = nullptr;
 
     glob::core_ctx_ptr = nullptr;
     glob::ambient_ctx_ptr = nullptr;

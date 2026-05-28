@@ -6,8 +6,7 @@ S32 main()
 {
     fr::init_core_ctx();
 
-    Logger logger;
-    logger.log("Hello world!");
+    fr::get_ambient_ctx().logger->log("Hello world!");
 
     fr::shutdown_core_ctx();
     return 0;
