@@ -7,15 +7,17 @@
 
 #pragma once
 
+#include <concepts>
 #include <utility>
 
 #include "fr/core/alloc.hpp"
 #include "fr/core/array.hpp"
+#include "fr/core/bitset.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/inline_function.hpp"
 #include "fr/data/cmd.hpp"
+#include "fr/data/part.hpp"
 #include "fr/data/registry.hpp"
-#include "fr/data/script.hpp"
 #include "fr/data/thing.hpp"
 
 namespace fr {
@@ -23,11 +25,38 @@ namespace fr {
 // ==================================================================== Typedefs
 class World;
 class Scope;
+class Script;
 using System = Fn128<void(Scope &)>;
 using StageStorageType = U8;
 
-enum class Stage : StageStorageType { PreUpdate, Update, PostUpdate };
-constexpr U8 STAGE_COUNT = 3;
+enum class Stage : StageStorageType {
+    PreUpdate,
+    PreUpdateScript,
+    Update,
+    UpdateScript,
+    PostUpdate,
+    PostUpdateScript
+};
+
+constexpr U8 STAGE_COUNT = 6;
+
+template <typename T>
+concept IsScript = std::derived_from<T, Script>;
+
+template <typename T>
+concept ScriptHasOnPreUpdate = requires(T script) {
+    { script.on_pre_update() } -> std::same_as<void>;
+};
+
+template <typename T>
+concept ScriptHasOnUpdate = requires(T script) {
+    { script.on_update() } -> std::same_as<void>;
+};
+
+template <typename T>
+concept ScriptHasOnPostUpdate = requires(T script) {
+    { script.on_post_update() } -> std::same_as<void>;
+};
 
 // ================================================================== SystemPool
 namespace impl {
@@ -102,7 +131,8 @@ public:
         : m_options(opt),
           m_registry(opt.registry_alloc),
           m_cmd_pool(opt.registry_alloc),
-          m_system_pool(opt.system_pool_alloc) {
+          m_system_pool(opt.system_pool_alloc),
+          m_script_registry(Bitset<MAX_PARTS>::with_zeros()) {
     }
 
     World(const World &) = delete;
@@ -348,14 +378,18 @@ public:
      */
     void run_all_sync() noexcept;
 
-    // --------------------------------------------------------------- Internals
+    // ----------------------------------------------------------------- Scripts
+
+    template <IsScript S>
+    void insert_script(Thing thing, S script) noexcept;
 
 private:
+    // --------------------------------------------------------------- Internals
     Options m_options{};
     impl::Registry m_registry{};
     impl::CmdPool m_cmd_pool{};
     impl::SystemPool m_system_pool{};
-    impl::ScriptPool m_script_pool{};
+    Bitset<MAX_PARTS> m_script_registry{};
 };
 
 // ======================================================================= Scope
@@ -369,14 +403,17 @@ class Scope {
 public:
     // -------------------------------------------------- Typedefs & Contructors
 
-    explicit Scope(World &world) noexcept
+    Scope() noexcept
+        : m_world(nullptr) {
+    }
+    Scope(World *world) noexcept
         : m_world(world) {
     }
 
-    Scope(const Scope &) = delete;
-    Scope(Scope &&) = delete;
-    Scope &operator=(const Scope &) = delete;
-    Scope &operator=(Scope &&) = delete;
+    Scope(const Scope &) noexcept = default;
+    Scope(Scope &&) noexcept = default;
+    Scope &operator=(const Scope &) noexcept = default;
+    Scope &operator=(Scope &&) noexcept = default;
 
     // -------------------------------------------------------- Thing Operations
 
@@ -384,7 +421,7 @@ public:
      * @brief Returns a fresh, non-nil thing.
      */
     Thing handout() noexcept {
-        return m_world.handout();
+        return m_world->handout();
     }
 
     /**
@@ -393,7 +430,7 @@ public:
      * @note If a thing is dead, the pool does nothing but the signature is reset.
      */
     void kill(Thing thing) noexcept {
-        m_world.kill(thing);
+        m_world->kill(thing);
     }
 
     /**
@@ -401,7 +438,7 @@ public:
      * @note The nil thing is alive and immortal.
      */
     bool is_alive(Thing thing) const noexcept {
-        return m_world.is_alive(thing);
+        return m_world->is_alive(thing);
     }
 
     /**
@@ -409,7 +446,7 @@ public:
      * @note The nil thing is alive and immortal.
      */
     bool is_dead(Thing thing) const noexcept {
-        return m_world.is_dead(thing);
+        return m_world->is_dead(thing);
     }
 
     // --------------------------------------------------------- Part Operations
@@ -421,7 +458,7 @@ public:
      */
     template <typename T>
     bool has(Thing thing) const noexcept {
-        return m_world.has<T>(thing);
+        return m_world->has<T>(thing);
     }
 
     /**
@@ -432,7 +469,7 @@ public:
      */
     template <typename T, typename... Args>
     T *try_emplace_now(Thing thing, Args &&...args) noexcept {
-        return m_world.try_emplace_now<T>(thing, std::forward<Args>(args)...);
+        return m_world->try_emplace_now<T>(thing, std::forward<Args>(args)...);
     }
 
     /**
@@ -441,7 +478,7 @@ public:
      */
     template <typename T>
     T *try_insert_now(Thing thing, const T &part) noexcept {
-        return m_world.try_insert_now<T>(thing, part);
+        return m_world->try_insert_now<T>(thing, part);
     }
 
     /**
@@ -450,7 +487,7 @@ public:
      */
     template <typename T>
     T *try_insert_now(Thing thing, T &&part) noexcept {
-        return m_world.try_insert_now<T>(thing, std::forward<T>(part));
+        return m_world->try_insert_now<T>(thing, std::forward<T>(part));
     }
 
     /**
@@ -461,7 +498,7 @@ public:
      */
     template <typename T, typename... Args>
     T &emplace_now(Thing thing, Args &&...args) noexcept {
-        return m_world.emplace_now<T>(thing, std::forward<Args>(args)...);
+        return m_world->emplace_now<T>(thing, std::forward<Args>(args)...);
     }
 
     /**
@@ -470,7 +507,7 @@ public:
      */
     template <typename T>
     T &insert_now(Thing thing, const T &part) noexcept {
-        return m_world.insert_now<T>(thing, part);
+        return m_world->insert_now<T>(thing, part);
     }
 
     /**
@@ -479,7 +516,7 @@ public:
      */
     template <typename T>
     T &insert_now(Thing thing, T &&part) noexcept {
-        return m_world.insert_now<T>(thing, std::forward<T>(part));
+        return m_world->insert_now<T>(thing, std::forward<T>(part));
     }
 
     /**
@@ -488,7 +525,7 @@ public:
      */
     template <typename T>
     bool try_destroy_now(Thing thing) noexcept {
-        return m_world.try_destroy_now<T>(thing);
+        return m_world->try_destroy_now<T>(thing);
     }
 
     /**
@@ -498,7 +535,7 @@ public:
      */
     template <typename T>
     bool destroy_now(Thing thing) noexcept {
-        return m_world.destroy_now<T>(thing);
+        return m_world->destroy_now<T>(thing);
     }
 
     // ------------------------------------------------- Command Part Operations
@@ -507,7 +544,7 @@ public:
      * @brief Apply all recorded insert commands across all part pools.
      */
     void commit_insert_part_cmds() noexcept {
-        m_world.commit_insert_part_cmds();
+        m_world->commit_insert_part_cmds();
     }
 
     /**
@@ -516,14 +553,14 @@ public:
 within a specific time period. Please try again ided mutate commands across all part pools.
      */
     void commit_mutate_part_cmds() noexcept {
-        m_world.commit_mutate_part_cmds();
+        m_world->commit_mutate_part_cmds();
     }
 
     /**
      * @brief Apply all recorded destroy commands across all part pools.
      */
     void commit_destroy_part_cmds() noexcept {
-        m_world.commit_destroy_part_cmds();
+        m_world->commit_destroy_part_cmds();
     }
 
     /**
@@ -534,7 +571,7 @@ within a specific time period. Please try again ided mutate commands across all 
      * 3. insert commands
      */
     void commit_part_cmds() noexcept {
-        m_world.commit_part_cmds();
+        m_world->commit_part_cmds();
     }
 
     /**
@@ -544,7 +581,7 @@ within a specific time period. Please try again ided mutate commands across all 
      */
     template <typename T>
     void insert(Thing thing, const T &part) noexcept {
-        m_world.insert(thing, part);
+        m_world->insert(thing, part);
     }
 
     /**
@@ -554,7 +591,7 @@ within a specific time period. Please try again ided mutate commands across all 
      */
     template <typename T>
     void insert(Thing thing, T &&part) noexcept {
-        m_world.insert(thing, std::move(part));
+        m_world->insert(thing, std::move(part));
     }
 
     /**
@@ -564,7 +601,7 @@ within a specific time period. Please try again ided mutate commands across all 
      */
     template <typename T>
     void destroy(Thing thing) noexcept {
-        m_world.destroy<T>(thing);
+        m_world->destroy<T>(thing);
     }
 
     // ------------------------------------------------------------------- Query
@@ -577,7 +614,7 @@ within a specific time period. Please try again ided mutate commands across all 
      */
     template <typename T>
     T *try_get(Thing thing) noexcept {
-        return m_world.try_get<T>(thing);
+        return m_world->try_get<T>(thing);
     }
 
     /**
@@ -586,7 +623,7 @@ within a specific time period. Please try again ided mutate commands across all 
      */
     template <typename T>
     T &get(Thing thing) noexcept {
-        return m_world.get<T>(thing);
+        return m_world->get<T>(thing);
     }
 
     /**
@@ -594,22 +631,129 @@ within a specific time period. Please try again ided mutate commands across all 
      */
     template <typename... Include>
     auto query() noexcept {
-        return m_world.query<Include...>();
+        return m_world->query<Include...>();
     }
 
 private:
-    World &m_world;
+    World *m_world{nullptr};
 };
 
 // ================================================= System Operations for World
 
 inline void World::run_stage_sync(Stage stage) noexcept {
-    Scope scope{*this};
+    Scope scope{this};
     m_system_pool.run_stage_sync(stage, scope);
 }
 
 inline void World::run_all_sync() noexcept {
-    Scope scope{*this};
+    Scope scope{this};
     m_system_pool.run_all_sync(scope);
 }
+
+// ====================================================================== Script
+
+class Script {
+public:
+    // ----------------------------------------------- Constructors & Destructor
+    Script() noexcept = default;
+    Script(const Script &) noexcept = default;
+    Script(Script &&) noexcept = default;
+    Script &operator=(const Script &) noexcept = default;
+    Script &operator=(Script &&) noexcept = default;
+    virtual ~Script() noexcept = default;
+
+    // --------------------------------------------------------------------- API
+
+    void set_self(Thing thing) noexcept {
+        m_self = thing;
+    }
+
+    void set_scope(Scope scope) noexcept {
+        m_scope = scope;
+    }
+
+    [[nodiscard]] Thing self() const noexcept {
+        return m_self;
+    }
+
+    [[nodiscard]] Scope &scope() noexcept {
+        return m_scope;
+    }
+
+    /**
+     * @brief Checks if self has part `T`.
+     * @note Returns false if the pool is missing
+     */
+    template <typename T>
+    bool has() const noexcept {
+        return m_scope.has<T>(m_self);
+    }
+
+    /**
+     * @brief Returns a reference to the part `T` attached to self.
+     * @warning Asserts if self does not have a part `T`.
+     */
+    template <typename T>
+    T &get() noexcept {
+        return m_scope.get<T>(m_self);
+    }
+
+    template <typename T>
+    void insert(const T &part) noexcept {
+        m_scope.insert(m_self, part);
+    }
+
+    template <typename T>
+    void insert(T &&part) noexcept {
+        m_scope.insert(m_self, std::move(part));
+    }
+
+    template <typename T>
+    void destroy() noexcept {
+        m_scope.destroy<T>(m_self);
+    }
+
+private:
+    // -------------------------------------------------------- Member Variables
+    Scope m_scope{};
+    Thing m_self{Thing::nil()};
+};
+
+template <IsScript S>
+void World::insert_script(Thing thing, S script) noexcept {
+    TypeIdx tidx = TypeIdx::from_type<S>();
+    script.set_self(thing);
+    script.set_scope(this);
+
+    if (!m_script_registry.check_bit(tidx.idx())) {
+        if constexpr (ScriptHasOnPostUpdate<S>) {
+            schedule_sync(Stage::PreUpdateScript, [](Scope &scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_pre_update();
+                }
+            });
+        }
+
+        if constexpr (ScriptHasOnUpdate<S>) {
+            schedule_sync(Stage::UpdateScript, [](Scope &scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_update();
+                }
+            });
+        }
+
+        if constexpr (ScriptHasOnPostUpdate<S>) {
+            schedule_sync(Stage::PostUpdateScript, [](Scope &scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_post_update();
+                }
+            });
+        }
+
+        m_script_registry.one_bit(tidx.idx());
+    }
+
+    insert(thing, script);
+}
+
 } // namespace fr
