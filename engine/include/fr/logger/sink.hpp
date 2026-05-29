@@ -1,12 +1,14 @@
 #pragma once
 
-#include "fr/core/string_view.hpp"
-
 namespace fr {
+
+struct Log;
+
 class Sink {
 public:
-    virtual ~Sink() noexcept = default;
-    virtual void write(StringView msg) noexcept = 0;
+    virtual ~Sink() = default;
+    virtual void write(const Log& log_entry) noexcept = 0;
     virtual void flush() noexcept = 0;
 };
+
 } // namespace fr

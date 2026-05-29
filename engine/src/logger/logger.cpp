@@ -2,9 +2,11 @@
 #include "fr/core/queue.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
+#include "fr/core/time.hpp"
 #include "fr/core/unique_ptr.hpp"
 
 namespace fr {
+
 Logger::Logger() {
     worker = std::thread(&Logger::process_logs, this);
 }
@@ -25,24 +27,21 @@ void Logger::add_sink(UniquePtr<Sink> sink) {
     sinks.push_back(std::move(sink));
 }
 
-void Logger::log(StringView msg) {
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        queue.enqueue(String(msg));
-    }
-    cv.notify_one();
+void Logger::log(LogLevel level, StringView msg) {
+    enqueue(level, String(msg));
 }
 
-void Logger::enqueue(String msg) {
+void Logger::enqueue(LogLevel level, String msg) {
+    Log log_entry{level, time::get_system_now_ms(), std::move(msg)};
     {
         std::lock_guard<std::mutex> lock(mtx);
-        queue.enqueue(std::move(msg));
+        queue.enqueue(std::move(log_entry));
     }
     cv.notify_one();
 }
 
 void Logger::process_logs() {
-    Queue<String> local_queue;
+    Queue<Log> local_queue;
 
     while (true) {
         {
@@ -61,12 +60,12 @@ void Logger::process_logs() {
         }
 
         while (!local_queue.is_empty()) {
-            String msg = std::move(local_queue.front());
+            Log log_entry = std::move(local_queue.front());
             local_queue.dequeue();
 
             std::lock_guard<std::mutex> sink_lock(sinks_mtx);
             for (auto &sink : sinks) {
-                sink->write(msg);
+                sink->write(log_entry);
             }
         }
     }

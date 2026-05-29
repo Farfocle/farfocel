@@ -1,6 +1,5 @@
 #pragma once
 
-#include "fr/core/string_view.hpp"
 #include "fr/logger/sink.hpp"
 
 namespace fr {
@@ -10,7 +9,7 @@ public:
     StandardSink() noexcept = default;
     ~StandardSink() noexcept override = default;
 
-    void write(StringView msg) noexcept override;
+    void write(const Log &log_entry) noexcept override;
     void flush() noexcept override;
 };
 

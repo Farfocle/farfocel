@@ -72,6 +72,7 @@ set(ENGINE_HEADERS
 ### logger
     "include/fr/logger/logger.hpp"
     "include/fr/logger/sink.hpp"
+    "include/fr/logger/log.hpp"
     "include/fr/logger/sinks/standard_sink.hpp"
 )
 

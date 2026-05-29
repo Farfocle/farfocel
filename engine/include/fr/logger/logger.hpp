@@ -1,19 +1,20 @@
 #pragma once
 
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include "fr/core/format.hpp"
 #include "fr/core/queue.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/unique_ptr.hpp"
+#include "fr/logger/log.hpp"
 #include "fr/logger/sink.hpp"
-#include <condition_variable>
-#include <mutex>
-#include <thread>
 
 namespace fr {
 class Logger {
 private:
-    Queue<String> queue;
+    Queue<Log> queue;
     std::mutex mtx;
     std::condition_variable cv;
     std::thread worker;
@@ -21,8 +22,9 @@ private:
 
     DynamicArray<UniquePtr<Sink>> sinks;
     std::mutex sinks_mtx;
+
     void process_logs();
-    void enqueue(String msg);
+    void enqueue(LogLevel level, String msg);
 
 public:
     Logger();
@@ -31,15 +33,15 @@ public:
     void add_sink(UniquePtr<Sink> sink);
 
     template <typename T>
-    void log(T && arg) {
-        enqueue(format("{}", std::forward<T>(arg)));
+    void log(LogLevel level, T && arg) {
+        enqueue(level, format("{}", std::forward<T>(arg)));
     }
 
     template <typename... Ts>
-    void log(StringView fmt, Ts &&...args) {
-        enqueue(format(fmt, std::forward<Ts>(args)...));
+    void log(LogLevel level, StringView fmt, Ts &&...args) {
+        enqueue(level, format(fmt, std::forward<Ts>(args)...));
     }
 
-    void log(StringView msg);
+    void log(LogLevel level, StringView msg);
 };
 } // namespace fr
