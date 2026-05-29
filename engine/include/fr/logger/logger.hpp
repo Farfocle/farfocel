@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fr/core/format.hpp"
 #include "fr/core/queue.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
@@ -21,11 +22,24 @@ private:
     DynamicArray<UniquePtr<Sink>> sinks;
     std::mutex sinks_mtx;
     void process_logs();
+    void enqueue(String msg);
 
 public:
     Logger();
     ~Logger();
-    void log(StringView msg);
+
     void add_sink(UniquePtr<Sink> sink);
+
+    template <typename T>
+    void log(T && arg) {
+        enqueue(format("{}", std::forward<T>(arg)));
+    }
+
+    template <typename... Ts>
+    void log(StringView fmt, Ts &&...args) {
+        enqueue(format(fmt, std::forward<Ts>(args)...));
+    }
+
+    void log(StringView msg);
 };
 } // namespace fr

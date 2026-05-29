@@ -33,6 +33,14 @@ void Logger::log(StringView msg) {
     cv.notify_one();
 }
 
+void Logger::enqueue(String msg) {
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        queue.enqueue(std::move(msg));
+    }
+    cv.notify_one();
+}
+
 void Logger::process_logs() {
     Queue<String> local_queue;
 
