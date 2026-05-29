@@ -8,6 +8,7 @@
 #pragma once
 
 #include <concepts>
+#include <iostream>
 #include <utility>
 
 #include "fr/core/alloc.hpp"
@@ -56,6 +57,11 @@ concept ScriptHasOnUpdate = requires(T script) {
 template <typename T>
 concept ScriptHasOnPostUpdate = requires(T script) {
     { script.on_post_update() } -> std::same_as<void>;
+};
+
+template <typename T>
+concept ScriptHasOnInit = requires(T script) {
+    { script.on_init() } -> std::same_as<void>;
 };
 
 // ================================================================== SystemPool
@@ -725,6 +731,10 @@ void World::insert_script(Thing thing, S script) noexcept {
     script.set_self(thing);
     script.set_scope(this);
 
+    if constexpr (ScriptHasOnInit<S>) {
+        script.on_init();
+    }
+
     if (!m_script_registry.check_bit(tidx.idx())) {
         if constexpr (ScriptHasOnPostUpdate<S>) {
             schedule_sync(Stage::PreUpdateScript, [](Scope &scope) {
@@ -753,7 +763,7 @@ void World::insert_script(Thing thing, S script) noexcept {
         m_script_registry.one_bit(tidx.idx());
     }
 
-    insert(thing, script);
+    insert<S>(thing, script);
 }
 
 } // namespace fr

@@ -2,6 +2,7 @@ set(BENCH_SOURCES
     "console_game_loop.cpp"
     "registry.cpp"
     "registry_commands.cpp"
+    "scripts.cpp"
     "world.cpp"
 )
 

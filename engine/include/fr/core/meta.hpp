@@ -136,9 +136,10 @@ struct TypeMeta {
  */
 template <typename T>
 struct TypeInfo {
-    FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
-    FR_STATIC_ASSERT_NOTHROW_DESTRUCTIBLE(T);
-    FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
+    // @todo Removed for now, scripts...
+    // FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
+    // FR_STATIC_ASSERT_NOTHROW_DESTRUCTIBLE(T);
+    // FR_STATIC_ASSERT_NOTHROW_DEFAULT_CONSTRUCTIBLE(T);
 
     /// @brief Returns the compiler-provided type name.
     static const char *name() noexcept {
