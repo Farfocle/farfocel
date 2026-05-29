@@ -51,12 +51,12 @@ struct Minion {
     })
 };
 
-void player_update(fr::Scope &world) {
-    for (auto [thing, player, health, transform] : world.query<Player, Health, Transform>()) {
-        fr::Thing minion = world.handout();
-        world.insert(minion, Transform{});
-        world.insert(minion, Health{.max_health = 10, .health = 10});
-        world.insert(minion, Minion{.name = "Karol Szypula", .level = 1});
+void player_update(fr::Scope &scope) {
+    for (auto [thing, player, health, transform] : scope.query<Player, Health, Transform>()) {
+        fr::Thing minion = scope.handout();
+        scope.insert(minion, Transform{});
+        scope.insert(minion, Health{.max_health = 10, .health = 10});
+        scope.insert(minion, Minion{.name = "Karol Szypula", .level = 1});
 
         player.minions.push_back(minion);
 
@@ -66,29 +66,29 @@ void player_update(fr::Scope &world) {
     }
 }
 
-void minion_update(fr::Scope &world) {
-    for (auto [thing, minion, health] : world.query<Minion, Health>()) {
+void minion_update(fr::Scope &scope) {
+    for (auto [thing, minion, health] : scope.query<Minion, Health>()) {
         health.health -= 3;
     }
 }
 
-void clear_dead(fr::Scope &world) {
-    for (auto [thing, health] : world.query<Health>()) {
+void clear_dead(fr::Scope &scope) {
+    for (auto [thing, health] : scope.query<Health>()) {
         if (health.health <= 0) {
-            world.kill(thing);
+            scope.kill(thing);
         }
     }
 }
 
-void print_player(fr::Scope &world) {
-    for (auto [thing, transform, health, player] : world.query<Transform, Health, Player>()) {
+void print_player(fr::Scope &scope) {
+    for (auto [thing, transform, health, player] : scope.query<Transform, Health, Player>()) {
         std::cout << fr::format("[PLAYER]\nthing: {}\nplayer: {}\ntransform: {}\nhealth: {}\n",
                                 thing, player, transform, health);
     }
 }
 
-void print_minions(fr::Scope &world) {
-    for (auto [thing, transform, health, minion] : world.query<Transform, Health, Minion>()) {
+void print_minions(fr::Scope &scope) {
+    for (auto [thing, transform, health, minion] : scope.query<Transform, Health, Minion>()) {
         std::cout << fr::format("[MINION]\nthing: {}\nminion: {}\ntransform: {}\nhealth: {}\n",
                                 thing, minion, transform, health);
     }

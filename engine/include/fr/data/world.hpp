@@ -15,6 +15,7 @@
 #include "fr/core/inline_function.hpp"
 #include "fr/data/cmd.hpp"
 #include "fr/data/registry.hpp"
+#include "fr/data/script.hpp"
 #include "fr/data/thing.hpp"
 
 namespace fr {
@@ -23,7 +24,9 @@ namespace fr {
 class World;
 class Scope;
 using System = Fn128<void(Scope &)>;
-enum class Stage : U8 { PreUpdate, Update, PostUpdate };
+using StageStorageType = U8;
+
+enum class Stage : StageStorageType { PreUpdate, Update, PostUpdate };
 constexpr U8 STAGE_COUNT = 3;
 
 // ================================================================== SystemPool
@@ -352,6 +355,7 @@ private:
     impl::Registry m_registry{};
     impl::CmdPool m_cmd_pool{};
     impl::SystemPool m_system_pool{};
+    impl::ScriptPool m_script_pool{};
 };
 
 // ======================================================================= Scope
