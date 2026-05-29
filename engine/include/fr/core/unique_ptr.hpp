@@ -85,6 +85,14 @@ public:
           m_alloc(other.m_alloc) {
     }
 
+    /// @brief Converting move constructor
+    template <typename U>
+        requires(!std::is_array_v<U> && std::is_convertible_v<U *, T *>)
+    UniquePtr(UniquePtr<U> &&other) noexcept
+        : m_ptr(other.leak()),
+          m_alloc(other.alloc()) {
+    }
+
     /// @brief Destroys the managed object and frees memory.
     ~UniquePtr() noexcept {
         clear();
@@ -98,6 +106,18 @@ public:
         if (this != &other) {
             UniquePtr temp(std::move(other));
             swap(temp);
+        }
+        return *this;
+    }
+
+    /// @brief Converting move assignment
+    template <typename U>
+        requires(!std::is_array_v<U> && std::is_convertible_v<U *, T *>)
+    UniquePtr &operator=(UniquePtr<U> &&other) noexcept {
+        if (reinterpret_cast<void *>(this) != reinterpret_cast<void *>(&other)) {
+            clear();
+            m_ptr = other.leak();
+            m_alloc = other.alloc(); // Changed from other.m_alloc
         }
         return *this;
     }
@@ -203,7 +223,7 @@ public:
      *
      * @return Pointer to allocator.
      */
-    const Alloc *alloc() const noexcept {
+    Alloc *alloc() const noexcept {
         return m_alloc;
     }
 
@@ -399,6 +419,7 @@ public:
      */
     void clear() noexcept {
         // maybe throw an exception here?
+        // - please don't
         if (m_ptr) {
             fr::mem::destroy_range(m_ptr, m_size);
             if (m_alloc) {

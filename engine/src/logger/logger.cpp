@@ -2,7 +2,7 @@
 #include "fr/core/queue.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
-#include <iostream>
+#include "fr/core/unique_ptr.hpp"
 
 namespace fr {
 Logger::Logger() {
@@ -18,6 +18,11 @@ Logger::~Logger() {
     if (worker.joinable()) {
         worker.join();
     }
+}
+
+void Logger::add_sink(UniquePtr<Sink> sink) {
+    std::lock_guard<std::mutex> lock(sinks_mtx);
+    sinks.push_back(std::move(sink));
 }
 
 void Logger::log(StringView msg) {
@@ -37,7 +42,10 @@ void Logger::process_logs() {
             cv.wait(lock, [this]() { return !queue.is_empty() || should_close; });
 
             if (queue.is_empty() && should_close) {
-                std::cout.flush();
+                std::lock_guard<std::mutex> sink_lock(sinks_mtx);
+                for (auto &sink : sinks) {
+                    sink->flush();
+                }
                 return;
             }
 
@@ -47,8 +55,13 @@ void Logger::process_logs() {
         while (!local_queue.is_empty()) {
             String msg = std::move(local_queue.front());
             local_queue.dequeue();
-            std::cout << msg << '\n';
+
+            std::lock_guard<std::mutex> sink_lock(sinks_mtx);
+            for (auto &sink : sinks) {
+                sink->write(msg);
+            }
         }
     }
 }
+
 } // namespace fr
