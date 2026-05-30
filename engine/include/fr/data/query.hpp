@@ -109,7 +109,7 @@ public:
     }
 
     Iter begin() noexcept {
-        if (m_registry->do_check_part_pool(m_iter_tidx)) {
+        if (m_registry->do_pool_absent(m_iter_tidx)) {
             return Iter(m_registry, m_include, m_exclude, Slice<const Thing>{}, 0);
         }
 
@@ -118,7 +118,7 @@ public:
     }
 
     Iter end() noexcept {
-        if (m_registry->do_check_part_pool(m_iter_tidx)) {
+        if (m_registry->do_pool_absent(m_iter_tidx)) {
             return Iter(m_registry, m_include, m_exclude, Slice<const Thing>{}, 0);
         }
 

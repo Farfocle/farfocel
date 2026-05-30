@@ -1,7 +1,19 @@
 /**
  * @file part_pool.hpp
  * @author Kiju
- * @brief PartPool is a data structure responsible for storing and managing parts.
+ * @brief PartPool stores parts in a densely-packed array, indexed by thing.
+ *
+ * @details Layout uses three parallel arrays:
+ *   - `m_parts`         : dense storage of T values; index 0 is a permanent stub for nil things.
+ *   - `m_thing_to_part` : sparse map from thing index → part index in `m_parts`.
+ *   - `m_part_to_thing` : dense map from part index → owning thing (mirrors `m_parts`).
+ *
+ * Slot 0 in all three arrays is permanently reserved as the stub / nil-thing entry.
+ * A `m_thing_to_part[idx] == 0` means the thing at `idx` does not own this part.
+ *
+ * @par Unchecked vs. checked methods
+ *   - `*_unchecked` : caller guarantees all preconditions; no bounds checking beyond debug asserts.
+ *   - `*_checked`   : verifies bounds and part presence; returns nullptr / false on failure.
  */
 
 #pragma once
@@ -19,12 +31,8 @@
 namespace fr::impl {
 
 /**
- * @brief PartPool is a data structure responsible for storing and managing parts.
- * @tparam T The type of part to store.
- * @pre T must be default constructible (stub).
- *
- * @details Implementation: `PartPool` consists of three dynamic arrays: `m_parts`,
- * `m_thing_to_part`, and `m_part_to_thing`.
+ * @brief Dense sparse-set storage for a single part type T.
+ * @tparam T Part type. Must be default-constructible (for the stub).
  */
 template <typename T>
     requires std::is_default_constructible_v<T>
@@ -33,31 +41,15 @@ public:
     // ----------------------------------------------- Constructors & Destructor
 
     /**
-     * @brief Constructs a `PartPool` with the ambient allocator.
+     * @brief Constructs with the ambient allocator.
      */
-    PartPool() noexcept
-        : PartPool(get_ambient_ctx().alloc) {
-    }
+    PartPool() noexcept;
 
     /**
-     * @brief Constructs a `PartPool` with the specified allocator.
-     * @param alloc The allocator to use for memory operations.
-     * @pre `alloc` must be non-null.
+     * @brief Constructs with the specified allocator.
+     * @pre alloc must be non-null.
      */
-    explicit PartPool(Alloc *alloc) noexcept {
-        m_alloc = alloc;
-        m_parts = DynamicArray<T>::with_alloc(alloc);
-        m_thing_to_part = DynamicArray<USize>::with_alloc(alloc);
-        m_part_to_thing = DynamicArray<Thing>::with_alloc(alloc);
-
-        m_parts.push_back(T());
-
-        // Push the stub mapping to nil thing.
-        m_thing_to_part.push_back(0);
-
-        // Push the stub mapping from nil thing to the stub.
-        m_part_to_thing.push_back(Thing::nil());
-    }
+    explicit PartPool(Alloc *alloc) noexcept;
 
     PartPool(const PartPool &) = delete;
     PartPool(PartPool &&) = delete;
@@ -66,194 +58,310 @@ public:
 
     ~PartPool() noexcept = default;
 
-    // --------------------------------------------------------- Part Operations
+    // ----------------------------------------------------------------- Sizing
 
     /**
-     * @brief Reserves space for parts array and part -> thing lookup array.
-     * @param size The number of parts to reserve.
+     * @brief Reserves capacity in the parts and part→thing arrays.
      */
-    void reserve_parts(USize size) noexcept {
-        FR_ASSERT(size <= MAX_THINGS, "size exceeds ThingIdx limit");
-        m_parts.reserve(size);
-        m_part_to_thing.reserve(size);
-    }
+    void reserve_parts(USize size) noexcept;
 
     /**
-     * @brief Reserves space for part -> thing lookup array.
-     * @param size The number of indices to reserve.
+     * @brief Reserves capacity in the thing→part lookup array.
      */
-    void reserve_lookup(USize size) noexcept {
-        FR_ASSERT(size <= MAX_THINGS, "size exceeds ThingIdx limit");
-        m_thing_to_part.reserve(size);
-    }
+    void reserve_lookup(USize size) noexcept;
 
     /**
-     * @brief Get the number of parts in the pool including the stub.
+     * @brief Returns the total number of stored parts including the stub.
      */
-    USize part_count() const noexcept {
-        return m_parts.size();
-    }
+    USize part_count() const noexcept;
 
-    // ------------------------------------------------------ Internal Accessors
+    // --------------------------------------------------------- Internal Slices
 
     /**
-     * @brief Returns a slice of parts including the stub.
+     * @brief Slice of all parts including the stub (index 0).
      */
-    Slice<const T> part_slice_with_stub() const noexcept {
-        return m_parts.slice();
-    }
+    Slice<const T> part_slice_with_stub() const noexcept;
 
     /**
-     * @brief Returns a slice of parts excluding the stub.
+     * @brief Slice of parts excluding the stub.
      */
-    Slice<const T> part_slice() const noexcept {
-        return m_parts.slice_from(1);
-    }
+    Slice<const T> part_slice() const noexcept;
 
     /**
-     * @brief Returns a slice mapping thing indices to part indices; includes the stub mapping.
+     * @brief Sparse slice mapping thing index → part index; includes stub entry.
      */
-    Slice<const USize> thing_to_part_slice_with_stub() const noexcept {
-        return m_thing_to_part.slice();
-    }
+    Slice<const USize> thing_to_part_slice_with_stub() const noexcept;
 
     /**
-     * @brief Returns a slice mapping thing indices to part indices; excludes the stub mapping.
+     * @brief Sparse slice mapping thing index → part index; excludes stub entry.
      */
-    Slice<const USize> thing_to_part_slice() const noexcept {
-        return m_thing_to_part.slice_from(1);
-    }
+    Slice<const USize> thing_to_part_slice() const noexcept;
 
     /**
-     * @brief Returns a slice mapping part indices to thing indices; includes the stub mapping.
+     * @brief Dense slice mapping part index → owning thing; includes stub entry.
      */
-    Slice<const Thing> part_to_thing_slice_with_stub() const noexcept {
-        return m_part_to_thing.slice();
-    }
+    Slice<const Thing> part_to_thing_slice_with_stub() const noexcept;
 
     /**
-     * @brief Returns a slice mapping part indices to thing indices; excludes the stub mapping.
+     * @brief Dense slice mapping part index → owning thing; excludes stub entry.
      */
-    Slice<const Thing> part_to_thing_slice() const noexcept {
-        return m_part_to_thing.slice_from(1);
-    }
+    Slice<const Thing> part_to_thing_slice() const noexcept;
 
     // ------------------------------------------------------------ Part Getters
 
     /**
-     * @brief Returns a reference to the stub.
+     * @brief Returns a reference to the stub (the nil-thing part).
      */
-    T &get_stub() noexcept {
-        return m_parts[0];
-    }
+    T &get_stub() noexcept;
+
+    /**
+     * @brief Returns a pointer to the part owned by the thing, or nullptr if not present.
+     * @note Checks index bounds and whether the thing actually owns the part.
+     */
+    T *get_checked(Thing thing) noexcept;
 
     /**
      * @brief Returns a pointer to the part owned by the thing.
-     * @param thing The thing to get the part of.
-     * @return A pointer to the part owned by the thing.
-     *
-     * @warning Caller must ensure the thing is alive and DOES own part T.
+     * @pre Caller must ensure thing index is in-bounds and the thing owns this part.
      */
-    T *get_unchecked(Thing thing) noexcept {
-        FR_ASSERT(thing.idx() < m_thing_to_part.size(), "index out of bounds");
-        return &m_parts[m_thing_to_part[thing.idx()]];
-    }
+    T *get_unchecked(Thing thing) noexcept;
 
-    // -------------------------------------------------------- Part Mutatations
+    // -------------------------------------------------------- Part Mutations
 
     /**
-     * @brief Emplace a part to a thing.
-     * @param thing The thing to emplace the part to.
-     * @param args The arguments to construct the part with.
-     * @return A reference to the emplaced part.
-     *
-     * @warning Caller must ensure the thing is alive and DOES NOT have part `T`.
+     * @brief Inserts a new part for a thing.
+     * @pre Caller must ensure the thing does NOT already own this part.
      */
     template <typename... Args>
-    T &emplace_unchecked(Thing thing, Args &&...args) noexcept {
-        ThingIdx idx = thing.idx();
-
-        if (m_thing_to_part.size() <= idx) [[unlikely]] {
-            m_thing_to_part.grow_default(idx + 1);
-        }
-
-        m_thing_to_part[idx] = m_parts.size();
-        m_parts.emplace_back(std::forward<Args>(args)...);
-        m_part_to_thing.emplace_back(thing);
-
-        return m_parts.back();
-    }
+    T &emplace_unchecked(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Insert a part to a thing.
-     * @param thing The thing to insert the part to.
-     * @param part The part to insert.
-     * @return A reference to the inserted part.
-     *
-     * @warning Caller must ensure the thing is alive and DOES NOT have part `T`.
+     * @brief Overwrites the existing part for a thing in-place.
+     * @pre Caller must ensure the thing DOES own this part.
      */
-    T &insert_unchecked(Thing thing, T &&part) noexcept {
-        return emplace_unchecked(thing, std::forward<T>(part));
-    }
+    template <typename... Args>
+    T &override_unchecked(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Insert a part to a thing.
-     * @param thing The thing to insert the part to.
-     * @param part The part to insert.
-     * @return A reference to the inserted part.
-     *
-     * @warning Caller must ensure the thing is alive and DOES NOT have part `T`.
+     * @brief Convenience insert by const reference.
+     * @pre Same as emplace_unchecked.
      */
-    T &insert_unchecked(Thing thing, const T &part) noexcept {
-        return emplace_unchecked(thing, part);
-    }
+    T &insert_unchecked(Thing thing, const T &part) noexcept;
 
     /**
-     * @brief Destroy a part owned by a thing.
-     * @note If thing is nil; does nothing.
-     *
-     * @warning Caller must ensure the thing is alive and DOES have part `T`.
+     * @brief Convenience insert by rvalue reference.
+     * @pre Same as emplace_unchecked.
      */
-    void destroy_unchecked(Thing thing) noexcept {
-        if (thing.is_nil()) [[unlikely]] {
-            return;
-        }
+    T &insert_unchecked(Thing thing, T &&part) noexcept;
 
-        USize idx = thing.idx();
+    /**
+     * @brief Destroys the part owned by the thing. Swaps with the last element.
+     * @pre Caller must ensure thing is not nil and DOES own this part.
+     */
+    void destroy_unchecked(Thing thing) noexcept;
 
-        FR_ASSERT(idx < m_thing_to_part.size(), "index out of bounds");
-        FR_ASSERT(m_parts.size() > 0, "remove on empty pool");
-
-        USize rem_part_idx = m_thing_to_part[idx];
-        USize rem_thing_idx = idx;
-
-        USize swap_part_idx = m_parts.size() - 1;
-        Thing swap_thing = m_part_to_thing[swap_part_idx];
-        USize swap_thing_idx = swap_thing.idx();
-
-        if (rem_part_idx != swap_part_idx) {
-            m_parts[rem_part_idx] = std::move(m_parts[swap_part_idx]);
-            m_thing_to_part[swap_thing_idx] = rem_part_idx;
-            m_part_to_thing[rem_part_idx] = swap_thing;
-        }
-
-        m_thing_to_part[rem_thing_idx] = 0;
-        m_part_to_thing.pop_back();
-        m_parts.pop_back();
-    }
+    /**
+     * @brief Destroys the part owned by the thing if present.
+     * @return true if destroyed, false if the thing did not own this part.
+     */
+    bool destroy_checked(Thing thing) noexcept;
 
 private:
     // -------------------------------------------------------- Member Variables
     Alloc *m_alloc{get_ambient_ctx().alloc};
 
+    /// Dense part storage; index 0 is the permanent stub.
     DynamicArray<T> m_parts{};
 
-    // A sparse index array for looking the part index by the original thing index.
+    /// Sparse map: thing.idx() → index in m_parts (0 = not owned / stub).
     DynamicArray<USize> m_thing_to_part{};
 
-    // A dense index array for looking the original thing index of the part.
+    /// Dense map: part index → owning thing (mirrors m_parts).
     DynamicArray<Thing> m_part_to_thing{};
 };
+
+// ============================================= PartPool Method Implementations
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline PartPool<T>::PartPool() noexcept
+    : PartPool(get_ambient_ctx().alloc) {
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline PartPool<T>::PartPool(Alloc *alloc) noexcept {
+    m_alloc = alloc;
+    m_parts = DynamicArray<T>::with_alloc(alloc);
+    m_thing_to_part = DynamicArray<USize>::with_alloc(alloc);
+    m_part_to_thing = DynamicArray<Thing>::with_alloc(alloc);
+
+    m_parts.push_back(T{});          // stub part at index 0
+    m_thing_to_part.push_back(0);    // nil thing maps to stub
+    m_part_to_thing.push_back(Thing::nil());
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline void PartPool<T>::reserve_parts(USize size) noexcept {
+    FR_ASSERT(size <= MAX_THINGS, "size exceeds ThingIdx limit");
+    m_parts.reserve(size);
+    m_part_to_thing.reserve(size);
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline void PartPool<T>::reserve_lookup(USize size) noexcept {
+    FR_ASSERT(size <= MAX_THINGS, "size exceeds ThingIdx limit");
+    m_thing_to_part.reserve(size);
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline USize PartPool<T>::part_count() const noexcept {
+    return m_parts.size();
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline Slice<const T> PartPool<T>::part_slice_with_stub() const noexcept {
+    return m_parts.slice();
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline Slice<const T> PartPool<T>::part_slice() const noexcept {
+    return m_parts.slice_from(1);
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline Slice<const USize> PartPool<T>::thing_to_part_slice_with_stub() const noexcept {
+    return m_thing_to_part.slice();
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline Slice<const USize> PartPool<T>::thing_to_part_slice() const noexcept {
+    return m_thing_to_part.slice_from(1);
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline Slice<const Thing> PartPool<T>::part_to_thing_slice_with_stub() const noexcept {
+    return m_part_to_thing.slice();
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline Slice<const Thing> PartPool<T>::part_to_thing_slice() const noexcept {
+    return m_part_to_thing.slice_from(1);
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline T &PartPool<T>::get_stub() noexcept {
+    return m_parts[0];
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline T *PartPool<T>::get_checked(Thing thing) noexcept {
+    ThingIdx idx = thing.idx();
+    if (idx >= m_thing_to_part.size()) {
+        return nullptr;
+    }
+    USize part_idx = m_thing_to_part[idx];
+    if (part_idx == 0) {
+        return nullptr;
+    }
+    return &m_parts[part_idx];
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline T *PartPool<T>::get_unchecked(Thing thing) noexcept {
+    FR_ASSERT(thing.idx() < m_thing_to_part.size(), "thing index out of bounds");
+    return &m_parts[m_thing_to_part[thing.idx()]];
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+template <typename... Args>
+inline T &PartPool<T>::emplace_unchecked(Thing thing, Args &&...args) noexcept {
+    ThingIdx idx = thing.idx();
+
+    if (m_thing_to_part.size() <= idx) [[unlikely]] {
+        m_thing_to_part.grow_default(idx + 1);
+    }
+
+    m_thing_to_part[idx] = m_parts.size();
+    m_parts.emplace_back(std::forward<Args>(args)...);
+    m_part_to_thing.emplace_back(thing);
+
+    return m_parts.back();
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+template <typename... Args>
+inline T &PartPool<T>::override_unchecked(Thing thing, Args &&...args) noexcept {
+    FR_ASSERT(thing.idx() < m_thing_to_part.size(), "thing index out of bounds");
+    FR_ASSERT(m_thing_to_part[thing.idx()] != 0, "thing does not own this part");
+
+    T &existing = m_parts[m_thing_to_part[thing.idx()]];
+    existing = T(std::forward<Args>(args)...);
+    return existing;
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline T &PartPool<T>::insert_unchecked(Thing thing, const T &part) noexcept {
+    return emplace_unchecked(thing, part);
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline T &PartPool<T>::insert_unchecked(Thing thing, T &&part) noexcept {
+    return emplace_unchecked(thing, std::move(part));
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline void PartPool<T>::destroy_unchecked(Thing thing) noexcept {
+    if (thing.is_nil()) [[unlikely]] {
+        return;
+    }
+
+    USize idx = thing.idx();
+
+    FR_ASSERT(idx < m_thing_to_part.size(), "thing index out of bounds");
+    FR_ASSERT(m_parts.size() > 0, "destroy on empty pool");
+
+    USize rem_part_idx = m_thing_to_part[idx];
+    USize swap_part_idx = m_parts.size() - 1;
+    Thing swap_thing = m_part_to_thing[swap_part_idx];
+
+    if (rem_part_idx != swap_part_idx) {
+        m_parts[rem_part_idx] = std::move(m_parts[swap_part_idx]);
+        m_thing_to_part[swap_thing.idx()] = rem_part_idx;
+        m_part_to_thing[rem_part_idx] = swap_thing;
+    }
+
+    m_thing_to_part[idx] = 0;
+    m_part_to_thing.pop_back();
+    m_parts.pop_back();
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline bool PartPool<T>::destroy_checked(Thing thing) noexcept {
+    if (!get_checked(thing)) {
+        return false;
+    }
+    destroy_unchecked(thing);
+    return true;
+}
 
 // ----------------------------------------------------------- Static Assertions
 
@@ -262,4 +370,5 @@ FR_STATIC_ASSERT(sizeof(PartPool<Byte>) == sizeof(PartPool<U64>),
 
 FR_STATIC_ASSERT(alignof(PartPool<Byte>) == alignof(PartPool<U64>),
                  "part pools must have the same alignment regardless of the element type");
+
 } // namespace fr::impl

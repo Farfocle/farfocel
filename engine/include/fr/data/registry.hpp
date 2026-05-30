@@ -2,7 +2,17 @@
  * @file registry.hpp
  * @author Kiju
  *
- * @brief Registry is a center of operations regarding things and parts in Farfocel.
+ * @brief Registry is the central store for things and parts in Farfocel.
+ *
+ * @par Responsibilities
+ *   - Manages thing lifetimes (handout / kill).
+ *   - Manages per-thing signatures (which parts a thing owns).
+ *   - Manages per-type PartPools and routes part operations to them.
+ *   - On kill, destroys all parts owned by the thing before invalidating it.
+ *
+ * @par Checked vs. Unchecked
+ *   - `*_checked`   : handles nil things, dead things, and missing pools/parts gracefully.
+ *   - `*_unchecked` : caller guarantees all preconditions; no defensive checks.
  */
 
 #pragma once
@@ -24,6 +34,7 @@ class Query;
 }
 
 namespace fr::impl {
+
 class Registry {
     template <typename... Include>
     friend class fr::Query;
@@ -31,14 +42,16 @@ class Registry {
 public:
     using AnyPartPool = InlineAny<sizeof(PartPool<Byte>), alignof(PartPool<Byte>)>;
 
-    // --------------------------------------------- Constructors and Destructor
-    Registry() noexcept
-        : m_alloc(get_ambient_ctx().alloc) {};
+    /**
+     * @brief Type-erased function that destroys one thing's part entry inside an AnyPartPool.
+     * Registered once per part type when its pool is first created.
+     */
+    using PartDestroyFn = void (*)(AnyPartPool &, Thing) noexcept;
 
-    explicit Registry(Alloc *alloc) noexcept
-        : m_alloc(alloc),
-          m_thing_pool(alloc),
-          m_signature_pool(alloc) {};
+    // --------------------------------------------- Constructors and Destructor
+
+    Registry() noexcept;
+    explicit Registry(Alloc *alloc) noexcept;
 
     Registry(const Registry &) = delete;
     Registry(Registry &&) = delete;
@@ -50,401 +63,390 @@ public:
     /**
      * @brief Returns the allocator used by this registry.
      */
-    const Alloc *alloc() const noexcept {
-        return m_alloc;
-    }
+    const Alloc *alloc() const noexcept;
 
     /**
-     * @brief Returns the thing pool used by this registry.
+     * @brief Returns the thing pool.
      */
-    const ThingPool &thing_pool() const noexcept {
-        return m_thing_pool;
-    }
+    const ThingPool &thing_pool() const noexcept;
 
     /**
-     * @brief Returns the signature pool used by this registry.
+     * @brief Returns the signature pool.
      */
-    const SignaturePool &signature_pool() const noexcept {
-        return m_signature_pool;
-    }
+    const SignaturePool &signature_pool() const noexcept;
 
     /**
-     * @brief Returns the part pool of type T used by this registry.
-     * @note Returns nullptr if the pool does not exist.
+     * @brief Returns a pointer to the PartPool for T, or nullptr if not yet created.
      */
     template <typename T>
-    const PartPool<T> *part_pool() const noexcept {
-        return do_part_pool<T>();
-    }
+    const PartPool<T> *part_pool() const noexcept;
+
+    /**
+     * @brief Returns true if a PartPool for T has been created.
+     */
+    template <typename T>
+    bool has_part_pool() const noexcept;
 
     // -------------------------------------------------------- Thing Operations
 
     /**
      * @brief Returns a fresh, non-nil thing.
      */
-    Thing handout() noexcept {
-        return m_thing_pool.handout();
-    }
+    Thing handout() noexcept;
 
     /**
-     * @brief Kills a thing, adding its slot into a free list.
-     * @note If a thing is nil, does nothing, nil thing is immortal.
-     * @note If a thing is dead, the pool does nothing but the signature is reset.
+     * @brief Kills a thing.
+     * Destroys all parts it owns, clears its signature, and recycles its slot.
+     * @note Does nothing for nil or already-dead things.
      */
-    void kill(Thing thing) noexcept {
-        m_thing_pool.kill(thing);
-        m_signature_pool.destroy_all(thing);
-    }
+    void kill(Thing thing) noexcept;
 
     /**
-     * @brief Checks if a thing is alive.
-     * @note The nil thing is alive and immortal.
+     * @brief Returns true if the thing is alive. Nil thing is always alive.
      */
-    bool is_alive(Thing thing) const noexcept {
-        if (thing.is_nil()) [[unlikely]] {
-            return true;
-        }
-
-        return m_thing_pool.check(thing);
-    }
+    bool is_alive(Thing thing) const noexcept;
 
     /**
-     * @brief Checks if a thing is dead.
-     * @note The nil thing is alive and immortal.
+     * @brief Returns true if the thing is dead. Nil thing is never dead.
      */
-    bool is_dead(Thing thing) const noexcept {
-        return !is_alive(thing);
-    }
+    bool is_dead(Thing thing) const noexcept;
 
     // --------------------------------------------------------- Part Operations
 
     /**
-     * @brief Checks if a part pool of type `T` exists.
-     * @return True if the pool exists, false otherwise.
+     * @brief Returns true if the thing owns part T.
+     * @note Returns false if pool is missing or thing is dead.
+     * @note Returns true for nil thing when the pool exists (nil → stub).
      */
     template <typename T>
-    bool check_part_pool() const noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        return !do_check_part_pool(tidx);
-    }
+    bool has(Thing thing) const noexcept;
 
     /**
-     * @brief Checks if a thing owns part `T`.
-     * @note Returns false if the pool is missing or the thing is dead.
-     * @note Returns true for nil thing if the pool exists.
-     */
-    template <typename T>
-    bool has(Thing thing) const noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            return false;
-        }
-
-        if (do_check_thing_nil(thing)) [[unlikely]] {
-            return true;
-        }
-
-        if (!do_check_thing_alive(thing)) [[unlikely]] {
-            return false;
-        }
-
-        return do_check_part(thing, tidx);
-    }
-
-    /**
-     * @brief Tries to emplace part `T` on a thing.
-     * @note Creates the part pool if missing.
-     * @note Returns the stub for nil thing.
-     * @note Returns nullptr if the thing is dead or already owns `T`.
+     * @brief Inserts or overrides part T on a thing.
+     * - Nil thing  : returns the stub pointer.
+     * - Dead thing : returns nullptr.
+     * - Alive, no T: inserts T, returns pointer to it.
+     * - Alive, has T: overrides T in-place, returns pointer to it.
      */
     template <typename T, typename... Args>
-    T *try_emplace(Thing thing, Args &&...args) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        PartPool<T> &pool = do_ensure_part_pool<T>(tidx);
-
-        if (do_check_thing_nil(thing)) [[unlikely]] {
-            return &pool.get_stub();
-        }
-
-        if (!do_check_thing_alive(thing)) [[unlikely]] {
-            return nullptr;
-        }
-
-        if (do_check_part(thing, tidx)) [[unlikely]] {
-            return nullptr;
-        }
-
-        m_signature_pool.insert(thing, tidx);
-        return &pool.emplace_unchecked(thing, std::forward<Args>(args)...);
-    }
+    T *emplace_checked(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Tries to insert part `T` on a thing by const reference.
-     * @note Same behavior as `try_emplace`.
-     */
-    template <typename T>
-    T *try_insert(Thing thing, const T &part) noexcept {
-        return try_emplace<T>(thing, part);
-    }
-
-    /**
-     * @brief Tries to insert part T on a thing by rvalue.
-     * @note Same behavior as try_emplace_part.
-     */
-    template <typename T>
-    T *try_insert(Thing thing, T &&part) noexcept {
-        return try_emplace<T>(thing, std::move(part));
-    }
-
-    /**
-     * @brief Emplaces part `T` on a thing.
-     * @note Creates the part pool if missing.
-     * @note Returns the stub for nil thing.
-     * @warning Asserts if the thing is dead or already owns `T`.
+     * @brief Inserts part T on a thing without any checks.
+     * @pre Caller must ensure: thing is alive (not nil, not dead), thing does NOT yet own T.
      */
     template <typename T, typename... Args>
-    T &emplace(Thing thing, Args &&...args) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        PartPool<T> &pool = do_ensure_part_pool<T>(tidx);
-
-        if (do_check_thing_nil(thing)) [[unlikely]] {
-            return pool.get_stub();
-        }
-
-        FR_ASSERT(do_check_thing_alive(thing), "cannot emplace part T on a dead thing");
-        FR_ASSERT(!do_check_part(thing, tidx),
-                  "cannot emplace part T if a thing already owns a part T");
-
-        m_signature_pool.insert(thing, tidx);
-        return pool.emplace_unchecked(thing, std::forward<Args>(args)...);
-    }
+    T &emplace_unchecked(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Inserts part `T` on a thing by const reference.
-     * @note Same behavior as `emplace_part`.
+     * @brief Destroys part T on a thing if present.
+     * @return false if thing is nil, dead, pool is missing, or thing does not own T.
      */
     template <typename T>
-    T &insert(Thing thing, const T &part) noexcept {
-        return emplace<T>(thing, part);
-    }
+    bool destroy_checked(Thing thing) noexcept;
 
     /**
-     * @brief Inserts part `T` on a thing by rvalue.
-     * @note Same behavior as emplace_part.
+     * @brief Destroys part T on a thing without any checks.
+     * @pre Caller must ensure: thing is alive, thing DOES own T, pool exists.
      */
     template <typename T>
-    T &insert(Thing thing, T &&part) noexcept {
-        return emplace<T>(thing, std::move(part));
-    }
+    void destroy_unchecked(Thing thing) noexcept;
 
     /**
-     * @brief Tries to destroy part `T` on a thing.
-     * @note Returns false if thing is nil, pool is missing, or the thing does not own `T`.
+     * @brief Returns a pointer to part T owned by the thing, or nullptr if not found.
+     * @note Returns stub pointer for nil thing when the pool exists.
      */
     template <typename T>
-    bool try_destroy(Thing thing) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-
-        if (do_check_thing_nil(thing)) [[unlikely]] {
-            return false;
-        }
-
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            return false;
-        }
-
-        if (!do_check_part(thing, tidx)) [[unlikely]] {
-            return false;
-        }
-
-        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
-        m_signature_pool.destroy(thing, tidx);
-        pool.destroy_unchecked(thing);
-
-        return true;
-    }
+    T *get_checked(Thing thing) noexcept;
 
     /**
-     * @brief Destroys part `T` on a thing.
-     * @note Returns false if thing is nil.
-     * @warning Asserts if the pool is missing or the thing does not have part `T`.
+     * @brief Returns a reference to part T owned by the thing.
+     * @pre Caller must ensure: thing is alive, thing owns T, pool exists.
      */
     template <typename T>
-    bool destroy(Thing thing) noexcept {
-        if (do_check_thing_nil(thing)) [[unlikely]] {
-            return false;
-        }
-
-        TypeIdx tidx = TypeIdx::from_type<T>();
-
-        FR_ASSERT(!do_check_part_pool(tidx),
-                  "cannot destroy part T; T is not registered as a part");
-        FR_ASSERT(do_check_part(thing, tidx),
-                  "cannot destroy part T if the thing does not own this part");
-
-        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
-        m_signature_pool.destroy(thing, tidx);
-        pool.destroy_unchecked(thing);
-
-        return true;
-    }
+    T &get_unchecked(Thing thing) noexcept;
 
     /**
-     * @brief Tries to get the part `T` owned by the thing.
-     * @note Returns nullptr if the pool is missing, the thing is dead, or the thing does not own
-     * `T`.
-     * @note Returns the stub pointer for nil thing if the pool exists.
-     */
-    template <typename T>
-    T *try_get(Thing thing) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            return nullptr;
-        }
-
-        PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
-        if (do_check_thing_nil(thing)) [[unlikely]] {
-            return &pool.get_stub();
-        }
-
-        if (!do_check_thing_alive(thing)) [[unlikely]] {
-            return nullptr;
-        }
-
-        if (!do_check_part(thing, tidx)) [[unlikely]] {
-            return nullptr;
-        }
-
-        return pool.get_unchecked(thing);
-    }
-
-    /**
-     * @brief Returns a reference to the part `T` owned by the thing.
-     * @warning Asserts if the thing is dead or does not have a part `T`.
-     */
-    template <typename T>
-    T &get(Thing thing) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        FR_ASSERT(do_check_thing_alive(thing), "thing has to be alive");
-        FR_ASSERT(!do_check_part_pool(tidx), "part pool missing");
-        FR_ASSERT(do_check_part(thing, tidx), "thing does not own part");
-
-        return *m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().get_unchecked(thing);
-    }
-
-    template <typename T>
-    T &get_unchecked(Thing thing) noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        return *m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().get_unchecked(thing);
-    }
-
-    /**
-     * @brief Creates a query for a set of parts.
+     * @brief Creates a query for things owning all parts in the Include list.
      */
     template <typename... Include>
-    auto query() noexcept {
-        Signature include;
-        (include.insert(TypeIdx::from_type<Include>()), ...);
-        return fr::Query<Include...>(this, include);
-    }
+    auto query() noexcept;
 
 private:
     // -------------------------------------------------------- Internal Helpers
 
     /**
-     * @brief Returns the signature of a thing by its index.
+     * @brief Returns true if no pool has been created for this type index (pool is absent).
      */
-    const Signature &do_signature_by_idx(ThingIdx idx) const noexcept {
-        return m_signature_pool.signatures()[idx];
-    }
+    bool do_pool_absent(TypeIdx tidx) const noexcept;
 
     /**
-     * @brief Returns the number of parts in a pool by TypeIdx.
+     * @brief Returns true if the thing's signature contains the given part type.
      */
-    USize do_part_count_by_tidx(TypeIdx tidx) const noexcept {
-        if (do_check_part_pool(tidx)) {
-            return 0;
-        }
-
-        // Layout of PartPool is same for all T.
-        return m_part_pools[tidx.idx()].cast_ref<PartPool<Byte>>().part_count();
-    }
+    bool do_check_part(Thing thing, TypeIdx tidx) const noexcept;
 
     /**
-     * @brief Returns the part -> thing mapping slice for a pool by TypeIdx.
+     * @brief Returns the pool for T, creating it if it does not yet exist.
      */
-    Slice<const Thing> do_part_to_thing_slice_by_tidx(TypeIdx tidx) const noexcept {
-        FR_ASSERT(!do_check_part_pool(tidx), "part pool missing");
-
-        // Layout of PartPool is same for all T.
-        return m_part_pools[tidx.idx()].cast_ref<PartPool<Byte>>().part_to_thing_slice_with_stub();
-    }
-
-    bool do_check_thing_nil(Thing thing) const noexcept {
-        return thing.is_nil();
-    }
-
-    bool do_check_thing_alive(Thing thing) const noexcept {
-        return m_thing_pool.check(thing);
-    }
-
-    bool do_check_part_pool(TypeIdx tidx) const noexcept {
-        return m_part_pools[tidx.idx()].is_nil();
-    }
-
     template <typename T>
-    const PartPool<T> *do_part_pool() const noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        FR_ASSERT(tidx.idx() < MAX_PARTS, "invalid part type index");
+    PartPool<T> &do_ensure_part_pool(TypeIdx tidx) noexcept;
 
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            return nullptr;
-        }
-
-        return &m_part_pools[tidx.idx()].cast_ref<const PartPool<T>>();
-    }
-
+    /**
+     * @brief Creates a new PartPool for T at the given type index slot.
+     * Also registers the type-erased destroy function used by kill().
+     */
     template <typename T>
-    PartPool<T> &do_ensure_part_pool() noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
-        FR_ASSERT(tidx.idx() < MAX_PARTS, "invalid part type index");
+    void do_create_part_pool(TypeIdx tidx) noexcept;
 
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            do_create_part_pool<T>(tidx);
-        }
+    /**
+     * @brief Destroys all parts owned by the thing by iterating its signature.
+     * Called by kill() before invalidating the thing.
+     */
+    void do_destroy_all_parts(Thing thing) noexcept;
 
-        return m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
-    }
-
+    /**
+     * @brief Type-erased destroy function stored in m_part_destroy_fns.
+     * Casts the pool to PartPool<T> and calls destroy_unchecked.
+     */
     template <typename T>
-    PartPool<T> &do_ensure_part_pool(TypeIdx tidx) noexcept {
-        FR_ASSERT(tidx.idx() < MAX_PARTS, "invalid part type index");
+    static void do_part_destroy_fn(AnyPartPool &pool, Thing thing) noexcept;
 
-        if (do_check_part_pool(tidx)) [[unlikely]] {
-            do_create_part_pool<T>(tidx);
-        }
-
-        return m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
-    }
-
-    bool do_check_part(Thing thing, TypeIdx tidx) const noexcept {
-        return m_signature_pool.owns(thing, tidx);
-    }
-
-    template <typename T>
-    void do_create_part_pool(TypeIdx tidx) noexcept {
-        m_part_pools[tidx.idx()].template emplace<PartPool<T>>(m_alloc);
-    }
+    // Used by Query.
+    USize do_part_count_by_tidx(TypeIdx tidx) const noexcept;
+    Slice<const Thing> do_part_to_thing_slice_by_tidx(TypeIdx tidx) const noexcept;
 
     // -------------------------------------------------------- Member Variables
-
     Alloc *m_alloc{nullptr};
     Array<AnyPartPool, MAX_PARTS> m_part_pools{};
+    Array<PartDestroyFn, MAX_PARTS> m_part_destroy_fns{};
     ThingPool m_thing_pool{};
     SignaturePool m_signature_pool{};
 };
 
+// ============================================= Registry Method Implementations
+
+inline Registry::Registry() noexcept
+    : Registry(get_ambient_ctx().alloc) {
+}
+
+inline Registry::Registry(Alloc *alloc) noexcept
+    : m_alloc(alloc),
+      m_thing_pool(alloc),
+      m_signature_pool(alloc) {
+}
+
+inline const Alloc *Registry::alloc() const noexcept {
+    return m_alloc;
+}
+
+inline const ThingPool &Registry::thing_pool() const noexcept {
+    return m_thing_pool;
+}
+
+inline const SignaturePool &Registry::signature_pool() const noexcept {
+    return m_signature_pool;
+}
+
+template <typename T>
+inline const PartPool<T> *Registry::part_pool() const noexcept {
+    TypeIdx tidx = TypeIdx::from_type<T>();
+    if (do_pool_absent(tidx)) {
+        return nullptr;
+    }
+    return &m_part_pools[tidx.idx()].cast_ref<const PartPool<T>>();
+}
+
+template <typename T>
+inline bool Registry::has_part_pool() const noexcept {
+    return !do_pool_absent(TypeIdx::from_type<T>());
+}
+
+inline Thing Registry::handout() noexcept {
+    return m_thing_pool.handout();
+}
+
+inline void Registry::kill(Thing thing) noexcept {
+    if (thing.is_nil()) [[unlikely]] {
+        return;
+    }
+    if (!m_thing_pool.check(thing)) [[unlikely]] {
+        return;
+    }
+
+    do_destroy_all_parts(thing);
+    m_signature_pool.destroy_all(thing);
+    m_thing_pool.kill_alive(thing);
+}
+
+inline bool Registry::is_alive(Thing thing) const noexcept {
+    if (thing.is_nil()) [[unlikely]] {
+        return true;
+    }
+    return m_thing_pool.check(thing);
+}
+
+inline bool Registry::is_dead(Thing thing) const noexcept {
+    return !is_alive(thing);
+}
+
+template <typename T>
+inline bool Registry::has(Thing thing) const noexcept {
+    TypeIdx tidx = TypeIdx::from_type<T>();
+    if (do_pool_absent(tidx)) [[unlikely]] {
+        return false;
+    }
+    if (thing.is_nil()) [[unlikely]] {
+        return true;
+    }
+    if (!m_thing_pool.check(thing)) [[unlikely]] {
+        return false;
+    }
+    return do_check_part(thing, tidx);
+}
+
+template <typename T, typename... Args>
+inline T *Registry::emplace_checked(Thing thing, Args &&...args) noexcept {
+    TypeIdx tidx = TypeIdx::from_type<T>();
+    PartPool<T> &pool = do_ensure_part_pool<T>(tidx);
+
+    if (thing.is_nil()) [[unlikely]] {
+        return &pool.get_stub();
+    }
+    if (!m_thing_pool.check(thing)) [[unlikely]] {
+        return nullptr;
+    }
+
+    if (do_check_part(thing, tidx)) {
+        return &pool.override_unchecked(thing, std::forward<Args>(args)...);
+    }
+
+    m_signature_pool.insert(thing, tidx);
+    return &pool.emplace_unchecked(thing, std::forward<Args>(args)...);
+}
+
+template <typename T, typename... Args>
+inline T &Registry::emplace_unchecked(Thing thing, Args &&...args) noexcept {
+    TypeIdx tidx = TypeIdx::from_type<T>();
+    PartPool<T> &pool = do_ensure_part_pool<T>(tidx);
+    m_signature_pool.insert(thing, tidx);
+    return pool.emplace_unchecked(thing, std::forward<Args>(args)...);
+}
+
+template <typename T>
+inline bool Registry::destroy_checked(Thing thing) noexcept {
+    if (thing.is_nil()) [[unlikely]] {
+        return false;
+    }
+    TypeIdx tidx = TypeIdx::from_type<T>();
+    if (do_pool_absent(tidx)) [[unlikely]] {
+        return false;
+    }
+    if (!m_thing_pool.check(thing)) [[unlikely]] {
+        return false;
+    }
+    if (!do_check_part(thing, tidx)) [[unlikely]] {
+        return false;
+    }
+
+    m_signature_pool.destroy(thing, tidx);
+    m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().destroy_unchecked(thing);
+    return true;
+}
+
+template <typename T>
+inline void Registry::destroy_unchecked(Thing thing) noexcept {
+    TypeIdx tidx = TypeIdx::from_type<T>();
+    m_signature_pool.destroy(thing, tidx);
+    m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().destroy_unchecked(thing);
+}
+
+template <typename T>
+inline T *Registry::get_checked(Thing thing) noexcept {
+    TypeIdx tidx = TypeIdx::from_type<T>();
+    if (do_pool_absent(tidx)) [[unlikely]] {
+        return nullptr;
+    }
+    PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
+    if (thing.is_nil()) [[unlikely]] {
+        return &pool.get_stub();
+    }
+    if (!m_thing_pool.check(thing)) [[unlikely]] {
+        return nullptr;
+    }
+    if (!do_check_part(thing, tidx)) [[unlikely]] {
+        return nullptr;
+    }
+    return pool.get_unchecked(thing);
+}
+
+template <typename T>
+inline T &Registry::get_unchecked(Thing thing) noexcept {
+    TypeIdx tidx = TypeIdx::from_type<T>();
+    FR_ASSERT(!do_pool_absent(tidx), "part pool missing");
+    FR_ASSERT(m_thing_pool.check(thing), "thing must be alive");
+    FR_ASSERT(do_check_part(thing, tidx), "thing does not own part T");
+    return *m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().get_unchecked(thing);
+}
+
+template <typename... Include>
+inline auto Registry::query() noexcept {
+    Signature include;
+    (include.insert(TypeIdx::from_type<Include>()), ...);
+    return fr::Query<Include...>(this, include);
+}
+
+// ------------------------------------------------------------ Internal Helpers
+
+inline bool Registry::do_pool_absent(TypeIdx tidx) const noexcept {
+    return m_part_pools[tidx.idx()].is_nil();
+}
+
+inline bool Registry::do_check_part(Thing thing, TypeIdx tidx) const noexcept {
+    return m_signature_pool.owns(thing, tidx);
+}
+
+template <typename T>
+inline PartPool<T> &Registry::do_ensure_part_pool(TypeIdx tidx) noexcept {
+    FR_ASSERT(tidx.idx() < MAX_PARTS, "part type index out of range");
+    if (do_pool_absent(tidx)) [[unlikely]] {
+        do_create_part_pool<T>(tidx);
+    }
+    return m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
+}
+
+template <typename T>
+inline void Registry::do_create_part_pool(TypeIdx tidx) noexcept {
+    m_part_pools[tidx.idx()].template emplace<PartPool<T>>(m_alloc);
+    m_part_destroy_fns[tidx.idx()] = &Registry::do_part_destroy_fn<T>;
+}
+
+inline void Registry::do_destroy_all_parts(Thing thing) noexcept {
+    const Signature &sig = m_signature_pool.get(thing);
+    for (USize i = 0; i < MAX_PARTS; ++i) {
+        if (m_part_destroy_fns[i] != nullptr && sig.has(TypeIdx::from_idx(i))) {
+            m_part_destroy_fns[i](m_part_pools[i], thing);
+        }
+    }
+}
+
+template <typename T>
+inline void Registry::do_part_destroy_fn(AnyPartPool &pool, Thing thing) noexcept {
+    pool.cast_ref<PartPool<T>>().destroy_unchecked(thing);
+}
+
+inline USize Registry::do_part_count_by_tidx(TypeIdx tidx) const noexcept {
+    if (do_pool_absent(tidx)) {
+        return 0;
+    }
+    return m_part_pools[tidx.idx()].cast_ref<PartPool<Byte>>().part_count();
+}
+
+inline Slice<const Thing> Registry::do_part_to_thing_slice_by_tidx(TypeIdx tidx) const noexcept {
+    FR_ASSERT(!do_pool_absent(tidx), "part pool missing");
+    return m_part_pools[tidx.idx()].cast_ref<PartPool<Byte>>().part_to_thing_slice_with_stub();
+}
+
 } // namespace fr::impl
 
-// Resolves a circual dependency between Query and Registry.
+// Resolves a circular dependency between Query and Registry.
 #include "fr/data/query.hpp"

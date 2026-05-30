@@ -337,7 +337,7 @@ private:
         CmdStorage<T> &typed_cmds = cmds.cast_ref<CmdStorage<T>>();
 
         for (const auto &cmd : typed_cmds.destroy_cmds) {
-            registry->template try_destroy<T>(cmd.thing);
+            registry->template destroy_checked<T>(cmd.thing);
         }
 
         typed_cmds.destroy_cmds.clear();
@@ -349,7 +349,7 @@ private:
         CmdStorage<T> &typed_cmds = cmds.cast_ref<CmdStorage<T>>();
 
         for (const auto &cmd : typed_cmds.insert_cmds) {
-            registry->template try_insert<T>(cmd.thing, cmd.part);
+            registry->template emplace_checked<T>(cmd.thing, cmd.part);
         }
 
         typed_cmds.insert_cmds.clear();
@@ -361,7 +361,7 @@ private:
         CmdStorage<T> &typed_cmds = cmds.cast_ref<CmdStorage<T>>();
 
         for (const auto &cmd : typed_cmds.mutate_cmds) {
-            T *part = registry->template try_get<T>(cmd.thing);
+            T *part = registry->template get_checked<T>(cmd.thing);
             if (part) [[likely]] {
                 *part = cmd.next;
             }

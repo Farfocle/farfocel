@@ -48,15 +48,15 @@ S32 main() {
         fr::impl::Registry registry;
 
         fr::Thing a = registry.handout();
-        registry.emplace<Pos>(a, Pos{42.0, 67.0});
-        registry.emplace<Sprite>(a, Sprite{42, 42, "banana.png"});
+        registry.emplace_checked<Pos>(a, Pos{42.0, 67.0});
+        registry.emplace_checked<Sprite>(a, Sprite{42, 42, "banana.png"});
 
         fr::Thing b = registry.handout();
-        registry.emplace<Pos>(b, Pos{42.0, 69.0});
-        registry.emplace<Sprite>(b, Sprite{42, 42, "apple.png"});
+        registry.emplace_checked<Pos>(b, Pos{42.0, 69.0});
+        registry.emplace_checked<Sprite>(b, Sprite{42, 42, "apple.png"});
 
         fr::Thing c = registry.handout();
-        registry.emplace<Pos>(c, Pos{13.0, 12.0});
+        registry.emplace_checked<Pos>(c, Pos{13.0, 12.0});
 
         std::cout << "---- query<Pos, Sprite>()\n";
         for (auto [thing, pos, spirte] : registry.query<Pos, Sprite>()) {

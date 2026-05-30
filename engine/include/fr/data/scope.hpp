@@ -38,85 +38,64 @@ public:
     Thing handout() noexcept;
 
     /**
-     * @brief Kills a thing. Nil thing is immortal.
-     * @note If a thing is dead, its signature is still reset.
+     * @brief Kills a thing and destroys all of its parts.
+     * @note Does nothing for nil or already-dead things.
      */
     void kill(Thing thing) noexcept;
 
     /**
-     * @brief Checks if a thing is alive. Nil thing is always alive.
+     * @brief Returns true if the thing is alive. Nil thing is always alive.
      */
     bool is_alive(Thing thing) const noexcept;
 
     /**
-     * @brief Checks if a thing is dead. Nil thing is never dead.
+     * @brief Returns true if the thing is dead. Nil thing is never dead.
      */
     bool is_dead(Thing thing) const noexcept;
 
     // --------------------------------------------------------- Part Operations
 
     /**
-     * @brief Checks if a thing has part T.
-     * @note Returns false if the pool is missing or the thing is dead.
-     * @note Returns true for nil thing if the pool exists.
+     * @brief Returns true if the thing owns part T.
      */
     template <typename T>
     bool has(Thing thing) const noexcept;
 
     /**
-     * @brief Tries to emplace part T on a thing.
-     * @note Creates the part pool if missing. Returns stub for nil thing.
-     * @note Returns nullptr if the thing is dead or already has T.
+     * @brief Inserts or overrides part T on a thing immediately.
+     * - Nil thing  : returns the stub pointer.
+     * - Dead thing : returns nullptr.
+     * - Alive thing: inserts T or overrides it if already present.
      */
     template <typename T, typename... Args>
     T *try_emplace_now(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Tries to insert part T on a thing by const reference.
-     */
-    template <typename T>
-    T *try_insert_now(Thing thing, const T &part) noexcept;
-
-    /**
-     * @brief Tries to insert part T on a thing by rvalue reference.
-     */
-    template <typename T>
-    T *try_insert_now(Thing thing, T &&part) noexcept;
-
-    /**
-     * @brief Emplaces part T on a thing.
-     * @note Creates the part pool if missing. Returns stub for nil thing.
-     * @warning Asserts if the thing is dead or already owns T.
+     * @brief Inserts part T immediately without any checks.
+     * @pre Caller must ensure: thing is alive, thing does NOT yet own T.
      */
     template <typename T, typename... Args>
     T &emplace_now(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Inserts part T on a thing by const reference.
-     */
-    template <typename T>
-    T &insert_now(Thing thing, const T &part) noexcept;
-
-    /**
-     * @brief Inserts part T on a thing by rvalue reference.
-     */
-    template <typename T>
-    T &insert_now(Thing thing, T &&part) noexcept;
-
-    /**
-     * @brief Tries to destroy part T on a thing.
-     * @note Returns false if the pool is missing or the thing does not have T.
-     */
-    template <typename T>
-    bool try_destroy_now(Thing thing) noexcept;
-
-    /**
-     * @brief Destroys part T on a thing.
-     * @note Returns false if thing is nil.
-     * @warning Asserts if pool missing or the thing does not have T.
+     * @brief Destroys part T on a thing immediately.
+     * @return false if thing is nil, dead, or does not own T.
      */
     template <typename T>
     bool destroy_now(Thing thing) noexcept;
+
+    /**
+     * @brief Returns a pointer to part T owned by the thing, or nullptr if not found.
+     */
+    template <typename T>
+    T *try_get(Thing thing) noexcept;
+
+    /**
+     * @brief Returns a reference to part T owned by the thing.
+     * @pre Caller must ensure: thing is alive and owns T.
+     */
+    template <typename T>
+    T &get(Thing thing) noexcept;
 
     // ------------------------------------------------- Command Part Operations
 
@@ -141,21 +120,21 @@ public:
     void commit_part_cmds() noexcept;
 
     /**
-     * @brief Records an insert command for part T on a thing.
+     * @brief Records a deferred insert command for part T on a thing.
      * @note Does nothing if thing is nil, dead, or already owns T.
      */
     template <typename T>
     void insert(Thing thing, const T &part) noexcept;
 
     /**
-     * @brief Records an insert command for part T on a thing.
+     * @brief Records a deferred insert command for part T on a thing.
      * @note Does nothing if thing is nil, dead, or already owns T.
      */
     template <typename T>
     void insert(Thing thing, T &&part) noexcept;
 
     /**
-     * @brief Records a destroy command for part T on a thing.
+     * @brief Records a deferred destroy command for part T on a thing.
      * @note Does nothing if thing is nil, dead, or does not own T.
      */
     template <typename T>
@@ -164,22 +143,7 @@ public:
     // ------------------------------------------------------------------- Query
 
     /**
-     * @brief Tries to get part T owned by the thing.
-     * @note Returns nullptr if pool is missing, thing is dead, or does not own T.
-     * @note Returns stub pointer for nil thing if the pool exists.
-     */
-    template <typename T>
-    T *try_get(Thing thing) noexcept;
-
-    /**
-     * @brief Returns part T owned by the thing.
-     * @warning Asserts if thing is dead or does not have T.
-     */
-    template <typename T>
-    T &get(Thing thing) noexcept;
-
-    /**
-     * @brief Creates a query for a set of parts.
+     * @brief Creates a query for things owning all parts in the Include list.
      */
     template <typename... Include>
     auto query() noexcept;

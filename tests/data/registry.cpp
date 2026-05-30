@@ -29,13 +29,13 @@ TEST_CASE("Registry - thing lifecycle") {
 TEST_CASE("Registry - part pool existence and nil behavior") {
     impl::Registry reg;
 
-    CHECK_FALSE(reg.check_part_pool<Position>());
+    CHECK_FALSE(reg.has_part_pool<Position>());
     CHECK_FALSE(reg.has<Position>(Thing::nil()));
 
-    Position *nil_pos = reg.try_emplace<Position>(Thing::nil(), Position{7});
+    Position *nil_pos = reg.emplace_checked<Position>(Thing::nil(), Position{7});
 
     CHECK(nil_pos != nullptr);
-    CHECK(reg.check_part_pool<Position>());
+    CHECK(reg.has_part_pool<Position>());
     CHECK(reg.has<Position>(Thing::nil()));
     CHECK(reg.part_pool<Position>() != nullptr);
 }
@@ -45,24 +45,28 @@ TEST_CASE("Registry - attach, destroy, and dead thing") {
 
     Thing a = reg.handout();
 
-    CHECK_FALSE(reg.try_destroy<Velocity>(a));
+    CHECK_FALSE(reg.destroy_checked<Velocity>(a));
 
-    Position *pos = reg.try_emplace<Position>(a, Position{3});
+    Position *pos = reg.emplace_checked<Position>(a, Position{3});
 
     CHECK(pos != nullptr);
     CHECK(reg.has<Position>(a));
     CHECK(pos->x == 3);
-    CHECK(reg.try_emplace<Position>(a, Position{9}) == nullptr);
 
-    CHECK(reg.try_destroy<Position>(a));
+    // emplace_checked overrides if already present
+    Position *pos2 = reg.emplace_checked<Position>(a, Position{9});
+    CHECK(pos2 != nullptr);
+    CHECK(pos2->x == 9);
+
+    CHECK(reg.destroy_checked<Position>(a));
     CHECK_FALSE(reg.has<Position>(a));
-    CHECK_FALSE(reg.try_destroy<Position>(a));
+    CHECK_FALSE(reg.destroy_checked<Position>(a));
 
-    reg.try_emplace<Position>(a, Position{11});
+    reg.emplace_checked<Position>(a, Position{11});
     reg.kill(a);
 
     CHECK_FALSE(reg.has<Position>(a));
-    CHECK(reg.try_emplace<Position>(a, Position{1}) == nullptr);
+    CHECK(reg.emplace_checked<Position>(a, Position{1}) == nullptr);
 }
 
 } // namespace fr
