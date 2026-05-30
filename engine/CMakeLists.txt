@@ -45,16 +45,18 @@ set(ENGINE_HEADERS
 
 ### data
     "include/fr/data/cmd.hpp"
+    "include/fr/data/common.hpp"
     "include/fr/data/part.hpp"
     "include/fr/data/part_pool.hpp"
     "include/fr/data/query.hpp"
     "include/fr/data/registry.hpp"
+    "include/fr/data/scope.hpp"
+    "include/fr/data/script.hpp"
     "include/fr/data/signature_pool.hpp"
+    "include/fr/data/stage.hpp"
     "include/fr/data/thing.hpp"
     "include/fr/data/thing_pool.hpp"
     "include/fr/data/world.hpp"
-    "include/fr/data/common.hpp"
-    "include/fr/data/script.hpp"
 )
 
 set(ENGINE_SOURCES
