@@ -28,6 +28,6 @@ enum class Stage : StageStorageType {
 
 constexpr U8 STAGE_COUNT = 6;
 
-using System = Fn128<void(Scope &)>;
+using System = Fn128<void(Scope)>;
 
 } // namespace fr

@@ -6,13 +6,14 @@
  * @details Commands offer a lazy way to modify the registry state (insert and destroy parts).
  */
 
+#include <iostream>
+
 #include "fr/core/ctx.hpp"
 #include "fr/core/format.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
-#include "fr/data/world.hpp"
 #include "fr/data/thing.hpp"
-#include <iostream>
+#include "fr/data/world.hpp"
 
 struct Pos {
     F32 x{0.0};

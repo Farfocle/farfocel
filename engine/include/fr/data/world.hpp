@@ -51,7 +51,7 @@ public:
     /**
      * @brief Runs all systems scheduled for the given stage synchronously.
      */
-    void run_stage_sync(Stage stage, Scope &scope);
+    void run_stage_sync(Stage stage, Scope scope);
 
     /**
      * @brief Runs all systems scheduled for all stages synchronously.
@@ -62,7 +62,7 @@ private:
     /**
      * @brief Executes all systems for a given stage index.
      */
-    void do_run_stage(U8 stage_idx, Scope &scope) noexcept;
+    void do_run_stage(U8 stage_idx, Scope scope) noexcept;
 
     // -------------------------------------------------------- Member Variables
     const Alloc *m_alloc{nullptr};
@@ -260,7 +260,7 @@ inline void impl::SystemPool::schedule_sync(Stage stage, const System &system) n
     m_stages[static_cast<U8>(stage)].push_back(system);
 }
 
-inline void impl::SystemPool::run_stage_sync(Stage stage, Scope &scope) {
+inline void impl::SystemPool::run_stage_sync(Stage stage, Scope scope) {
     do_run_stage(static_cast<U8>(stage), scope);
 }
 
@@ -270,7 +270,7 @@ inline void impl::SystemPool::run_all_sync(Scope &scope) {
     }
 }
 
-inline void impl::SystemPool::do_run_stage(U8 stage_idx, Scope &scope) noexcept {
+inline void impl::SystemPool::do_run_stage(U8 stage_idx, Scope scope) noexcept {
     for (const auto &system : m_stages[stage_idx]) {
         system(scope);
     }
@@ -400,7 +400,7 @@ inline void World::insert_script(Thing thing, S script) noexcept {
 
     if (!m_script_registry.check_bit(tidx.idx())) {
         if constexpr (ScriptHasOnPostUpdate<S>) {
-            schedule_sync(Stage::PreUpdateScript, [](Scope &scope) {
+            schedule_sync(Stage::PreUpdateScript, [](Scope scope) {
                 for (auto [t, s] : scope.query<S>()) {
                     s.on_pre_update();
                 }
@@ -408,7 +408,7 @@ inline void World::insert_script(Thing thing, S script) noexcept {
         }
 
         if constexpr (ScriptHasOnUpdate<S>) {
-            schedule_sync(Stage::UpdateScript, [](Scope &scope) {
+            schedule_sync(Stage::UpdateScript, [](Scope scope) {
                 for (auto [t, s] : scope.query<S>()) {
                     s.on_update();
                 }
@@ -416,7 +416,7 @@ inline void World::insert_script(Thing thing, S script) noexcept {
         }
 
         if constexpr (ScriptHasOnPostUpdate<S>) {
-            schedule_sync(Stage::PostUpdateScript, [](Scope &scope) {
+            schedule_sync(Stage::PostUpdateScript, [](Scope scope) {
                 for (auto [t, s] : scope.query<S>()) {
                     s.on_post_update();
                 }

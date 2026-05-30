@@ -51,7 +51,7 @@ struct Minion {
     })
 };
 
-void player_update(fr::Scope &scope) {
+void player_update(fr::Scope scope) {
     for (auto [thing, player, health, transform] : scope.query<Player, Health, Transform>()) {
         fr::Thing minion = scope.handout();
         scope.insert(minion, Transform{});
@@ -66,13 +66,13 @@ void player_update(fr::Scope &scope) {
     }
 }
 
-void minion_update(fr::Scope &scope) {
+void minion_update(fr::Scope scope) {
     for (auto [thing, minion, health] : scope.query<Minion, Health>()) {
         health.health -= 3;
     }
 }
 
-void clear_dead(fr::Scope &scope) {
+void clear_dead(fr::Scope scope) {
     for (auto [thing, health] : scope.query<Health>()) {
         if (health.health <= 0) {
             scope.kill(thing);
@@ -80,14 +80,14 @@ void clear_dead(fr::Scope &scope) {
     }
 }
 
-void print_player(fr::Scope &scope) {
+void print_player(fr::Scope scope) {
     for (auto [thing, transform, health, player] : scope.query<Transform, Health, Player>()) {
         std::cout << fr::format("[PLAYER]\nthing: {}\nplayer: {}\ntransform: {}\nhealth: {}\n",
                                 thing, player, transform, health);
     }
 }
 
-void print_minions(fr::Scope &scope) {
+void print_minions(fr::Scope scope) {
     for (auto [thing, transform, health, minion] : scope.query<Transform, Health, Minion>()) {
         std::cout << fr::format("[MINION]\nthing: {}\nminion: {}\ntransform: {}\nhealth: {}\n",
                                 thing, minion, transform, health);
