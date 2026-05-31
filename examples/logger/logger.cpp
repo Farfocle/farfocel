@@ -10,14 +10,15 @@ S32 main()
 
     // setup a sink and add it to the logger
     auto standard_sink = fr::make_unique<fr::StandardSink>();
-    fr ::get_ambient_ctx().logger->add_sink(std::move(standard_sink));
+    fr::get_ambient_ctx().logger->add_sink(std::move(standard_sink));
 
     // use logger
-    fr::get_ambient_ctx().logger->log(fr::LogLevel::Info, "Hello {}! ", "world");
-    fr::get_ambient_ctx().logger->log(fr::LogLevel::Success, "It works!");
-    fr::get_ambient_ctx().logger->log(fr::LogLevel::Critical, 42);
-    fr::get_ambient_ctx().logger->log(fr::LogLevel::Error, true);
-    fr::get_ambient_ctx().logger->log(fr::LogLevel::Info, "{} + {} = {}", 2, 2, 2+2);
+    FR_LOG("Hello {}! ", "world");
+    FR_LOG_OK("It works!");
+    FR_LOG_CRIT(42);
+    FR_LOG_ERR(true);
+    FR_LOG_WARN("This is a warning.");
+    FR_LOG("{} + {} = {}", 2, 2, 2+2);
 
     fr::shutdown_core_ctx();
     return 0;

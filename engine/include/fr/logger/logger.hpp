@@ -45,3 +45,16 @@ public:
     void log(LogLevel level, StringView msg);
 };
 } // namespace fr
+
+
+// ------------------------------------------------------------------ Macros
+#define _FR_LOG_BASE(level, ...) \
+    if (auto* _logger = ::fr::get_ambient_ctx().logger) { \
+        _logger->log(level, __VA_ARGS__); \
+    }
+
+#define FR_LOG(...) _FR_LOG_BASE(::fr::LogLevel::Info,  __VA_ARGS__)
+#define FR_LOG_OK(...) _FR_LOG_BASE(::fr::LogLevel::Success, __VA_ARGS__)
+#define FR_LOG_WARN(...) _FR_LOG_BASE(::fr::LogLevel::Warning, __VA_ARGS__)
+#define FR_LOG_ERR(...) _FR_LOG_BASE(::fr::LogLevel::Error, __VA_ARGS__)
+#define FR_LOG_CRIT(...) _FR_LOG_BASE(::fr::LogLevel::Critical, __VA_ARGS__)

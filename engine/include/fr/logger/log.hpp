@@ -7,6 +7,7 @@ namespace fr {
 enum class LogLevel {
     Info,
     Success,
+    Warning,
     Error,
     Critical
 };

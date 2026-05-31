@@ -13,6 +13,8 @@ static const char *level_to_string(LogLevel level) {
         return "[ERROR]   ";
     case LogLevel::Critical:
         return "[CRITICAL]";
+    case LogLevel::Warning:
+        return "[WARNING] ";
     default:
         return "          ";
     }
