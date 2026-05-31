@@ -1,5 +1,6 @@
 #include "fr/logger/sinks/standard_sink.hpp"
 #include "fr/core/format.hpp"
+#include "fr/core/timestamp.hpp"
 #include "fr/logger/log.hpp"
 #include <iostream>
 
@@ -22,8 +23,9 @@ static const char *level_to_string(LogLevel level) {
 
 void StandardSink::write(const Log &log_entry) noexcept {
     try {
-        String buffer = format("{} {} {}\n", log_entry.timestamp, level_to_string(log_entry.level),
-                               log_entry.message);
+        String buffer = format("{} {} {}\n",
+                               log_entry.timestamp.to_string(),
+                               level_to_string(log_entry.level), log_entry.message);
         std::cout.write(buffer.data(), buffer.size());
     } catch (...) {
     }

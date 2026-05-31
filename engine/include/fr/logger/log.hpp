@@ -1,7 +1,7 @@
 #pragma once
 
 #include "fr/core/string.hpp"
-#include "fr/core/typedefs.hpp"
+#include "fr/core/timestamp.hpp"
 
 namespace fr {
 enum class LogLevel {
@@ -14,7 +14,7 @@ enum class LogLevel {
 
 struct Log {
     LogLevel level;
-    U64 timestamp;
+    Timestamp timestamp;
     String message;
 };
 } // namespace fr

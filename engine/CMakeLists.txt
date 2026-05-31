@@ -44,6 +44,7 @@ set(ENGINE_HEADERS
     "include/fr/core/typetraits.hpp"
     "include/fr/core/unique_ptr.hpp"
     "include/fr/core/slot_map.hpp"
+    "include/fr/core/timestamp.hpp"
 
 #### platform
     "include/fr/platform/window.hpp"

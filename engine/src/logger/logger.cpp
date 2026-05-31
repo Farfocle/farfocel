@@ -2,7 +2,7 @@
 #include "fr/core/queue.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
-#include "fr/core/time.hpp"
+#include "fr/core/timestamp.hpp"
 #include "fr/core/unique_ptr.hpp"
 
 namespace fr {
@@ -32,7 +32,7 @@ void Logger::log(LogLevel level, StringView msg) {
 }
 
 void Logger::enqueue(LogLevel level, String msg) {
-    Log log_entry{level, time::get_system_now_ms(), std::move(msg)};
+    Log log_entry{level, Timestamp::now(), std::move(msg)};
     {
         std::lock_guard<std::mutex> lock(mtx);
         queue.enqueue(std::move(log_entry));
