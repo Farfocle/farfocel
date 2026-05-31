@@ -5,6 +5,7 @@
 #include "fr/core/shape.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
+#include "fr/data/scope.hpp"
 #include "fr/data/thing.hpp"
 #include "fr/data/world.hpp"
 

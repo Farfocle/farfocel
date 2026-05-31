@@ -45,7 +45,6 @@ set(ENGINE_HEADERS
 
 ### data
     "include/fr/data/cmd.hpp"
-    "include/fr/data/common.hpp"
     "include/fr/data/part.hpp"
     "include/fr/data/part_pool.hpp"
     "include/fr/data/query.hpp"
@@ -57,6 +56,7 @@ set(ENGINE_HEADERS
     "include/fr/data/thing.hpp"
     "include/fr/data/thing_pool.hpp"
     "include/fr/data/world.hpp"
+    "include/fr/data/relations.hpp"
 )
 
 set(ENGINE_SOURCES
