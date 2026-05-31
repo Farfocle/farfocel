@@ -80,32 +80,37 @@ public:
     /**
      * @brief Slice of all parts including the stub (index 0).
      */
-    Slice<const T> part_slice_with_stub() const noexcept;
+    Slice<T> parts_with_stub_mut() noexcept;
 
     /**
      * @brief Slice of parts excluding the stub.
      */
-    Slice<const T> part_slice() const noexcept;
+    Slice<T> parts_mut() noexcept;
 
     /**
-     * @brief Sparse slice mapping thing index → part index; includes stub entry.
+     * @brief Sparse slice mapping thing index ->part index; includes stub entry.
      */
-    Slice<const USize> thing_to_part_slice_with_stub() const noexcept;
+    Slice<USize> thing_to_part_with_stub_mut() noexcept;
 
     /**
-     * @brief Sparse slice mapping thing index → part index; excludes stub entry.
+     * @brief Sparse slice mapping thing index -> part index; excludes stub entry.
      */
-    Slice<const USize> thing_to_part_slice() const noexcept;
+    Slice<USize> thing_to_part_mut() noexcept;
 
     /**
-     * @brief Dense slice mapping part index → owning thing; includes stub entry.
+     * @brief Dense slice mapping part index -> owning thing; includes stub entry.
      */
-    Slice<const Thing> part_to_thing_slice_with_stub() const noexcept;
+    Slice<Thing> part_to_thing_with_stub_mut() noexcept;
+
+    /**
+     * @brief Dense slice mapping part index -> owning thing; includes stub entry.
+     */
+    Slice<const Thing> part_to_thing_with_stub() const noexcept;
 
     /**
      * @brief Dense slice mapping part index → owning thing; excludes stub entry.
      */
-    Slice<const Thing> part_to_thing_slice() const noexcept;
+    Slice<Thing> part_to_thing_mut() noexcept;
 
     // ------------------------------------------------------------ Part Getters
 
@@ -196,8 +201,8 @@ inline PartPool<T>::PartPool(Alloc *alloc) noexcept {
     m_thing_to_part = DynamicArray<USize>::with_alloc(alloc);
     m_part_to_thing = DynamicArray<Thing>::with_alloc(alloc);
 
-    m_parts.push_back(T{});          // stub part at index 0
-    m_thing_to_part.push_back(0);    // nil thing maps to stub
+    m_parts.push_back(T{});       // stub part at index 0
+    m_thing_to_part.push_back(0); // nil thing maps to stub
     m_part_to_thing.push_back(Thing::nil());
 }
 
@@ -224,38 +229,44 @@ inline USize PartPool<T>::part_count() const noexcept {
 
 template <typename T>
     requires std::is_default_constructible_v<T>
-inline Slice<const T> PartPool<T>::part_slice_with_stub() const noexcept {
-    return m_parts.slice();
+inline Slice<T> PartPool<T>::parts_with_stub_mut() noexcept {
+    return m_parts.slice_mut();
 }
 
 template <typename T>
     requires std::is_default_constructible_v<T>
-inline Slice<const T> PartPool<T>::part_slice() const noexcept {
-    return m_parts.slice_from(1);
+inline Slice<T> PartPool<T>::parts_mut() noexcept {
+    return m_parts.slice_mut_from(1);
 }
 
 template <typename T>
     requires std::is_default_constructible_v<T>
-inline Slice<const USize> PartPool<T>::thing_to_part_slice_with_stub() const noexcept {
-    return m_thing_to_part.slice();
+inline Slice<USize> PartPool<T>::thing_to_part_with_stub_mut() noexcept {
+    return m_thing_to_part.slice_mut();
 }
 
 template <typename T>
     requires std::is_default_constructible_v<T>
-inline Slice<const USize> PartPool<T>::thing_to_part_slice() const noexcept {
-    return m_thing_to_part.slice_from(1);
+inline Slice<USize> PartPool<T>::thing_to_part_mut() noexcept {
+    return m_thing_to_part.slice_mut_from(1);
 }
 
 template <typename T>
     requires std::is_default_constructible_v<T>
-inline Slice<const Thing> PartPool<T>::part_to_thing_slice_with_stub() const noexcept {
+inline Slice<Thing> PartPool<T>::part_to_thing_with_stub_mut() noexcept {
+    return m_part_to_thing.slice_mut();
+}
+
+template <typename T>
+    requires std::is_default_constructible_v<T>
+inline Slice<const Thing> PartPool<T>::part_to_thing_with_stub() const noexcept {
     return m_part_to_thing.slice();
 }
 
 template <typename T>
     requires std::is_default_constructible_v<T>
-inline Slice<const Thing> PartPool<T>::part_to_thing_slice() const noexcept {
-    return m_part_to_thing.slice_from(1);
+inline Slice<Thing> PartPool<T>::part_to_thing_mut() noexcept {
+    return m_part_to_thing.slice_mut_from(1);
 }
 
 template <typename T>

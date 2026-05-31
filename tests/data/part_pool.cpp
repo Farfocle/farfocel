@@ -40,7 +40,7 @@ TEST_CASE("PartPool - remove swaps last") {
 
     CHECK(pool.part_count() == 3);
 
-    const auto &parts = pool.part_slice_with_stub();
+    auto parts = pool.parts_with_stub_mut();
     CHECK(parts.size() == 3);
     CHECK(parts[1].value == 10);
     CHECK(parts[2].value == 30);

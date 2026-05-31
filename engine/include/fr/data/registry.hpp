@@ -66,18 +66,18 @@ public:
     /**
      * @brief Returns the thing pool.
      */
-    const ThingPool &thing_pool() const noexcept;
+    ThingPool &thing_pool_mut() noexcept;
 
     /**
      * @brief Returns the signature pool.
      */
-    const SignaturePool &signature_pool() const noexcept;
+    SignaturePool &signature_pool_mut() noexcept;
 
     /**
      * @brief Returns a pointer to the PartPool for T, or nullptr if not yet created.
      */
     template <typename T>
-    const PartPool<T> *part_pool() const noexcept;
+    PartPool<T> *part_pool_mut() noexcept;
 
     /**
      * @brief Returns true if a PartPool for T has been created.
@@ -243,21 +243,22 @@ inline const Alloc *Registry::alloc() const noexcept {
     return m_alloc;
 }
 
-inline const ThingPool &Registry::thing_pool() const noexcept {
+inline ThingPool &Registry::thing_pool_mut() noexcept {
     return m_thing_pool;
 }
 
-inline const SignaturePool &Registry::signature_pool() const noexcept {
+inline SignaturePool &Registry::signature_pool_mut() noexcept {
     return m_signature_pool;
 }
 
 template <typename T>
-inline const PartPool<T> *Registry::part_pool() const noexcept {
+inline PartPool<T> *Registry::part_pool_mut() noexcept {
     TypeIdx tidx = TypeIdx::from_type<T>();
     if (do_pool_absent(tidx)) {
         return nullptr;
     }
-    return &m_part_pools[tidx.idx()].cast_ref<const PartPool<T>>();
+
+    return &m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
 }
 
 template <typename T>
@@ -450,7 +451,7 @@ inline USize Registry::do_part_count_by_tidx(TypeIdx tidx) const noexcept {
 
 inline Slice<const Thing> Registry::do_part_to_thing_slice_by_tidx(TypeIdx tidx) const noexcept {
     FR_ASSERT(!do_pool_absent(tidx), "part pool missing");
-    return m_part_pools[tidx.idx()].cast_ref<PartPool<Byte>>().part_to_thing_slice_with_stub();
+    return m_part_pools[tidx.idx()].cast_ref<PartPool<Byte>>().part_to_thing_with_stub();
 }
 
 } // namespace fr::impl
