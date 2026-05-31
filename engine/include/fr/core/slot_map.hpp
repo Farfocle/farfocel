@@ -85,16 +85,12 @@ public:
         if (m_slots[key.index].generation != key.generation)
             return nullptr;
 
-        return reinterpret_cast<T *>(&m_slots[key.index].data);
+        return reinterpret_cast<T *>(m_slots[key.index].data);
     }
 
-    // Added especially for use in RenderDevice, because a resource added to RenderDevice MUST exist
-    // till the end of the game's frame, and so this skips if-checks
-    // This should be used ONLY when there's a guarrantee that a resource will exist at a given
-    // moment
     [[nodiscard]] T *get_data_unsafe(SlotKey key) noexcept {
         FR_ASSERT(key.index < m_slots.size(), "index outside range");
-        return reinterpret_cast<T *>(&m_slots[key.index].data);
+        return reinterpret_cast<T *>(m_slots[key.index].data);
     }
 
     [[nodiscard]] const T *get_data(SlotKey key) const noexcept {
@@ -104,7 +100,7 @@ public:
         if (m_slots[key.index].generation != key.generation)
             return nullptr;
 
-        return reinterpret_cast<T *>(&m_slots[key.index].data);
+        return reinterpret_cast<const T *>(m_slots[key.index].data);
     }
 
     bool erase(SlotKey key) noexcept {

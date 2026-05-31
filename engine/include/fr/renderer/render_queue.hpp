@@ -22,11 +22,16 @@ namespace fr {
  * @brief Determines the general category of the render pass for sorting purposes.
  */
 enum class RenderPassType : U8 {
+    /// Regular solid models
     Opaque = 0, // regular models
+    /// Alpha-tested models (vegetation)
     Masked = 1, // leaves, vegetation
+    /// Background skybox
     Skybox = 2,
+    /// Semi-transparent that require blending
     Transparent = 3, // glass
-    TwoDim = 4,      // 2D sprites
+    /// two dim
+    TwoDim = 4, // 2D sprites
     UI = 5,
 };
 
@@ -69,24 +74,47 @@ struct SortKey {
  * @brief Drawing call packet sent from the ECS to the RENDERER.
  */
 struct alignas(8) DrawCall {
-    SortKey key;
-    RenderPipelineHandle pipe;
-    BufferHandle vbo;
-    BufferHandle ibo;
-    TextureHandle texture;
-    U32 index_count;
-    U32 index_offset;
-    U32 vertex_offset;
-    U32 vbo_stride;
-    U32 transform_index;
-    U32 passing;
+    /// Sorting key dictating the render execution order
+    SortKey key; // 8 bytes
 
+    /// Graphics pipeline properties
+    RenderPipelineHandle pipe; // 4
+
+    /// Vertex buffer handle
+    BufferHandle vbo; // 4
+    /// Index buffer handle
+    BufferHandle ibo; // 4
+
+    /// PBR albedo or base color map
+    TextureHandle albedo_map; // 4
+    /// Tangent space normal map
+    TextureHandle normal_map; // 4
+    /// Metallic-roughness mapr for PBR or specular map for Standard lighting model
+    TextureHandle extra_map; // 4
+
+    /// Amount of indices to draw
+    U32 index_count; // 4
+    /// Starting offset in the IBO
+    U32 index_offset; // 4
+
+    /// Base offset added to each index
+    U32 vertex_offset; // 4
+    /// Size of a single vertex
+    U32 vbo_stride; // 4
+
+    /// Index locating the model matrix in the global SSBO of transform matrices
+    U32 transform_index; // 4 bytes
+
+    /// ID specifying the shading model (0 = Unlit, 1 = Standard Blinn-Phpong, 2 = PBR)
+    U32 shading_model; // 4 bytes
+
+    /// @brief Less-than operator
     constexpr bool operator<(const DrawCall &other) const noexcept {
         return key < other.key;
     }
 };
 
-FR_STATIC_ASSERT(sizeof(DrawCall) == 64, "DrawCall must be exactly 64B of size");
+FR_STATIC_ASSERT(sizeof(DrawCall) == 80, "DrawCall must be exactly 80 bytes of size");
 
 class RenderQueue {
 public:

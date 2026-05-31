@@ -1,12 +1,12 @@
 #include "fr/renderer/mesh_loader.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/string.hpp"
+#include "fr/renderer/render_queue.hpp"
 #include <cgltf.h>
 
 #include <iostream>
 
 namespace fr {
-
 
 MeshData load_mesh_gltf(RenderDevice *device, StringView file_path) {
     FR_ASSERT(device != nullptr, "mesh_loader requires valid RenderDevice");
@@ -59,7 +59,6 @@ MeshData load_mesh_gltf(RenderDevice *device, StringView file_path) {
         return out_data;
     }
 
-
     DynamicArray<Vertex> vertices(get_ambient_ctx().alloc);
     DynamicArray<U32> indices(get_ambient_ctx().alloc);
 
@@ -84,6 +83,16 @@ MeshData load_mesh_gltf(RenderDevice *device, StringView file_path) {
             SubMesh submesh{};
             submesh.vertex_offset = static_cast<U32>(vertices.size());
             submesh.index_offset = static_cast<U32>(indices.size());
+
+            // material type detection, gbuffer vs forward
+            submesh.pass_type = RenderPassType::Opaque;
+            if (primitive.material != nullptr) {
+                if (primitive.material->alpha_mode == cgltf_alpha_mode_mask) {
+                    submesh.pass_type = RenderPassType::Masked;
+                } else if (primitive.material->alpha_mode == cgltf_alpha_mode_blend) {
+                    submesh.pass_type = RenderPassType::Transparent;
+                }
+            }
 
             if (primitive.indices != nullptr) {
                 const cgltf_accessor *acc = primitive.indices;

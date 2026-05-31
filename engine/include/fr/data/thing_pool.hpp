@@ -16,6 +16,8 @@
 #include "fr/core/typedefs.hpp"
 #include "fr/data/thing.hpp"
 
+#include <new>
+
 namespace fr::impl {
 class ThingPool {
 
@@ -32,14 +34,18 @@ public:
         m_alloc = alloc;
 
         void *raw = m_alloc->allocate(sizeof(Things), alignof(Things));
-        m_things = static_cast<Things *>(raw);
+        m_things = new (raw) Things();
+
+        // m_things = static_cast<Things *>(raw);
 
         // Uses memset to zero-initialize the array - the fastest way to clear memory
-        std::memset(m_things, 0, sizeof(Things));
+        // std::memset(m_things, 0, sizeof(Things));
     }
 
     ~ThingPool() noexcept {
         using Things = Array<Thing, MAX_THINGS>;
+
+        m_things->~Things();
 
         m_alloc->deallocate(m_things, sizeof(Things), alignof(Things));
     }

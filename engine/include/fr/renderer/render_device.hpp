@@ -12,63 +12,24 @@
 #include "fr/core/slice.hpp"
 #include "fr/core/slot_map.hpp"
 #include "fr/core/string_view.hpp"
+#include "fr/core/strong_handle.hpp"
 #include "fr/core/typedefs.hpp"
 
 #include <glm/glm.hpp>
 
 namespace fr {
-/**
- * @brief Handle to a GPU memory buffer (VBO/IBO/SSBO).
- */
-struct BufferHandle {
-    SlotKey key{};
-    /**
-     * @brief Checks if the handle points to a valid, live resource.
-     * * @return true if the resource is currently valid.
-     */
-    [[nodiscard]] bool is_valid() const noexcept {
-        return key.generation % 2 != 0;
-    }
-};
-/**
- * @brief Handle to a texture object on the GPU.
- */
-struct TextureHandle {
-    SlotKey key{};
-    /**
-     * @brief Checks if the handle points to a valid, live resource.
-     * * @return true if the resource is currently valid.
-     */
-    [[nodiscard]] bool is_valid() const noexcept {
-        return key.generation % 2 != 0;
-    };
-};
-/**
- * @brief Handle to a compiled shader program on the GPU.
- */
-struct ShaderHandle {
-    SlotKey key{};
-    /**
-     * @brief Checks if the handle points to a valid, live resource.
-     * * @return true if the resource is currently valid.
-     */
-    [[nodiscard]] bool is_valid() const noexcept {
-        return key.generation % 2 != 0;
-    }
-};
-/**
- * @brief Handle to a compiled graphics pipeline.
- */
-struct RenderPipelineHandle {
-    SlotKey key{};
-    /**
-     * @brief Checks if the handle points to a valid, live resource.
-     * * @return true if the resource is currently valid.
-     */
-    [[nodiscard]] bool is_valid() const noexcept {
-        return key.generation % 2 != 0;
-    }
-};
+// STRONGLY TYPED HANDLES
+struct BufferTag {};
+using BufferHandle = StrongHandle<BufferTag>;
+
+struct TextureTag {};
+using TextureHandle = StrongHandle<TextureTag>;
+
+struct ShaderTag {};
+using ShaderHandle = StrongHandle<ShaderTag>;
+
+struct PipelineTag {};
+using RenderPipelineHandle = StrongHandle<PipelineTag>;
 
 inline bool operator==(BufferHandle a, BufferHandle b) noexcept {
     return a.key == b.key;
@@ -83,12 +44,14 @@ inline bool operator==(ShaderHandle a, ShaderHandle b) noexcept {
 inline bool operator==(RenderPipelineHandle a, RenderPipelineHandle b) {
     return a.key == b.key;
 }
+// ----------------
 
 /**
  * @brief Supported texture formats for GPU allocation.
  */
 enum class TextureFormat : U8 {
     R8G8B8A8_UNorm,
+    R8G8B8A8_SRGB,
     R16G16B16A16_Float,
     R32G32B32A32_Float,
     Depth24_Stencil8,
@@ -103,9 +66,12 @@ enum class CullMode : U8 { None, Front, Back };
  * @brief Properties used to create specify a graphics pipeline.
  */
 struct RenderPipelineProperties {
+    /// Handle to the compiled shader program
     ShaderHandle shader;
     CullMode cull_mode{CullMode::Back};
+    /// Enable Z-buffer depth testing
     bool depth_test{true};
+    /// Enable writing tothe Z-buffer
     bool depth_write{true};
     bool wireframe{false};
 };
@@ -179,6 +145,14 @@ public:
      */
     virtual void draw_indexed(U32 index_count, U32 index_offset = 0,
                               U32 vertex_offset = 0) noexcept = 0;
+
+    /**
+     * @brief Issues a non-indexed hardware draw command. Useful for or procedurally generated
+     * geometry.
+     * @param vertex_count Number of sequential vertices to draw.
+     * @param first_vertex Starting vertex index.
+     */
+    virtual void draw_arrays(U32 vertex_count, U32 first_vertex = 0) noexcept = 0;
 };
 
 class RenderDevice {

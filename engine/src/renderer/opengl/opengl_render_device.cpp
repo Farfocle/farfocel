@@ -1,8 +1,8 @@
 /**
- * @file renderer.hpp
+ * @file opengl_render_device.hpp
  * @author Tfoedy
  *
- * @brief The main OpenGL hardware interface implementing RenderDevice.
+ * @brief RHI implementation in OpenGL
  */
 
 #include "fr/core/alloc.hpp"
@@ -15,6 +15,8 @@
 #include "fr/renderer/render_device.hpp"
 
 #include <SDL3/SDL.h>
+#include <algorithm>
+#include <cmath>
 #include <glad/gl.h>
 #include <iostream>
 #include <unistd.h>
@@ -46,7 +48,8 @@ enum class CommandType : U8 {
     BindStorageBuffer,
     BindIndexBuffer,
     BindTexture,
-    DrawIndexed
+    DrawIndexed,
+    DrawArrays
 };
 
 /**
@@ -90,6 +93,11 @@ struct OpenGLCommand {
             U32 index_offset;
             U32 vertex_offset;
         } draw;
+
+        struct {
+            U32 vertex_count;
+            U32 first_vertex;
+        } draw_arrays;
 
         struct {
             BufferHandle buffer;
@@ -192,6 +200,14 @@ public:
         m_commands.push_back(cmd);
     }
 
+    void draw_arrays(U32 vertex_count, U32 first_vertex = 0) noexcept override {
+        OpenGLCommand cmd{};
+        cmd.type = CommandType::DrawArrays;
+        cmd.payload.draw_arrays.vertex_count = vertex_count;
+        cmd.payload.draw_arrays.first_vertex = first_vertex;
+        m_commands.push_back(cmd);
+    }
+
     void bind_storage_buffer(BufferHandle buffer, U32 slot) noexcept override {
         OpenGLCommand cmd{};
         cmd.type = CommandType::BindStorageBuffer;
@@ -268,17 +284,16 @@ public:
         switch (format) {
         case TextureFormat::R8G8B8A8_UNorm:
             internal_format = GL_RGBA8;
-            data_format = GL_RGBA;
-            data_type = GL_UNSIGNED_BYTE;
+            break;
+        case TextureFormat::R8G8B8A8_SRGB:
+            internal_format = GL_SRGB8_ALPHA8;
             break;
         case TextureFormat::R16G16B16A16_Float:
             internal_format = GL_RGBA16F;
-            data_format = GL_RGBA;
             data_type = GL_FLOAT;
             break;
         case TextureFormat::R32G32B32A32_Float:
             internal_format = GL_RGBA32F;
-            data_format = GL_RGBA;
             data_type = GL_FLOAT;
             break;
         case TextureFormat::Depth24_Stencil8:
@@ -293,13 +308,28 @@ public:
             break;
         }
 
-        glTextureStorage2D(id, 1, internal_format, width, height);
+        U32 mip_levels = 1;
+        if (format == TextureFormat::R8G8B8A8_UNorm || format == TextureFormat::R8G8B8A8_SRGB) {
+            mip_levels = 1 + static_cast<U32>(std::floor(std::log2(std::max(width, height))));
+        }
 
-        if (!data.is_empty())
+        glTextureStorage2D(id, mip_levels, internal_format, width, height);
+
+        if (!data.is_empty()) {
             glTextureSubImage2D(id, 0, 0, 0, width, height, data_format, data_type, data.data());
+            if (mip_levels > 1)
+                glGenerateTextureMipmap(id);
+        }
 
-        glTextureParameteri(id, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        GLint min_filter = (mip_levels > 1) ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
+        glTextureParameteri(id, GL_TEXTURE_MIN_FILTER, min_filter);
         glTextureParameteri(id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        if (mip_levels > 1) {
+            GLfloat max = 0.0;
+            glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &max);
+            glTextureParameterf(id, GL_TEXTURE_MAX_ANISOTROPY, max);
+        }
 
         return TextureHandle{m_textures.add(id)};
     }
@@ -417,10 +447,13 @@ public:
 
             switch (cmd.type) {
             case CommandType::BeginRenderPass: {
+                glDepthMask(GL_TRUE);
+                glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
                 if (cmd.payload.render_pass.num_colors == 0 &&
                     !cmd.payload.render_pass.depth_target.is_valid()) {
                     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-                    glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+                    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 } else {
                     glBindFramebuffer(GL_FRAMEBUFFER, m_fallback_fbo);
@@ -442,6 +475,7 @@ public:
                                                gl_depth, 0);
                     }
 
+                    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 }
                 break;
@@ -514,6 +548,10 @@ public:
                 if (loc != -1) {
                     glUniform1ui(loc, cmd.payload.push_constants.data[0]);
                 }
+                GLint loc_model = glGetUniformLocation(current_program, "u_shading_model");
+                if (loc_model != -1) {
+                    glUniform1ui(loc_model, cmd.payload.push_constants.data[1]);
+                }
                 break;
             }
 
@@ -535,6 +573,11 @@ public:
                                          reinterpret_cast<void *>(static_cast<USize>(
                                              cmd.payload.draw.index_offset * sizeof(U32))),
                                          cmd.payload.draw.vertex_offset);
+                break;
+            }
+            case CommandType::DrawArrays: {
+                glDrawArrays(GL_TRIANGLES, cmd.payload.draw_arrays.first_vertex,
+                             cmd.payload.draw_arrays.vertex_count);
                 break;
             }
             }

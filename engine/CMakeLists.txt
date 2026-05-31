@@ -44,6 +44,7 @@ set(ENGINE_HEADERS
     "include/fr/core/typetraits.hpp"
     "include/fr/core/unique_ptr.hpp"
     "include/fr/core/slot_map.hpp"
+    "include/fr/core/strong_handle.hpp"
     
 #### platform
     "include/fr/platform/window.hpp"
@@ -57,6 +58,7 @@ set(ENGINE_HEADERS
     "include/fr/renderer/camera.hpp"
     "include/fr/renderer/render_queue.hpp"
     "include/fr/renderer/renderer.hpp"
+    "include/fr/renderer/texture_loader.hpp"
 
 ### data
     "include/fr/data/part.hpp"
@@ -68,6 +70,11 @@ set(ENGINE_HEADERS
     "include/fr/data/thing_pool.hpp"
     "include/fr/data/typeidx.hpp"
     "include/fr/data/world.hpp"
+    "include/fr/data/asset_manager.hpp"
+
+### scene?
+    "include/fr/scene/components.hpp"
+    "include/fr/scene/render_system.hpp"
 )
 
 set(ENGINE_SOURCES
@@ -80,6 +87,7 @@ set(ENGINE_SOURCES
     "src/renderer/opengl/opengl_render_device.cpp"
     "src/renderer/mesh.cpp"
     "src/renderer/mesh_loader.cpp"
+    "src/renderer/texture_loader.cpp"
 )
 
 
@@ -94,6 +102,7 @@ target_link_libraries(engine PRIVATE glad)
 target_link_libraries(engine PUBLIC glm::glm)
 target_link_libraries(engine PUBLIC SDL3::SDL3-static)
 target_link_libraries(engine PRIVATE cgltf)
+target_link_libraries(engine PRIVATE stb)
 
 target_include_directories(engine
     PUBLIC "include"

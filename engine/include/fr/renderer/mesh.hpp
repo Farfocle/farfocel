@@ -1,10 +1,16 @@
-// THIS IS A TEMPORARY CLASS
-// IT WILL BE REPLACED WITH A PROPER ECS ONE
+/**
+ * @file mesh.hpp
+ * @author Tfoedy
+ * @brief Mesh asset (not component) structure for GPU geometry
+ *
+ */
+
 #pragma once
 
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/renderer/render_device.hpp"
+#include "fr/renderer/render_queue.hpp"
 #include <glm/glm.hpp>
 
 namespace fr {
@@ -19,6 +25,8 @@ struct SubMesh {
     U32 index_offset{0};
     U32 vertex_offset{0};
     glm::mat4 transform{1.0f};
+    // g-buffer vs forward
+    RenderPassType pass_type{RenderPassType::Opaque};
 };
 
 struct MeshData {

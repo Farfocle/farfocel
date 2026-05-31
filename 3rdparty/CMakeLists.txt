@@ -16,5 +16,6 @@ add_subdirectory(glm)
 set(SDL_SHARED OFF CACHE BOOL "Do not build SDL as a shared library" FORCE)
 set(SDL_STATIC ON CACHE BOOL "Build SDL as a static library" FORCE)
 add_subdirectory(SDL)
+add_subdirectory(stb)
 
 add_subdirectory(cgltf)
