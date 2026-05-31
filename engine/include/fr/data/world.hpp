@@ -159,6 +159,25 @@ public:
     template <typename T>
     T &get(Thing thing) noexcept;
 
+    // --------------------------------------------------------------- Relations
+
+    /// @todo Calculate depth changes.
+    void attach_now(Thing parent, Thing thing) noexcept {
+        Relations &parent_rel = m_registry.get_unchecked<Relations>(parent);
+        Relations &thing_rel = m_registry.get_unchecked<Relations>(thing);
+
+        thing_rel.parent = parent;
+        thing_rel.next_sibling = parent_rel.first_child;
+
+        if (!parent_rel.first_child.is_nil()) {
+            Relations &first_child_rel =
+                m_registry.get_unchecked<Relations>(parent_rel.first_child);
+            first_child_rel.prev_sibling = thing;
+        }
+
+        parent_rel.first_child = thing;
+    }
+
     // ------------------------------------------------- Command Part Operations
 
     /**
@@ -408,7 +427,8 @@ inline auto World::reverse_query(QueryOptions options) noexcept {
 
 template <typename... Include>
 inline auto World::shallow_query(Thing thing, QueryOptions options) noexcept {
-    return ShallowQuery<Include...>(&m_registry, thing, Signature::from_parts<Include...>(), options);
+    return ShallowQuery<Include...>(&m_registry, thing, Signature::from_parts<Include...>(),
+                                    options);
 }
 
 template <typename... Include>

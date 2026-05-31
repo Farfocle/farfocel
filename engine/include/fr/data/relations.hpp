@@ -7,8 +7,8 @@
 
 #pragma once
 
+#include "fr/core/shape.hpp"
 #include "fr/data/thing.hpp"
-#include <limits>
 
 namespace fr {
 using HierarchyDepth = U32;
@@ -21,5 +21,13 @@ struct Relations {
     Thing prev_sibling{Thing::nil()};
     Thing next_sibling{Thing::nil()};
     HierarchyDepth depth{ROOT_HIERARCHY_DEPTH};
+
+    FR_SHAPE({
+        FR_PROP(parent);
+        FR_PROP(first_child);
+        FR_PROP(prev_sibling);
+        FR_PROP(next_sibling);
+        FR_PROP(depth);
+    })
 };
 } // namespace fr

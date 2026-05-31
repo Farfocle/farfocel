@@ -1,0 +1,68 @@
+#include "fr/core/ctx.hpp"
+#include "fr/core/format.hpp"
+#include "fr/core/shape.hpp"
+#include "fr/core/string.hpp"
+#include "fr/core/typedefs.hpp"
+#include "fr/data/relations.hpp"
+#include "fr/data/thing.hpp"
+#include "fr/data/world.hpp"
+#include <codecvt>
+#include <iostream>
+
+struct Pos {
+    F32 x{0.0};
+    F32 y{0.0};
+
+    FR_SHAPE({
+        FR_PROP(x);
+        FR_PROP(y);
+    })
+};
+
+struct Sprite {
+    U32 width{0};
+    U32 height{0};
+    fr::String path{};
+
+    FR_SHAPE({
+        FR_PROP(width);
+        FR_PROP(height);
+        FR_PROP(path);
+    })
+};
+
+struct Game {
+    fr::World world;
+    fr::Thing player;
+
+    void init() {
+        player = world.handout();
+        world.emplace_now<fr::Relations>(player);
+
+        for (USize i = 0; i < 3; ++i) {
+            fr::Thing child = world.handout();
+            world.emplace_now<fr::Relations>(child);
+            world.emplace_now<Pos>(child, Pos{.x = static_cast<F32>(i), .y = static_cast<F32>(i)});
+            world.attach_now(player, child);
+        }
+    }
+
+    void run() {
+        for (auto [thing, relations, pos] : world.shallow_query<fr::Relations, Pos>(player)) {
+            std::cout << "\n\n----\n";
+            std::cout << fr::format("thing: {}\nrelations: {}\npos: {}\n", thing, relations, pos);
+        }
+    }
+};
+
+S32 main() {
+    fr::init_core_ctx();
+
+    {
+        Game game;
+        game.init();
+        game.run();
+    }
+
+    fr::shutdown_core_ctx();
+}

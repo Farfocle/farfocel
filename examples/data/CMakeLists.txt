@@ -4,6 +4,7 @@ set(BENCH_SOURCES
     "registry_commands.cpp"
     "scripts.cpp"
     "world.cpp"
+    "hierarchy.cpp"
 )
 
 foreach(source ${BENCH_SOURCES})
