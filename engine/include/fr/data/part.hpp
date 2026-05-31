@@ -28,6 +28,20 @@ public:
     // ------------------------------------ Typedefs & Constructors & Destructor
     using Storage = Bitset<MAX_PARTS>;
 
+    Signature() = default;
+    Signature(const Signature &) noexcept = default;
+    Signature(Signature &&) noexcept = default;
+    Signature &operator=(const Signature &) noexcept = default;
+    Signature &operator=(Signature &&) noexcept = default;
+    ~Signature() noexcept = default;
+
+    template <typename... Parts>
+    static Signature from_parts() noexcept {
+        Signature signature;
+        (signature.insert(TypeIdx::from_type<Parts>()), ...);
+        return signature;
+    }
+
     // ------------------------------------------------------------ Operatations
 
     /**
@@ -101,4 +115,16 @@ private:
     // -------------------------------------------------------- Member Variables
     Storage m_bits{};
 };
+
+// ================================================================ QueryOptions
+
+/**
+ * @brief Filtering options for a query.
+ * @note Use Signature::from_parts<...>() to construct the fields.
+ */
+struct QueryOptions {
+    Signature with{};
+    Signature without{};
+};
+
 } // namespace fr

@@ -17,6 +17,7 @@
 #include "fr/core/meta.hpp"
 #include "fr/data/cmd.hpp"
 #include "fr/data/part.hpp"
+#include "fr/data/query.hpp"
 #include "fr/data/registry.hpp"
 #include "fr/data/scope.hpp"
 #include "fr/data/script.hpp"
@@ -203,10 +204,16 @@ public:
     // ------------------------------------------------------------------- Query
 
     /**
-     * @brief Creates a query for things owning all parts in the Include list.
+     * @brief Creates a forward query for things owning all parts in the Include list.
      */
     template <typename... Include>
-    auto query() noexcept;
+    auto query(QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Creates a reverse query for things owning all parts in the Include list.
+     */
+    template <typename... Include>
+    auto reverse_query(QueryOptions options = {}) noexcept;
 
     // ----------------------------------------------------------------- Systems
 
@@ -233,6 +240,13 @@ public:
      */
     template <IsScript S>
     void insert_script(Thing thing, S script) noexcept;
+
+    /**
+     * @brief Removes a script from a thing, calling on_destroy if defined.
+     * @note Does nothing if thing is nil, dead, or does not own script S.
+     */
+    template <IsScript S>
+    void destroy_script(Thing thing) noexcept;
 
 private:
     // -------------------------------------------------------- Member Variables
@@ -370,8 +384,13 @@ inline void World::destroy(Thing thing) noexcept {
 }
 
 template <typename... Include>
-inline auto World::query() noexcept {
-    return m_registry.query<Include...>();
+inline auto World::query(QueryOptions options) noexcept {
+    return Query<Include...>(&m_registry, Signature::from_parts<Include...>(), options);
+}
+
+template <typename... Include>
+inline auto World::reverse_query(QueryOptions options) noexcept {
+    return ReverseQuery<Include...>(&m_registry, Signature::from_parts<Include...>(), options);
 }
 
 inline void World::schedule_sync(Stage stage, const System &system) noexcept {
@@ -427,6 +446,25 @@ inline void World::insert_script(Thing thing, S script) noexcept {
     }
 
     insert<S>(thing, script);
+}
+
+template <IsScript S>
+inline void World::destroy_script(Thing thing) noexcept {
+    if (thing.is_nil()) [[unlikely]] {
+        return;
+    }
+    if (m_registry.is_dead(thing)) [[unlikely]] {
+        return;
+    }
+    if (!m_registry.has<S>(thing)) [[unlikely]] {
+        return;
+    }
+
+    if constexpr (ScriptHasOnDestroy<S>) {
+        m_registry.get_unchecked<S>(thing).on_destroy();
+    }
+
+    m_registry.destroy_checked<S>(thing);
 }
 
 // ============================================== Scope Method Implementations
@@ -518,8 +556,18 @@ inline void Scope::destroy(Thing thing) noexcept {
 }
 
 template <typename... Include>
-inline auto Scope::query() noexcept {
-    return m_world->query<Include...>();
+inline auto Scope::query(QueryOptions options) noexcept {
+    return m_world->query<Include...>(options);
+}
+
+template <typename... Include>
+inline auto Scope::reverse_query(QueryOptions options) noexcept {
+    return m_world->reverse_query<Include...>(options);
+}
+
+template <typename S>
+inline void Scope::destroy_script(Thing thing) noexcept {
+    m_world->destroy_script<S>(thing);
 }
 
 } // namespace fr

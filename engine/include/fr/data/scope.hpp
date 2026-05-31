@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "fr/data/query.hpp"
 #include "fr/data/thing.hpp"
 
 namespace fr {
@@ -143,10 +144,25 @@ public:
     // ------------------------------------------------------------------- Query
 
     /**
-     * @brief Creates a query for things owning all parts in the Include list.
+     * @brief Creates a forward query for things owning all parts in the Include list.
      */
     template <typename... Include>
-    auto query() noexcept;
+    auto query(QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Creates a reverse query for things owning all parts in the Include list.
+     */
+    template <typename... Include>
+    auto reverse_query(QueryOptions options = {}) noexcept;
+
+    // ----------------------------------------------------------------- Scripts
+
+    /**
+     * @brief Removes a script from a thing, calling on_destroy if defined.
+     * @note Does nothing if thing is nil, dead, or does not own script S.
+     */
+    template <typename S>
+    void destroy_script(Thing thing) noexcept;
 
 private:
     // -------------------------------------------------------- Member Variables

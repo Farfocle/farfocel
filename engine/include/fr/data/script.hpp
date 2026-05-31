@@ -37,6 +37,11 @@ concept ScriptHasOnInit = requires(T script) {
     { script.on_init() } -> std::same_as<void>;
 };
 
+template <typename T>
+concept ScriptHasOnDestroy = requires(T script) {
+    { script.on_destroy() } -> std::same_as<void>;
+};
+
 // ======================================================================= Script
 
 class Script {

@@ -1,7 +1,6 @@
 #include <doctest.h>
 
 #include "fr/core/typedefs.hpp"
-#include "fr/data/query.hpp"
 #include "fr/data/registry.hpp"
 
 namespace fr {
@@ -61,7 +60,9 @@ TEST_CASE("Registry - Query with exclusion") {
     reg.emplace_checked<C>(t2, 5);
 
     USize count = 0;
-    for (auto [thing, a, b] : reg.query<A, B>().without<C>()) {
+    for (auto [thing, a, b] : reg.query<A, B>({
+             .without = fr::Signature::from_parts<C>(),
+         })) {
         ++count;
 
         CHECK(a.value == 1);

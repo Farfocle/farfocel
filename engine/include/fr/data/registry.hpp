@@ -28,16 +28,14 @@
 #include "fr/data/signature_pool.hpp"
 #include "fr/data/thing_pool.hpp"
 
-namespace fr {
-template <typename... Include>
-class Query;
-}
-
 namespace fr::impl {
 
+template <bool IsReverse, typename... Include>
+class GenericQuery;
+
 class Registry {
-    template <typename... Include>
-    friend class fr::Query;
+    template <bool IsReverse, typename... Include>
+    friend class GenericQuery;
 
 public:
     using AnyPartPool = InlineAny<sizeof(PartPool<Byte>), alignof(PartPool<Byte>)>;
@@ -170,7 +168,13 @@ public:
      * @brief Creates a query for things owning all parts in the Include list.
      */
     template <typename... Include>
-    auto query() noexcept;
+    auto query(QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Creates a reverse query for things owning all parts in the Include list.
+     */
+    template <typename... Include>
+    auto reverse_query(QueryOptions options = {}) noexcept;
 
 private:
     // -------------------------------------------------------- Internal Helpers
@@ -389,10 +393,13 @@ inline T &Registry::get_unchecked(Thing thing) noexcept {
 }
 
 template <typename... Include>
-inline auto Registry::query() noexcept {
-    Signature include;
-    (include.insert(TypeIdx::from_type<Include>()), ...);
-    return fr::Query<Include...>(this, include);
+inline auto Registry::query(QueryOptions options) noexcept {
+    return GenericQuery<false, Include...>(this, Signature::from_parts<Include...>(), options);
+}
+
+template <typename... Include>
+inline auto Registry::reverse_query(QueryOptions options) noexcept {
+    return GenericQuery<true, Include...>(this, Signature::from_parts<Include...>(), options);
 }
 
 // ------------------------------------------------------------ Internal Helpers

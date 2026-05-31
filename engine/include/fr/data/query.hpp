@@ -15,17 +15,21 @@
 
 namespace fr {
 
+namespace impl {
+
 /**
  * @brief Simple query system for the hidden sparse set ECS.
- * @tparam Include List of part types that a thing must own.
+ * @tparam IsReverse If true, iterates in reverse order over the smallest pool.
+ * @tparam Include List of part types that a thing must own and that are yielded by the iterator.
  */
-template <typename... Include>
-class Query {
+template <bool IsReverse, typename... Include>
+class GenericQuery {
 public:
     // ------------------------------------------------------------- Constructor
-    Query(impl::Registry *registry, Signature include_mask) noexcept
+    GenericQuery(Registry *registry, Signature return_mask, QueryOptions options = {}) noexcept
         : m_registry(registry),
-          m_include(include_mask) {
+          m_return(return_mask),
+          m_options(options) {
         m_iter_tidx = do_find_smallest_pool();
     }
 
@@ -37,11 +41,11 @@ public:
         using pointer = void;
         using reference = value_type;
 
-        Iter(impl::Registry *registry, Signature include, Signature exclude,
+        Iter(Registry *registry, Signature return_mask, QueryOptions options,
              Slice<const Thing> things, USize idx) noexcept
             : m_registry(registry),
-              m_include(include),
-              m_exclude(exclude),
+              m_return(return_mask),
+              m_options(options),
               m_things(things),
               m_idx(idx) {
             do_find_next();
@@ -53,8 +57,14 @@ public:
         }
 
         Iter &operator++() noexcept {
-            ++m_idx;
-            do_find_next();
+            if constexpr (IsReverse) {
+                if (m_idx > 0)
+                    --m_idx;
+                do_find_next();
+            } else {
+                ++m_idx;
+                do_find_next();
+            }
             return *this;
         }
 
@@ -68,62 +78,74 @@ public:
 
     private:
         void do_find_next() noexcept {
-            while (m_idx < m_things.size()) {
-                Thing thing = m_things[m_idx];
-
-                if (!thing.is_nil()) {
-                    const Signature &signature = m_registry->m_signature_pool.get(thing);
-                    if (do_check_signature(signature)) {
-                        break;
+            if constexpr (IsReverse) {
+                while (m_idx > 0) {
+                    Thing thing = m_things[m_idx];
+                    if (!thing.is_nil()) {
+                        const Signature &signature = m_registry->m_signature_pool.get(thing);
+                        if (do_check_signature(signature)) {
+                            return;
+                        }
                     }
+                    --m_idx;
                 }
-
-                ++m_idx;
+            } else {
+                while (m_idx < m_things.size()) {
+                    Thing thing = m_things[m_idx];
+                    if (!thing.is_nil()) {
+                        const Signature &signature = m_registry->m_signature_pool.get(thing);
+                        if (do_check_signature(signature)) {
+                            break;
+                        }
+                    }
+                    ++m_idx;
+                }
             }
         }
 
         bool do_check_signature(const Signature &signature) const noexcept {
             const auto &bits = signature.bitset();
-            const auto &include_bits = m_include.bitset();
-            const auto &exclude_bits = m_exclude.bitset();
+            const auto &return_bits = m_return.bitset();
+            const auto &with_bits = m_options.with.bitset();
+            const auto &without_bits = m_options.without.bitset();
 
-            return (bits & include_bits) == include_bits && (bits & exclude_bits).none();
+            return (bits & return_bits) == return_bits && (bits & with_bits) == with_bits &&
+                   (bits & without_bits).none();
         }
 
-        impl::Registry *m_registry;
-        Signature m_include;
-        Signature m_exclude;
+        Registry *m_registry;
+        Signature m_return;
+        QueryOptions m_options;
         Slice<const Thing> m_things;
         USize m_idx;
     };
 
     // ----------------------------------------------------------------- Methods
-    /**
-     * @brief Adds exclusion filters to the query.
-     * @tparam Exclude List of part types that a thing must NOT own.
-     */
-    template <typename... Exclude>
-    Query &without() noexcept {
-        (m_exclude.insert(TypeIdx::from_type<Exclude>()), ...);
-        return *this;
-    }
-
     Iter begin() noexcept {
         if (m_registry->do_pool_absent(m_iter_tidx)) {
-            return Iter(m_registry, m_include, m_exclude, Slice<const Thing>{}, 0);
+            return Iter(m_registry, m_return, m_options, Slice<const Thing>{}, 0);
         }
 
         Slice<const Thing> part_to_thing = m_registry->do_part_to_thing_slice_by_tidx(m_iter_tidx);
-        return Iter(m_registry, m_include, m_exclude, part_to_thing, 1);
+        if constexpr (IsReverse) {
+            USize last = part_to_thing.size() > 0 ? part_to_thing.size() - 1 : 0;
+            return Iter(m_registry, m_return, m_options, part_to_thing, last);
+        } else {
+            return Iter(m_registry, m_return, m_options, part_to_thing, 1);
+        }
     }
 
     Iter end() noexcept {
         if (m_registry->do_pool_absent(m_iter_tidx)) {
-            return Iter(m_registry, m_include, m_exclude, Slice<const Thing>{}, 0);
+            return Iter(m_registry, m_return, m_options, Slice<const Thing>{}, 0);
         }
 
         Slice<const Thing> part_to_thing = m_registry->do_part_to_thing_slice_by_tidx(m_iter_tidx);
-        return Iter(m_registry, m_include, m_exclude, part_to_thing, part_to_thing.size());
+        if constexpr (IsReverse) {
+            return Iter(m_registry, m_return, m_options, part_to_thing, 0);
+        } else {
+            return Iter(m_registry, m_return, m_options, part_to_thing, part_to_thing.size());
+        }
     }
 
 private:
@@ -147,10 +169,18 @@ private:
     }
 
     // -------------------------------------------------------- Member Variables
-    impl::Registry *m_registry;
-    Signature m_include{};
-    Signature m_exclude{};
+    Registry *m_registry;
+    Signature m_return{};
+    QueryOptions m_options{};
     TypeIdx m_iter_tidx;
 };
+
+} // namespace impl
+
+template <typename... Include>
+using Query = impl::GenericQuery<false, Include...>;
+
+template <typename... Include>
+using ReverseQuery = impl::GenericQuery<true, Include...>;
 
 } // namespace fr

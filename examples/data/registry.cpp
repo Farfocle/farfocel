@@ -64,7 +64,7 @@ S32 main() {
         }
 
         std::cout << "---- query<Pos>().without<Sprite>()\n";
-        for (auto [thing, pos] : registry.query<Pos>().without<Sprite>()) {
+        for (auto [thing, pos] : registry.query<Pos>()) {
             std::cout << fr::format("pos: {}", pos) << "\n";
         }
 
