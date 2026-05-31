@@ -33,9 +33,21 @@ namespace fr::impl {
 template <bool IsReverse, typename... Include>
 class GenericQuery;
 
+template <typename... Include>
+class ShallowHierarchyQuery;
+
+template <typename... Include>
+class DeepHierarchyQuery;
+
 class Registry {
     template <bool IsReverse, typename... Include>
     friend class GenericQuery;
+
+    template <typename... Include>
+    friend class ShallowHierarchyQuery;
+
+    template <typename... Include>
+    friend class DeepHierarchyQuery;
 
 public:
     using AnyPartPool = InlineAny<sizeof(PartPool<Byte>), alignof(PartPool<Byte>)>;

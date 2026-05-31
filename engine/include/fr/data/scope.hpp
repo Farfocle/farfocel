@@ -155,6 +155,18 @@ public:
     template <typename... Include>
     auto reverse_query(QueryOptions options = {}) noexcept;
 
+    /**
+     * @brief Creates a query over the direct children of a thing.
+     */
+    template <typename... Include>
+    auto shallow_query(Thing thing, QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Creates a depth-first query over all descendants of a thing.
+     */
+    template <typename... Include>
+    auto deep_query(Thing thing, QueryOptions options = {}) noexcept;
+
     // ----------------------------------------------------------------- Scripts
 
     /**

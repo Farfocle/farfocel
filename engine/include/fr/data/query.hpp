@@ -7,14 +7,16 @@
 
 #pragma once
 
+#include <iterator>
+
 #include "fr/core/meta.hpp"
 #include "fr/core/tuple.hpp"
 #include "fr/data/part.hpp"
 #include "fr/data/registry.hpp"
+#include "fr/data/relations.hpp"
 #include "fr/data/thing.hpp"
 
 namespace fr {
-
 namespace impl {
 
 /**
@@ -65,6 +67,7 @@ public:
                 ++m_idx;
                 do_find_next();
             }
+
             return *this;
         }
 
@@ -81,23 +84,27 @@ public:
             if constexpr (IsReverse) {
                 while (m_idx > 0) {
                     Thing thing = m_things[m_idx];
+
                     if (!thing.is_nil()) {
                         const Signature &signature = m_registry->m_signature_pool.get(thing);
                         if (do_check_signature(signature)) {
                             return;
                         }
                     }
+
                     --m_idx;
                 }
             } else {
                 while (m_idx < m_things.size()) {
                     Thing thing = m_things[m_idx];
+
                     if (!thing.is_nil()) {
                         const Signature &signature = m_registry->m_signature_pool.get(thing);
                         if (do_check_signature(signature)) {
                             break;
                         }
                     }
+
                     ++m_idx;
                 }
             }
@@ -169,10 +176,248 @@ private:
     }
 
     // -------------------------------------------------------- Member Variables
-    Registry *m_registry;
+    Registry *m_registry{};
     Signature m_return{};
     QueryOptions m_options{};
-    TypeIdx m_iter_tidx;
+    TypeIdx m_iter_tidx{};
+};
+
+// ============================================== ShallowHierarchyQuery
+
+/**
+ * @brief Iterates the direct children of a thing by following the Relations sibling chain.
+ * @tparam Include List of part types that a child must own and that are yielded by the iterator.
+ */
+template <typename... Include>
+class ShallowHierarchyQuery {
+public:
+    // ------------------------------------------------------------- Constructor
+    ShallowHierarchyQuery(Registry *registry, Thing root, Signature return_mask,
+                          QueryOptions options = {}) noexcept
+        : m_registry(registry),
+          m_root(root),
+          m_return(return_mask),
+          m_options(options) {
+    }
+
+    // ---------------------------------------------------------------- Iterator
+    struct Iter {
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = Tuple<Thing, Include &...>;
+        using difference_type = std::ptrdiff_t;
+        using pointer = void;
+        using reference = value_type;
+
+        Iter(Registry *registry, Signature return_mask, QueryOptions options,
+             Thing current) noexcept
+            : m_registry(registry),
+              m_return(return_mask),
+              m_options(options),
+              m_current(current) {
+            do_find_next();
+        }
+
+        value_type operator*() const noexcept {
+            return value_type(m_current, m_registry->get_unchecked<Include>(m_current)...);
+        }
+
+        Iter &operator++() noexcept {
+            m_current = m_registry->get_unchecked<Relations>(m_current).next_sibling;
+            do_find_next();
+            return *this;
+        }
+
+        bool operator==(const Iter &other) const noexcept {
+            return m_current == other.m_current;
+        }
+
+        bool operator!=(const Iter &other) const noexcept {
+            return !(*this == other);
+        }
+
+    private:
+        void do_find_next() noexcept {
+            while (!m_current.is_nil()) {
+                const Signature &signature = m_registry->signature_pool_mut().get(m_current);
+                if (do_check_signature(signature)) {
+                    return;
+                }
+
+                m_current = m_registry->get_unchecked<Relations>(m_current).next_sibling;
+            }
+        }
+
+        bool do_check_signature(const Signature &signature) const noexcept {
+            const auto &bits = signature.bitset();
+            const auto &return_bits = m_return.bitset();
+            const auto &with_bits = m_options.with.bitset();
+            const auto &without_bits = m_options.without.bitset();
+
+            return (bits & return_bits) == return_bits && (bits & with_bits) == with_bits &&
+                   (bits & without_bits).none();
+        }
+
+        Registry *m_registry;
+        Signature m_return;
+        QueryOptions m_options;
+        Thing m_current;
+    };
+
+    // ----------------------------------------------------------------- Methods
+    Iter begin() noexcept {
+        const Relations *root_rel = m_registry->get_checked<Relations>(m_root);
+        if (root_rel == nullptr) {
+            return end();
+        }
+        return Iter(m_registry, m_return, m_options, root_rel->first_child);
+    }
+
+    Iter end() noexcept {
+        return Iter(m_registry, m_return, m_options, Thing::nil());
+    }
+
+private:
+    // -------------------------------------------------------- Member Variables
+    Registry *m_registry{};
+    Thing m_root{};
+    Signature m_return{};
+    QueryOptions m_options{};
+};
+
+// ================================================= DeepHierarchyQuery
+
+/**
+ * @brief Iterates all descendants of a thing in depth-first order.
+ * @tparam Include List of part types that a descendant must own and that are yielded.
+ * @note Root must own a Relations part; if it does not, the query yields nothing.
+ */
+template <typename... Include>
+class DeepHierarchyQuery {
+public:
+    // ------------------------------------------------------------- Constructor
+    DeepHierarchyQuery(Registry *registry, Thing root, Signature return_mask,
+                       QueryOptions options = {}) noexcept
+        : m_registry(registry),
+          m_root(root),
+          m_return(return_mask),
+          m_options(options) {
+    }
+
+    // ---------------------------------------------------------------- Iterator
+    struct Iter {
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = Tuple<Thing, Include &...>;
+        using difference_type = std::ptrdiff_t;
+        using pointer = void;
+        using reference = value_type;
+
+        Iter(Registry *registry, Signature return_mask, QueryOptions options, Thing root,
+             Thing current) noexcept
+            : m_registry(registry),
+              m_return(return_mask),
+              m_options(options),
+              m_root(root),
+              m_current(current) {
+            do_find_next();
+        }
+
+        value_type operator*() const noexcept {
+            return value_type(m_current, m_registry->get_unchecked<Include>(m_current)...);
+        }
+
+        Iter &operator++() noexcept {
+            do_advance();
+            do_find_next();
+            return *this;
+        }
+
+        bool operator==(const Iter &other) const noexcept {
+            return m_current == other.m_current;
+        }
+
+        bool operator!=(const Iter &other) const noexcept {
+            return !(*this == other);
+        }
+
+    private:
+        void do_advance() noexcept {
+            const Relations &cur_rel = m_registry->get_unchecked<Relations>(m_current);
+
+            // Go deeper if possible.
+            if (!cur_rel.first_child.is_nil()) {
+                m_current = cur_rel.first_child;
+                return;
+            }
+
+            // Try next sibling.
+            if (!cur_rel.next_sibling.is_nil()) {
+                m_current = cur_rel.next_sibling;
+                return;
+            }
+
+            // Walk up until we find an ancestor with a next sibling, but never past root.
+            Thing up = cur_rel.parent;
+            while (!up.is_nil() && up != m_root) {
+                const Relations &up_rel = m_registry->get_unchecked<Relations>(up);
+                if (!up_rel.next_sibling.is_nil()) {
+                    m_current = up_rel.next_sibling;
+                    return;
+                }
+                up = up_rel.parent;
+            }
+
+            // Exhausted the entire subtree.
+            m_current = Thing::nil();
+        }
+
+        void do_find_next() noexcept {
+            while (!m_current.is_nil()) {
+                const Signature &signature = m_registry->signature_pool_mut().get(m_current);
+                if (do_check_signature(signature)) {
+                    return;
+                }
+
+                do_advance();
+            }
+        }
+
+        bool do_check_signature(const Signature &signature) const noexcept {
+            const auto &bits = signature.bitset();
+            const auto &return_bits = m_return.bitset();
+            const auto &with_bits = m_options.with.bitset();
+            const auto &without_bits = m_options.without.bitset();
+
+            return (bits & return_bits) == return_bits && (bits & with_bits) == with_bits &&
+                   (bits & without_bits).none();
+        }
+
+        Registry *m_registry;
+        Signature m_return;
+        QueryOptions m_options;
+        Thing m_root;
+        Thing m_current;
+    };
+
+    // ----------------------------------------------------------------- Methods
+    Iter begin() noexcept {
+        const Relations *root_rel = m_registry->get_checked<Relations>(m_root);
+        if (root_rel == nullptr) {
+            return end();
+        }
+
+        return Iter(m_registry, m_return, m_options, m_root, root_rel->first_child);
+    }
+
+    Iter end() noexcept {
+        return Iter(m_registry, m_return, m_options, m_root, Thing::nil());
+    }
+
+private:
+    // -------------------------------------------------------- Member Variables
+    Registry *m_registry{};
+    Thing m_root{};
+    Signature m_return{};
+    QueryOptions m_options{};
 };
 
 } // namespace impl
@@ -182,5 +427,11 @@ using Query = impl::GenericQuery<false, Include...>;
 
 template <typename... Include>
 using ReverseQuery = impl::GenericQuery<true, Include...>;
+
+template <typename... Include>
+using ShallowQuery = impl::ShallowHierarchyQuery<Include...>;
+
+template <typename... Include>
+using DeepQuery = impl::DeepHierarchyQuery<Include...>;
 
 } // namespace fr

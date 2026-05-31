@@ -19,6 +19,7 @@
 #include "fr/data/part.hpp"
 #include "fr/data/query.hpp"
 #include "fr/data/registry.hpp"
+#include "fr/data/relations.hpp"
 #include "fr/data/scope.hpp"
 #include "fr/data/script.hpp"
 #include "fr/data/stage.hpp"
@@ -215,6 +216,18 @@ public:
     template <typename... Include>
     auto reverse_query(QueryOptions options = {}) noexcept;
 
+    /**
+     * @brief Creates a query over the direct children of a thing.
+     */
+    template <typename... Include>
+    auto shallow_query(Thing thing, QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Creates a depth-first query over all descendants of a thing.
+     */
+    template <typename... Include>
+    auto deep_query(Thing thing, QueryOptions options = {}) noexcept;
+
     // ----------------------------------------------------------------- Systems
 
     /**
@@ -393,6 +406,16 @@ inline auto World::reverse_query(QueryOptions options) noexcept {
     return ReverseQuery<Include...>(&m_registry, Signature::from_parts<Include...>(), options);
 }
 
+template <typename... Include>
+inline auto World::shallow_query(Thing thing, QueryOptions options) noexcept {
+    return ShallowQuery<Include...>(&m_registry, thing, Signature::from_parts<Include...>(), options);
+}
+
+template <typename... Include>
+inline auto World::deep_query(Thing thing, QueryOptions options) noexcept {
+    return DeepQuery<Include...>(&m_registry, thing, Signature::from_parts<Include...>(), options);
+}
+
 inline void World::schedule_sync(Stage stage, const System &system) noexcept {
     m_system_pool.schedule_sync(stage, system);
 }
@@ -563,6 +586,16 @@ inline auto Scope::query(QueryOptions options) noexcept {
 template <typename... Include>
 inline auto Scope::reverse_query(QueryOptions options) noexcept {
     return m_world->reverse_query<Include...>(options);
+}
+
+template <typename... Include>
+inline auto Scope::shallow_query(Thing thing, QueryOptions options) noexcept {
+    return m_world->shallow_query<Include...>(thing, options);
+}
+
+template <typename... Include>
+inline auto Scope::deep_query(Thing thing, QueryOptions options) noexcept {
+    return m_world->deep_query<Include...>(thing, options);
 }
 
 template <typename S>
