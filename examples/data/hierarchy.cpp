@@ -42,7 +42,7 @@ struct Game {
         for (USize i = 0; i < 3; ++i) {
             fr::Thing child = world.handout();
             world.emplace_now<fr::Relations>(child);
-            world.emplace_now<Pos>(child, Pos{.x = static_cast<F32>(i), .y = static_cast<F32>(i)});
+            world.emplace_now<Pos>(child);
 
             for (USize j = 0; j < 3; ++j) {
                 fr::Thing more_so_a_child = world.handout();

@@ -30,7 +30,7 @@ namespace fr {
 /**
  * @brief Kind of command that targets a part.
  */
-enum class CmdKind : U8 { DestroyPart, InsertPart, MutatePart };
+enum class CmdKind : U8 { DestroyPart, InsertPart, MutatePart, AttachChild, DetachChild };
 
 /**
  * @brief Command to destroy a part owned by a thing.

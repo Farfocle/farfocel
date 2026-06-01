@@ -162,7 +162,66 @@ public:
 
     // --------------------------------------------------------------- Relations
 
+    /**
+     * @brief Attaches a child to the parent. Updates hierarchy.
+     * @param parent The parent thing.
+     * @pre `parent` must have `Relations` part.
+     * @param child The child thing.
+     * @pre `child` must have `Relations` part.
+     *
+     * @note If `parent` is nil; does nothing.
+     * @note If `child` is nil; does nothing.
+     */
     void attach_child_now(Thing parent, Thing child) noexcept;
+
+    /**
+     * @brief Emits a `AttachChild` command.
+     * @param parent The parent thing.
+     * @pre `parent` must have `Relations` part.
+     * @param child The child thing.
+     * @pre `child` must have `Relations` part.
+     *
+     * @note If `parent` is nil; does nothing.
+     * @note If `child` is nil; does nothing.
+     */
+    void attach_child(Thing parent, Thing child) noexcept;
+
+    /**
+     * @brief Detaches a child from a parent. Updates hierarchy.
+     * @param parent The parent thing.
+     * @pre `parent` must have `Relations` part.
+     * @param child The child thing.
+     * @pre `child` must have `Relations` part.
+     *
+     * @note If `child` is not a real child of the `parent`; does nothing.
+     * @note If `parent` is nil; does nothing.
+     * @note If `child` is nil; does nothing.
+     */
+    void detach_child_now(Thing parent, Thing child) noexcept;
+
+    /**
+     * @brief Emits a `DetachChild` command.
+     * @param parent The parent thing.
+     * @pre `parent` must have `Relations` part.
+     * @param child The child thing.
+     * @pre `child` must have `Relations` part.
+     *
+     * @note If `child` is not a real child of the `parent`; does nothing.
+     * @note If `parent` is nil; does nothing.
+     * @note If `child` is nil; does nothing.
+     */
+    void detach_child(Thing parent, Thing child) noexcept;
+
+    /**
+     * @brief Updates hierarchy.
+     *
+     * @param root from which root to update the hierarchy from.
+     * @pre `root` must have `Relations` part.
+     *
+     * @note If `root` is nil; does nothing.
+     * @details This only updates the `depth` field of `Relations` part.
+     */
+    void update_hierarchy(Thing root) noexcept;
 
     // ------------------------------------------------- Command Part Operations
 
@@ -268,7 +327,8 @@ public:
 
 private:
     // --------------------------------------------------------------- Internals
-    void do_recompute_hierarchy_depth(HierarchyDepth paren_depth, Thing dirty) noexcept;
+    void do_update_hierarchy(HierarchyDepth parent_depth, Thing child) noexcept;
+    void do_detach_from_hierarchy_unchecked(Thing thing) noexcept;
 
     // -------------------------------------------------------- Member Variables
     Options m_options{};
@@ -405,34 +465,70 @@ inline void World::destroy(Thing thing) noexcept {
 }
 
 inline void World::attach_child_now(Thing parent, Thing child) noexcept {
+    if (parent.is_nil() || child.is_nil()) {
+        return;
+    }
+
     Relations &parent_rel = m_registry.get_unchecked<Relations>(parent);
     Relations &child_rel = m_registry.get_unchecked<Relations>(child);
 
-    if (!child_rel.parent.is_nil()) {
-        Relations &child_parent_rel = m_registry.get_unchecked<Relations>(child_rel.parent);
-        child_parent_rel.first_child = child_rel.next_sibling;
+    if (child_rel.parent == parent) {
+        return;
+    }
 
-        if (!child_parent_rel.first_child.is_nil()) {
-            Relations &child_next_rel =
-                m_registry.get_unchecked<Relations>(child_parent_rel.first_child);
-            child_next_rel.prev_sibling = Thing::nil();
-        }
+    if (!child_rel.parent.is_nil()) {
+        do_detach_from_hierarchy_unchecked(child);
     }
 
     child_rel.parent = parent;
     child_rel.next_sibling = parent_rel.first_child;
 
-    if (!parent_rel.first_child.is_nil()) {
-        Relations &first_child_rel = m_registry.get_unchecked<Relations>(parent_rel.first_child);
-        first_child_rel.prev_sibling = child;
+    if (!child_rel.next_sibling.is_nil()) {
+        Relations &next_rel = m_registry.get_unchecked<Relations>(child_rel.next_sibling);
+        next_rel.prev_sibling = child;
     }
 
     parent_rel.first_child = child;
-
-    do_recompute_hierarchy_depth(parent_rel.depth, child);
+    do_update_hierarchy(parent_rel.depth, child);
 }
 
-inline void World::do_recompute_hierarchy_depth(HierarchyDepth parent_depth, Thing child) noexcept {
+inline void World::attach_child(Thing parent, Thing child) noexcept {
+    if (parent.is_nil() || child.is_nil()) {
+        return;
+    }
+}
+
+inline void World::detach_child_now(Thing parent, Thing child) noexcept {
+    if (parent.is_nil() || child.is_nil()) {
+        return;
+    }
+
+    Relations &child_rel = m_registry.get_unchecked<Relations>(child);
+    if (child_rel.parent != parent) {
+        return;
+    }
+
+    do_detach_from_hierarchy_unchecked(child);
+}
+
+inline void World::detach_child(Thing parent, Thing child) noexcept {
+    if (parent.is_nil() || child.is_nil()) {
+        return;
+    }
+}
+
+inline void World::update_hierarchy(Thing root) noexcept {
+    Relations &root_rel = m_registry.get_unchecked<Relations>(root);
+    Thing curr = root_rel.first_child;
+
+    while (!curr.is_nil()) {
+        Relations &rel = m_registry.get_unchecked<Relations>(curr);
+        do_update_hierarchy(root_rel.depth, curr);
+        curr = rel.next_sibling;
+    }
+}
+
+inline void World::do_update_hierarchy(HierarchyDepth parent_depth, Thing child) noexcept {
     Thing curr_thing = child;
     HierarchyDepth curr_depth = parent_depth + 1;
 
@@ -462,6 +558,50 @@ inline void World::do_recompute_hierarchy_depth(HierarchyDepth parent_depth, Thi
         curr_thing = rel.parent;
         --curr_depth;
     }
+}
+
+inline void World::do_detach_from_hierarchy_unchecked(Thing thing) noexcept {
+    Relations &thing_rel = m_registry.get_unchecked<Relations>(thing);
+
+    if (thing_rel.parent.is_nil()) {
+        return;
+    }
+
+    Relations &parent_rel = m_registry.get_unchecked<Relations>(thing_rel.parent);
+    if (thing == parent_rel.first_child) {
+        FR_ASSERT(thing_rel.prev_sibling.is_nil(), "previous sibling of a first child must be nil");
+
+        parent_rel.first_child = thing_rel.next_sibling;
+        if (!parent_rel.first_child.is_nil()) {
+            Relations &next_rel = m_registry.get_unchecked<Relations>(thing_rel.next_sibling);
+            next_rel.prev_sibling = Thing::nil();
+            thing_rel.next_sibling = Thing::nil();
+        }
+
+        return;
+    }
+
+    if (thing_rel.next_sibling.is_nil()) {
+        Relations &prev_rel = m_registry.get_unchecked<Relations>(thing_rel.prev_sibling);
+        prev_rel.next_sibling = Thing::nil();
+        thing_rel.prev_sibling = Thing::nil();
+        thing_rel.parent = Thing::nil();
+        return;
+    }
+
+    FR_ASSERT(!thing_rel.next_sibling.is_nil(),
+              "in the final case the next sibling must be non-nil");
+    FR_ASSERT(!thing_rel.prev_sibling.is_nil(),
+              "in the final case the previous sibling must be non-nil");
+
+    Relations &prev_rel = m_registry.get_unchecked<Relations>(thing_rel.prev_sibling);
+    Relations &next_rel = m_registry.get_unchecked<Relations>(thing_rel.next_sibling);
+
+    prev_rel.next_sibling = thing_rel.next_sibling;
+    next_rel.prev_sibling = thing_rel.prev_sibling;
+    thing_rel.prev_sibling = Thing::nil();
+    thing_rel.next_sibling = Thing::nil();
+    thing_rel.parent = Thing::nil();
 }
 
 template <typename... Include>
