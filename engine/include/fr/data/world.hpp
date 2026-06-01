@@ -83,6 +83,7 @@ public:
     struct Options {
         Alloc *registry_alloc{get_ambient_ctx().alloc};
         Alloc *system_pool_alloc{get_ambient_ctx().alloc};
+        USize cmd_arena_size{impl::CmdPool::DEFAULT_ARENA_SIZE};
     };
 
     World() noexcept;
@@ -246,6 +247,16 @@ public:
     void commit_part_cmds() noexcept;
 
     /**
+     * @brief Apply all recorded attach-child commands.
+     */
+    void commit_attach_child_cmds() noexcept;
+
+    /**
+     * @brief Apply all recorded detach-child commands.
+     */
+    void commit_detach_child_cmds() noexcept;
+
+    /**
      * @brief Records a deferred insert command for part T on a thing.
      * @note Does nothing if thing is nil, dead, or already owns T.
      */
@@ -380,7 +391,7 @@ inline World::World() noexcept
 inline World::World(const Options &opt) noexcept
     : m_options(opt),
       m_registry(opt.registry_alloc),
-      m_cmd_pool(opt.registry_alloc),
+      m_cmd_pool(opt.registry_alloc, opt.cmd_arena_size),
       m_system_pool(opt.system_pool_alloc),
       m_script_registry(Bitset<MAX_PARTS>::with_zeros()) {
 }
@@ -447,6 +458,15 @@ inline void World::commit_part_cmds() noexcept {
     commit_mutate_part_cmds();
     commit_destroy_part_cmds();
     commit_insert_part_cmds();
+    m_cmd_pool.reset();
+}
+
+inline void World::commit_attach_child_cmds() noexcept {
+    m_cmd_pool.commit_attach_child_all(this);
+}
+
+inline void World::commit_detach_child_cmds() noexcept {
+    m_cmd_pool.commit_detach_child_all(this);
 }
 
 template <typename T>
@@ -496,6 +516,8 @@ inline void World::attach_child(Thing parent, Thing child) noexcept {
     if (parent.is_nil() || child.is_nil()) {
         return;
     }
+
+    m_cmd_pool.record_attach_child(parent, child);
 }
 
 inline void World::detach_child_now(Thing parent, Thing child) noexcept {
@@ -515,6 +537,8 @@ inline void World::detach_child(Thing parent, Thing child) noexcept {
     if (parent.is_nil() || child.is_nil()) {
         return;
     }
+
+    m_cmd_pool.record_detach_child(parent, child);
 }
 
 inline void World::update_hierarchy(Thing root) noexcept {
@@ -770,6 +794,14 @@ inline void Scope::commit_destroy_part_cmds() noexcept {
 
 inline void Scope::commit_part_cmds() noexcept {
     m_world->commit_part_cmds();
+}
+
+inline void Scope::commit_attach_child_cmds() noexcept {
+    m_world->commit_attach_child_cmds();
+}
+
+inline void Scope::commit_detach_child_cmds() noexcept {
+    m_world->commit_detach_child_cmds();
 }
 
 template <typename T>

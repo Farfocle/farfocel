@@ -121,6 +121,16 @@ public:
     void commit_part_cmds() noexcept;
 
     /**
+     * @brief Apply all recorded attach-child commands.
+     */
+    void commit_attach_child_cmds() noexcept;
+
+    /**
+     * @brief Apply all recorded detach-child commands.
+     */
+    void commit_detach_child_cmds() noexcept;
+
+    /**
      * @brief Records a deferred insert command for part T on a thing.
      * @note Does nothing if thing is nil, dead, or already owns T.
      */

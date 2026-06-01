@@ -3,22 +3,21 @@
  * @author Kiju
  *
  * @brief Commands and command pool for the data layer.
- * @details Implements the `fr::CmdPool` which allows for lazy modifications of the world state.
- * Akin to relation database transactions, this sytem allows for safe, batched and synnchonized
- * mutations.
- *
- * @todo Make a mechanism to collect the changes in an efficient way, this could be really helpful
- * for deterministic replays of the evolution of the world.
+ * @details Implements `fr::impl::CmdPool`, which allows for lazy, batched mutations of the world
+ * state. Internally all recorded commands are stored in a flat `CmdSnapshot`:
+ *   - Part data (for insert/mutate) is bump-allocated from a fixed-size arena.
+ *   - Command headers are stored in a single `DynamicArray<RawCmd>`.
  */
 
 #pragma once
 
+#include <cstddef>
 #include <utility>
 
+#include "fr/core/arena_alloc.hpp"
 #include "fr/core/array.hpp"
-#include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
-#include "fr/core/inline_any.hpp"
+#include "fr/core/meta.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/part.hpp"
 #include "fr/data/thing.hpp"
@@ -28,7 +27,7 @@ namespace fr {
 // =============================================================== Command Types
 
 /**
- * @brief Kind of command that targets a part.
+ * @brief Different kinds of commands.
  */
 enum class CmdKind : U8 { DestroyPart, InsertPart, MutatePart, AttachChild, DetachChild };
 
@@ -59,78 +58,144 @@ struct InsertPartCmd {
  */
 template <typename T>
 struct MutatePartCmd {
-    /// @brief Part alias for tooling and reflection.
     using Part = T;
-
-    /// @brief Target thing.
     Thing thing;
-
-    /// @brief Previous part state.
     Part prev;
-
-    /// @brief Next part state.
     Part next;
 };
+
+/**
+ * @brief Command to attach a child thing to a parent thing.
+ */
+struct AttachChildCmd {
+    Thing parent;
+    Thing child;
+};
+
+/**
+ * @brief Command to detach a child thing from a parent thing.
+ */
+struct DetachChildCmd {
+    Thing parent;
+    Thing child;
+};
+
 } // namespace fr
 
 // ================================================================ Command Pool
 
 namespace fr::impl {
 
+// ---------------------------------------------------------- Raw Command Types
+
 /**
- * @brief Storage for command buffers for a specific part type `T`.
- * @tparam T Part type.
+ * @brief Type-erased header for an insert command.
+ * @details `part_ptr` points into the `CmdSnapshot` arena. `destroy_part` is always called on it
+ * during `CmdPool::reset()` — safe whether the part was committed (moved-from, dtor still valid)
+ * or not (uncommitted, dtor destroys the live object).
  */
-template <typename T>
-struct CmdStorage {
-    DynamicArray<DestroyPartCmd<T>> destroy_cmds{};
-    DynamicArray<InsertPartCmd<T>> insert_cmds{};
-    DynamicArray<MutatePartCmd<T>> mutate_cmds{};
-
-    /**
-     * @brief Default constructor that uses the ambient allocator.
-     */
-    CmdStorage() noexcept
-        : CmdStorage(get_ambient_ctx().alloc) {
-    }
-
-    /**
-     * @brief Constructs a `CmdStorage` with the specified allocator.
-     * @param alloc Allocator to use for command buffer memory.
-     * @pre `alloc` must be non-null.
-     */
-    explicit CmdStorage(Alloc *alloc) noexcept {
-        destroy_cmds = DynamicArray<DestroyPartCmd<T>>::with_alloc(alloc);
-        insert_cmds = DynamicArray<InsertPartCmd<T>>::with_alloc(alloc);
-        mutate_cmds = DynamicArray<MutatePartCmd<T>>::with_alloc(alloc);
-    }
+struct RawInsertPartCmd {
+    TypeIdx tidx;
+    Thing thing;
+    void *part_ptr;
+    void (*destroy_part)(void *) noexcept;
 };
 
 /**
- * @brief Pool for managing all the command buffers.
- * @details Two main operations are supported: recording commands and committing them.
+ * @brief Type-erased header for a destroy command.
+ * @details No arena data — the part lives in the registry.
+ */
+struct RawDestroyPartCmd {
+    TypeIdx tidx;
+    Thing thing;
+};
+
+/**
+ * @brief Type-erased header for a mutate command.
+ * @details Both `prev_ptr` and `next_ptr` point into the `CmdSnapshot` arena.
+ */
+struct RawMutatePartCmd {
+    TypeIdx tidx;
+    Thing thing;
+    void *prev_ptr;
+    void *next_ptr;
+    void (*destroy_part)(void *) noexcept;
+};
+
+/**
+ * @brief Discriminated union of all raw command headers.
+ * @details Relation commands reuse their public typed structs directly since they carry no
+ * type-erased data and do not need separate Raw variants.
+ */
+struct RawCmd {
+    CmdKind kind;
+    union {
+        RawInsertPartCmd insert_part;
+        RawDestroyPartCmd destroy_part;
+        RawMutatePartCmd mutate_part;
+        AttachChildCmd attach_child;
+        DetachChildCmd detach_child;
+    };
+};
+
+// ---------------------------------------------------------------- CmdSnapshot
+
+/**
+ * @brief All recorded command data for one commit cycle.
+ * @details `arena` provides fast bump-pointer storage for part copies; `cmds` is the ordered flat
+ * list of command headers. Contains all state needed to replay commands deterministically.
+ */
+struct CmdSnapshot {
+    ArenaAlloc arena{};
+    DynamicArray<RawCmd> cmds{};
+};
+
+// ------------------------------------------------------------------ CmdPool
+
+/**
+ * @brief Records and commits deferred commands against a registry.
+ * @details Uses a fixed-size arena for part data and a single flat `DynamicArray<RawCmd>` for
+ * command headers. Call `reset()` once after all commits to destroy arena objects and clear the
+ * command list in one shot.
  */
 class CmdPool {
 public:
-    // ------------------------------------ Typedefs & Constructors & Destructor
+    // ----------------------------------------- Constants & Constructors & Destructor
 
-    using AnyCmdStorage = InlineAny<sizeof(CmdStorage<Byte>), alignof(CmdStorage<Byte>)>;
-    using CmdCommitFn = void (*)(void *, AnyCmdStorage &) noexcept;
+    /// @brief Default arena size (64 KiB). Tune via `CmdPool(alloc, arena_size)` if needed.
+    static constexpr USize DEFAULT_ARENA_SIZE = 64 * 1024;
 
     /**
-     * @brief Default constructor that uses the ambient allocator.
+     * @brief Construct using the ambient allocator and the default arena size.
      */
     CmdPool() noexcept
         : CmdPool(get_ambient_ctx().alloc) {
     }
 
     /**
-     * @brief Constructs a `CmdPool` with the specified allocator.
-     * @param alloc Allocator to use for command buffer memory.
-     * @pre `alloc` must be non-null.
+     * @brief Construct with an explicit allocator and arena size.
+     * @param alloc       Allocator for both the arena backing buffer and the cmd list.
+     * @param arena_size  Size in bytes of the arena; tune based on expected part data per frame.
+     * @pre `alloc` must be non-null and `arena_size` must be non-zero.
      */
-    explicit CmdPool(Alloc *alloc) noexcept
+    explicit CmdPool(Alloc *alloc, USize arena_size = DEFAULT_ARENA_SIZE) noexcept
         : m_alloc(alloc) {
+        FR_ASSERT(alloc, "allocator must be non-null");
+        FR_ASSERT(arena_size > 0, "arena size must be non-zero");
+
+        Byte *buf = static_cast<Byte *>(alloc->allocate(arena_size, alignof(std::max_align_t)));
+        m_arena_buffer = Slice<Byte>(buf, arena_size);
+        m_snapshot.arena = ArenaAlloc(m_arena_buffer.data(), m_arena_buffer.size(), "CmdPool");
+        m_snapshot.cmds = DynamicArray<RawCmd>::with_alloc(alloc);
+    }
+
+    /**
+     * @brief Destroys any pending arena objects and frees the arena buffer.
+     */
+    ~CmdPool() noexcept {
+        reset();
+        m_alloc->deallocate(m_arena_buffer.data(), m_arena_buffer.size(),
+                            alignof(std::max_align_t));
     }
 
     CmdPool(const CmdPool &) = delete;
@@ -138,251 +203,380 @@ public:
     CmdPool &operator=(const CmdPool &) = delete;
     CmdPool &operator=(CmdPool &&) = delete;
 
-    // --------------------------------------------------------- Record Commands
+    // ---------------------------------------------------------- Record Commands
 
     /**
-     * @brief Records a destroy command for the specified thing.
-     * @tparam T Type of the part to destroy.
-     * @tparam RegistryT Type of the registry.
-     * @param registry Reference to the registry.
-     * @param thing The thing to destroy.
-     * @note If the thing is nil or dead; does nothing.
-     * @note If the thing does not have the specified part; does nothing.
+     * @brief Records a destroy command for part `T` on a thing.
+     * @note Does nothing if thing is nil, dead, or does not have part `T`.
      */
     template <typename T, typename RegistryT>
     void record_destroy(RegistryT &registry, Thing thing) noexcept {
         if (thing.is_nil()) [[unlikely]] {
             return;
         }
-
         if (!registry.is_alive(thing)) [[unlikely]] {
             return;
         }
-
         if (!registry.template has<T>(thing)) [[unlikely]] {
             return;
         }
 
-        do_ensure_cmd_storage<T, RegistryT>().destroy_cmds.push_back(
-            DestroyPartCmd<T>{.thing = thing});
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        do_ensure_commit_fns<T, RegistryT>(tidx);
+
+        RawCmd cmd{};
+        cmd.kind = CmdKind::DestroyPart;
+        cmd.destroy_part = RawDestroyPartCmd{.tidx = tidx, .thing = thing};
+        m_snapshot.cmds.push_back(cmd);
     }
 
     /**
-     * @brief Records an insert command for the specified thing and part.
-     * @tparam T Type of the part to insert.
-     * @tparam RegistryT Type of the registry.
-     * @param registry Reference to the registry.
-     * @param thing The thing to insert the part into.
-     * @param part The part to insert.
-     * @note If the thing is nil or dead; does nothing.
-     * @note If the thing already has the specified part; does nothing.
+     * @brief Records an insert command for part `T` (copy) on a thing.
+     * @note Does nothing if thing is nil, dead, or already has part `T`.
      */
     template <typename T, typename RegistryT>
     void record_insert(RegistryT &registry, Thing thing, const T &part) noexcept {
         if (thing.is_nil()) [[unlikely]] {
             return;
         }
-
         if (!registry.is_alive(thing)) [[unlikely]] {
             return;
         }
-
         if (registry.template has<T>(thing)) [[unlikely]] {
             return;
         }
 
-        do_ensure_cmd_storage<T, RegistryT>().insert_cmds.push_back(
-            InsertPartCmd<T>{.thing = thing, .part = part});
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        do_ensure_commit_fns<T, RegistryT>(tidx);
+
+        void *part_ptr = m_snapshot.arena.allocate(sizeof(T), alignof(T));
+        new (part_ptr) T(part);
+
+        RawCmd cmd{};
+        cmd.kind = CmdKind::InsertPart;
+        cmd.insert_part = RawInsertPartCmd{
+            .tidx = tidx,
+            .thing = thing,
+            .part_ptr = part_ptr,
+            .destroy_part = &TypeInfo<T>::destroy,
+        };
+        m_snapshot.cmds.push_back(cmd);
     }
 
     /**
-     * @brief Records an insert command for a part into a thing.
-     * @tparam T Type of the part.
-     * @tparam RegistryT Type of the registry.
-     * @param registry Reference to the registry.
-     * @param thing The thing to insert the part into.
-     * @param part The part to insert.
-     * @note If the thing is nil or dead; does nothing.
-     * @note If the thing already has the specified part; does nothing.
+     * @brief Records an insert command for part `T` (move) on a thing.
+     * @note Does nothing if thing is nil, dead, or already has part `T`.
      */
     template <typename T, typename RegistryT>
     void record_insert(RegistryT &registry, Thing thing, T &&part) noexcept {
         if (thing.is_nil()) [[unlikely]] {
             return;
         }
-
         if (!registry.is_alive(thing)) [[unlikely]] {
             return;
         }
-
         if (registry.template has<T>(thing)) [[unlikely]] {
             return;
         }
 
-        do_ensure_cmd_storage<T, RegistryT>().insert_cmds.push_back(
-            InsertPartCmd<T>{.thing = thing, .part = std::move(part)});
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        do_ensure_commit_fns<T, RegistryT>(tidx);
+
+        void *part_ptr = m_snapshot.arena.allocate(sizeof(T), alignof(T));
+        new (part_ptr) T(std::move(part));
+
+        RawCmd cmd{};
+        cmd.kind = CmdKind::InsertPart;
+        cmd.insert_part = RawInsertPartCmd{
+            .tidx = tidx,
+            .thing = thing,
+            .part_ptr = part_ptr,
+            .destroy_part = &TypeInfo<T>::destroy,
+        };
+        m_snapshot.cmds.push_back(cmd);
     }
 
     /**
-     * @brief Records a mutate command for a part in a thing.
-     * @tparam T Type of the part.
-     * @tparam RegistryT Type of the registry.
-     * @param registry Reference to the registry.
-     * @param thing The thing to mutate the part in.
-     * @param prev The previous value of the part.
-     * @param next The new value of the part.
-     * @note If the thing is nil or dead; does nothing.
-     * @note If the thing does not have the specified part; does nothing.
+     * @brief Records a mutate command (prev → next) for part `T` on a thing.
+     * @note Does nothing if thing is nil, dead, or does not have part `T`.
      */
     template <typename T, typename RegistryT>
     void record_mutate(RegistryT &registry, Thing thing, const T &prev, const T &next) noexcept {
         if (thing.is_nil()) [[unlikely]] {
             return;
         }
-
         if (!registry.is_alive(thing)) [[unlikely]] {
             return;
         }
-
         if (!registry.template has<T>(thing)) [[unlikely]] {
             return;
         }
 
-        do_ensure_cmd_storage<T, RegistryT>().mutate_cmds.push_back(
-            MutatePartCmd<T>{.thing = thing, .prev = prev, .next = next});
+        TypeIdx tidx = TypeIdx::from_type<T>();
+        do_ensure_commit_fns<T, RegistryT>(tidx);
+
+        void *prev_ptr = m_snapshot.arena.allocate(sizeof(T), alignof(T));
+        new (prev_ptr) T(prev);
+
+        void *next_ptr = m_snapshot.arena.allocate(sizeof(T), alignof(T));
+        new (next_ptr) T(next);
+
+        RawCmd cmd{};
+        cmd.kind = CmdKind::MutatePart;
+        cmd.mutate_part = RawMutatePartCmd{
+            .tidx = tidx,
+            .thing = thing,
+            .prev_ptr = prev_ptr,
+            .next_ptr = next_ptr,
+            .destroy_part = &TypeInfo<T>::destroy,
+        };
+        m_snapshot.cmds.push_back(cmd);
     }
 
-    // --------------------------------------------------------- Commit Commands
+    /**
+     * @brief Records an attach-child relation command.
+     */
+    void record_attach_child(Thing parent, Thing child) noexcept {
+        RawCmd cmd{};
+        cmd.kind = CmdKind::AttachChild;
+        cmd.attach_child = AttachChildCmd{.parent = parent, .child = child};
+        m_snapshot.cmds.push_back(cmd);
+    }
 
     /**
-     * @brief Commits all destroy commands for all parts.
-     * @tparam RegistryT Type of the registry.
-     * @param registry Pointer to the registry.
+     * @brief Records a detach-child relation command.
+     */
+    void record_detach_child(Thing parent, Thing child) noexcept {
+        RawCmd cmd{};
+        cmd.kind = CmdKind::DetachChild;
+        cmd.detach_child = DetachChildCmd{.parent = parent, .child = child};
+        m_snapshot.cmds.push_back(cmd);
+    }
+
+    // ---------------------------------------------------------- Commit Commands
+
+    /**
+     * @brief Commits all destroy commands: calls `destroy_checked<T>` for each.
      */
     template <typename RegistryT>
     void commit_destroy_all(RegistryT *registry) noexcept {
-        for (USize i = 0; i < MAX_PARTS; ++i) {
-            if (m_cmds[i].is_nil()) {
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind != CmdKind::DestroyPart) {
                 continue;
             }
-
-            if (m_commit_destroy_fns[i]) {
-                m_commit_destroy_fns[i](static_cast<void *>(registry), m_cmds[i]);
+            const RawDestroyPartCmd &c = cmd.destroy_part;
+            if (m_commit_destroy_fns[c.tidx.idx()]) {
+                m_commit_destroy_fns[c.tidx.idx()](static_cast<void *>(registry), c.thing);
             }
         }
     }
 
     /**
-     * @brief Commits all insert commands for all parts.
-     * @tparam RegistryT Type of the registry.
-     * @param registry Pointer to the registry.
+     * @brief Commits all insert commands: moves arena part data into the registry.
      */
     template <typename RegistryT>
     void commit_insert_all(RegistryT *registry) noexcept {
-        for (USize i = 0; i < MAX_PARTS; ++i) {
-            if (m_cmds[i].is_nil()) {
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind != CmdKind::InsertPart) {
                 continue;
             }
-
-            if (m_commit_insert_fns[i]) {
-                m_commit_insert_fns[i](static_cast<void *>(registry), m_cmds[i]);
+            const RawInsertPartCmd &c = cmd.insert_part;
+            if (m_commit_insert_fns[c.tidx.idx()]) {
+                m_commit_insert_fns[c.tidx.idx()](static_cast<void *>(registry), c.thing,
+                                                  c.part_ptr);
             }
         }
     }
 
     /**
-     * @brief Commits all mutate commands for all parts.
-     * @tparam RegistryT Type of the registry.
-     * @param registry Pointer to the registry.
+     * @brief Commits all mutate commands: moves the `next` state from the arena into the registry.
      */
     template <typename RegistryT>
     void commit_mutate_all(RegistryT *registry) noexcept {
-        for (USize i = 0; i < MAX_PARTS; ++i) {
-            if (m_cmds[i].is_nil()) {
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind != CmdKind::MutatePart) {
                 continue;
             }
-
-            if (m_commit_mutate_fns[i]) {
-                m_commit_mutate_fns[i](static_cast<void *>(registry), m_cmds[i]);
+            const RawMutatePartCmd &c = cmd.mutate_part;
+            if (m_commit_mutate_fns[c.tidx.idx()]) {
+                m_commit_mutate_fns[c.tidx.idx()](static_cast<void *>(registry), c.thing,
+                                                  c.next_ptr);
             }
         }
     }
 
-    // -------------------------------------------------------- Internal Methods
+    /**
+     * @brief Commits all attach-child commands.
+     * @tparam WorldT Any type exposing `attach_child_now(Thing, Thing) noexcept`.
+     */
+    template <typename WorldT>
+    void commit_attach_child_all(WorldT *world) noexcept {
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind != CmdKind::AttachChild) {
+                continue;
+            }
+            world->attach_child_now(cmd.attach_child.parent, cmd.attach_child.child);
+        }
+    }
+
+    /**
+     * @brief Commits all detach-child commands.
+     * @tparam WorldT Any type exposing `detach_child_now(Thing, Thing) noexcept`.
+     */
+    template <typename WorldT>
+    void commit_detach_child_all(WorldT *world) noexcept {
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind != CmdKind::DetachChild) {
+                continue;
+            }
+            world->detach_child_now(cmd.detach_child.parent, cmd.detach_child.child);
+        }
+    }
+
+    /**
+     * @brief Destroys all arena-allocated part objects and clears the command list.
+     * @details Must be called once after all commit functions. Safe to call with uncommitted
+     * commands — arena objects are properly destroyed regardless.
+     */
+    void reset() noexcept {
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind == CmdKind::InsertPart) {
+                cmd.insert_part.destroy_part(cmd.insert_part.part_ptr);
+            } else if (cmd.kind == CmdKind::MutatePart) {
+                cmd.mutate_part.destroy_part(cmd.mutate_part.prev_ptr);
+                cmd.mutate_part.destroy_part(cmd.mutate_part.next_ptr);
+            }
+        }
+        m_snapshot.cmds.clear();
+        m_snapshot.arena.reset();
+    }
+
+    // ------------------------------------------------------- Collect (Debug)
+
+    /**
+     * @brief Returns a snapshot of all pending insert-part command headers.
+     * @note Allocates using the pool's own allocator. Intended for debugging and inspection.
+     */
+    DynamicArray<RawInsertPartCmd> collect_insert_part_cmds() const noexcept {
+        DynamicArray<RawInsertPartCmd> result = DynamicArray<RawInsertPartCmd>::with_alloc(m_alloc);
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind == CmdKind::InsertPart) {
+                result.push_back(cmd.insert_part);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @brief Returns a snapshot of all pending destroy-part command headers.
+     * @note Allocates using the pool's own allocator. Intended for debugging and inspection.
+     */
+    DynamicArray<RawDestroyPartCmd> collect_destroy_part_cmds() const noexcept {
+        DynamicArray<RawDestroyPartCmd> result =
+            DynamicArray<RawDestroyPartCmd>::with_alloc(m_alloc);
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind == CmdKind::DestroyPart) {
+                result.push_back(cmd.destroy_part);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @brief Returns a snapshot of all pending mutate-part command headers.
+     * @note Allocates using the pool's own allocator. Intended for debugging and inspection.
+     */
+    DynamicArray<RawMutatePartCmd> collect_mutate_part_cmds() const noexcept {
+        DynamicArray<RawMutatePartCmd> result = DynamicArray<RawMutatePartCmd>::with_alloc(m_alloc);
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind == CmdKind::MutatePart) {
+                result.push_back(cmd.mutate_part);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @brief Returns a snapshot of all pending attach-child commands.
+     * @note Allocates using the pool's own allocator. Intended for debugging and inspection.
+     */
+    DynamicArray<AttachChildCmd> collect_attach_child_cmds() const noexcept {
+        DynamicArray<AttachChildCmd> result = DynamicArray<AttachChildCmd>::with_alloc(m_alloc);
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind == CmdKind::AttachChild) {
+                result.push_back(cmd.attach_child);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @brief Returns a snapshot of all pending detach-child commands.
+     * @note Allocates using the pool's own allocator. Intended for debugging and inspection.
+     */
+    DynamicArray<DetachChildCmd> collect_detach_child_cmds() const noexcept {
+        DynamicArray<DetachChildCmd> result = DynamicArray<DetachChildCmd>::with_alloc(m_alloc);
+        for (const RawCmd &cmd : m_snapshot.cmds) {
+            if (cmd.kind == CmdKind::DetachChild) {
+                result.push_back(cmd.detach_child);
+            }
+        }
+        return result;
+    }
 
 private:
+    // --------------------------------------------------------- Internal Methods
+
+    using CommitInsertFn = void (*)(void *registry, Thing thing, void *part_ptr) noexcept;
+    using CommitDestroyFn = void (*)(void *registry, Thing thing) noexcept;
+    using CommitMutateFn = void (*)(void *registry, Thing thing, void *next_ptr) noexcept;
+
+    /**
+     * @brief Registers the three commit functions for type T the first time a cmd of that type
+     * is recorded. All three are always set together so any of them serves as the "is
+     * initialized" sentinel.
+     */
     template <typename T, typename RegistryT>
-    CmdStorage<T> &do_ensure_cmd_storage() noexcept {
-        TypeIdx tidx = TypeIdx::from_type<T>();
+    void do_ensure_commit_fns(TypeIdx tidx) noexcept {
         FR_ASSERT(tidx.idx() < MAX_PARTS, "invalid part type index");
-
-        if (m_cmds[tidx.idx()].is_nil()) [[unlikely]] {
-            do_create_cmd_storage<T, RegistryT>(tidx);
+        if (m_commit_insert_fns[tidx.idx()]) {
+            return;
         }
-
-        return m_cmds[tidx.idx()].cast_ref<CmdStorage<T>>();
+        m_commit_insert_fns[tidx.idx()] = &CmdPool::do_commit_insert<T, RegistryT>;
+        m_commit_destroy_fns[tidx.idx()] = &CmdPool::do_commit_destroy<T, RegistryT>;
+        m_commit_mutate_fns[tidx.idx()] = &CmdPool::do_commit_mutate<T, RegistryT>;
     }
 
     template <typename T, typename RegistryT>
-    void do_create_cmd_storage(TypeIdx tidx) noexcept {
-        m_cmds[tidx.idx()].template emplace<CmdStorage<T>>(m_alloc);
-        m_commit_destroy_fns[tidx.idx()] = &CmdPool::do_commit_destroy_cmds<T, RegistryT>;
-        m_commit_insert_fns[tidx.idx()] = &CmdPool::do_commit_insert_cmds<T, RegistryT>;
-        m_commit_mutate_fns[tidx.idx()] = &CmdPool::do_commit_mutate_cmds<T, RegistryT>;
-    }
-
-    template <typename T, typename RegistryT>
-    static void do_commit_destroy_cmds(void *registry_ptr, AnyCmdStorage &cmds) noexcept {
+    static void do_commit_insert(void *registry_ptr, Thing thing, void *part_ptr) noexcept {
         RegistryT *registry = static_cast<RegistryT *>(registry_ptr);
-        CmdStorage<T> &typed_cmds = cmds.cast_ref<CmdStorage<T>>();
-
-        for (const auto &cmd : typed_cmds.destroy_cmds) {
-            registry->template destroy_checked<T>(cmd.thing);
-        }
-
-        typed_cmds.destroy_cmds.clear();
+        T *part = static_cast<T *>(part_ptr);
+        registry->template emplace_checked<T>(thing, std::move(*part));
     }
 
     template <typename T, typename RegistryT>
-    static void do_commit_insert_cmds(void *registry_ptr, AnyCmdStorage &cmds) noexcept {
+    static void do_commit_destroy(void *registry_ptr, Thing thing) noexcept {
         RegistryT *registry = static_cast<RegistryT *>(registry_ptr);
-        CmdStorage<T> &typed_cmds = cmds.cast_ref<CmdStorage<T>>();
-
-        for (const auto &cmd : typed_cmds.insert_cmds) {
-            registry->template emplace_checked<T>(cmd.thing, cmd.part);
-        }
-
-        typed_cmds.insert_cmds.clear();
+        registry->template destroy_checked<T>(thing);
     }
 
     template <typename T, typename RegistryT>
-    static void do_commit_mutate_cmds(void *registry_ptr, AnyCmdStorage &cmds) noexcept {
+    static void do_commit_mutate(void *registry_ptr, Thing thing, void *next_ptr) noexcept {
         RegistryT *registry = static_cast<RegistryT *>(registry_ptr);
-        CmdStorage<T> &typed_cmds = cmds.cast_ref<CmdStorage<T>>();
-
-        for (const auto &cmd : typed_cmds.mutate_cmds) {
-            T *part = registry->template get_checked<T>(cmd.thing);
-            if (part) [[likely]] {
-                *part = cmd.next;
-            }
+        T *part = registry->template get_checked<T>(thing);
+        if (part) [[likely]] {
+            *part = std::move(*static_cast<T *>(next_ptr));
         }
-
-        typed_cmds.mutate_cmds.clear();
     }
 
-    // -------------------------------------------------------- Member Variables
+    // --------------------------------------------------------- Member Variables
+
     Alloc *m_alloc{nullptr};
-    Array<AnyCmdStorage, MAX_PARTS> m_cmds{};
-    Array<CmdCommitFn, MAX_PARTS> m_commit_destroy_fns{};
-    Array<CmdCommitFn, MAX_PARTS> m_commit_insert_fns{};
-    Array<CmdCommitFn, MAX_PARTS> m_commit_mutate_fns{};
+    Slice<Byte> m_arena_buffer{};
+    CmdSnapshot m_snapshot{};
+    Array<CommitInsertFn, MAX_PARTS> m_commit_insert_fns{};
+    Array<CommitDestroyFn, MAX_PARTS> m_commit_destroy_fns{};
+    Array<CommitMutateFn, MAX_PARTS> m_commit_mutate_fns{};
 };
 
-// ----------------------------------------------------------- Static Assertions
-
-FR_STATIC_ASSERT(sizeof(CmdStorage<Byte>) == sizeof(CmdStorage<U64>),
-                 "cmd storages must have the same size regardless of the part type");
-
-FR_STATIC_ASSERT(alignof(CmdStorage<Byte>) == alignof(CmdStorage<U64>),
-                 "cmd storages must have the same alignment regardless of the part type");
 } // namespace fr::impl

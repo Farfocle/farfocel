@@ -119,6 +119,9 @@ struct TypeMeta {
     /// @brief Destructor hook.
     void (*destroy)(void *) noexcept {nullptr};
 
+    /// @brief Move-construct a T from src into dst.
+    void (*move_construct)(void *dst, void *src) noexcept {nullptr};
+
     /// @brief Shape writer hook (JSON).
     void (*json_writer_shape)(JsonWriterArchive &, void *) noexcept {nullptr};
 
@@ -154,6 +157,11 @@ struct TypeInfo {
     /// @brief Destroy a T at the given address.
     static void destroy(void *ptr) noexcept {
         static_cast<T *>(ptr)->~T();
+    }
+
+    /// @brief Move-construct a T at dst from src.
+    static void move_construct(void *dst, void *src) noexcept {
+        new (dst) T(std::move(*static_cast<T *>(src)));
     }
 
     /// @brief Serialize T via shape protocol (writer).
@@ -259,6 +267,7 @@ TypeIdx lookup_tidx_from_registry(TypeRegistry &registry) noexcept {
         .name = TypeInfo<T>::name(),
         .construct = TypeInfo<T>::construct,
         .destroy = TypeInfo<T>::destroy,
+        .move_construct = TypeInfo<T>::move_construct,
         .json_writer_shape = TypeInfo<T>::json_writer_shape,
         .json_reader_shape = TypeInfo<T>::json_reader_shape,
     });
@@ -293,6 +302,9 @@ TypeIdx lookup_tidx() noexcept {
         }                                                                                          \
         static void destroy(void *ptr) noexcept {                                                  \
             static_cast<T *>(ptr)->~T();                                                           \
+        }                                                                                          \
+        static void move_construct(void *dst, void *src) noexcept {                                \
+            new (dst) T(std::move(*static_cast<T *>(src)));                                        \
         }                                                                                          \
         static void json_writer_shape(fr::JsonWriterArchive &archive, void *ptr) noexcept {        \
             call_shape(archive, *(static_cast<T *>(ptr)));                                         \
