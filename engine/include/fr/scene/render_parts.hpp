@@ -1,7 +1,7 @@
 /**
  * @file components.hpp
  * @author Tfoedy
- * @brief Core ECS components for the rendering system.
+ * @brief Core ECS components, or in our case, parts, for the rendering system.
  */
 #pragma once
 
@@ -26,7 +26,7 @@ enum class ShadingModel : U32 {
 /**
  * @brief Space properties of an entity.
  */
-struct TransformComponent {
+struct TransformPart {
     using vec3_t = glm::vec3;
     using quat_t = glm::quat;
 
@@ -34,7 +34,7 @@ struct TransformComponent {
     quat_t rotation;
     vec3_t scale;
 
-    TransformComponent() noexcept
+    TransformPart() noexcept
         : position(0.0f, 0.0f, 0.0f),
           rotation(1.0f, 0.0f, 0.0f, 0.0f),
           scale(1.0f, 1.0f, 1.0f) {
@@ -44,31 +44,35 @@ struct TransformComponent {
 /**
  * @brief Lens properties of a camera.
  */
-struct CameraComponent {
-    F32 fov;
-    F32 near_plane;
-    F32 far_plane;
-    bool is_main;
+struct CameraPart {
+    F32 fov{70.0f};
+    F32 near_plane{0.1f};
+    F32 far_plane{1000.0f};
+    bool is_main{true};
 
-    CameraComponent() noexcept
-        : fov(70.0f),
-          near_plane(0.1f),
-          far_plane(1000.0f),
-          is_main(true) {
-    }
+    CameraPart() noexcept = default;
+};
+
+struct FPSControllerPart {
+    F32 pitch{0.0f};
+    F32 yaw{-90.0f};
+    F32 move_speed{15.0f};
+    F32 mouse_sensitivity{0.1f};
+
+    FPSControllerPart() noexcept = default;
 };
 
 /**
  * @brief Represents the 3D shape attached to an entity.
  */
-struct MeshComponent {
+struct MeshPart {
     MeshAssetHandle handle;
 
-    MeshComponent() noexcept
+    MeshPart() noexcept
         : handle() {
     }
 
-    explicit MeshComponent(const MeshAssetHandle &h) noexcept
+    explicit MeshPart(const MeshAssetHandle &h) noexcept
         : handle(h) {
     }
 };
@@ -76,7 +80,7 @@ struct MeshComponent {
 /**
  * @brief Defines the surface visuals and light interactions of an entity.
  */
-struct MaterialComponent {
+struct MaterialPart {
     ShadingModel shading_model;
 
     TextureAssetHandle albedo_map;
@@ -84,12 +88,28 @@ struct MaterialComponent {
     /// Specular for Standard, metallic/Roughness for PBR
     TextureAssetHandle extra_map;
 
-    MaterialComponent() noexcept
+    MaterialPart() noexcept
         : shading_model(ShadingModel::PBR),
           albedo_map(),
           normal_map(),
           extra_map() {
     }
+};
+
+/// @brief Point light source component
+struct PointLightPart {
+    glm::vec3 color{1.0f, 1.0f, 1.0f};
+    F32 intensity{1.0f};
+    F32 radius{10.0f};
+
+    PointLightPart() noexcept = default;
+};
+
+/// @brief Directional light source like the sun
+struct DirectionalLightPart {
+    glm::vec3 color{1.0f, 1.0f, 1.0f};
+    F32 intensity{5.0f};
+    DirectionalLightPart() noexcept = default;
 };
 
 } // namespace fr

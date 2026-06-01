@@ -16,6 +16,7 @@ uniform uint u_shading_model;
 
 void main() {
     vec4 albedo = texture(u_albedo_map, v_uv);
+    if (albedo.a < 0.1f) discard;
     
     vec3 normal = normalize(v_normal);
     

@@ -100,7 +100,7 @@ public:
             }
         }
 
-        MeshData new_data = load_mesh_gltf(m_device, file_path);
+        MeshData new_data = load_mesh_gltf(this, m_device, file_path);
         if (!new_data.vbo.is_valid()) {
             return MeshAssetHandle{};
         }

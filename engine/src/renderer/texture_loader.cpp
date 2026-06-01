@@ -1,8 +1,4 @@
-/**
- * @file texture_loader.cpp
- * @author Tfoedy
- * @brief Implementation of the texture loader using the stb_image library.
- */
+// THIS WILL BE REMOVED FROM THE ENGINE
 
 #include "fr/renderer/texture_loader.hpp"
 #include "fr/core/string.hpp"
@@ -15,7 +11,7 @@ FR_API TextureHandle load_texture_2d(RenderDevice *device, StringView file_path,
     String path = String::from_view(file_path);
     int width, height, channels;
 
-    stbi_set_flip_vertically_on_load(true);
+    stbi_set_flip_vertically_on_load(false);
 
     stbi_uc *pixels = stbi_load(path.c_str(), &width, &height, &channels, 4);
 

@@ -2,7 +2,7 @@
  * @file renderer.hpp
  * @author Tfoedy
  *
- * @brief Deferred renderer of Farfocel
+ * @brief Renderer does a bunch of things
  */
 #pragma once
 
@@ -12,6 +12,13 @@
 #include "fr/renderer/render_queue.hpp"
 
 namespace fr {
+
+struct alignas(16) CameraData {
+    glm::mat4 view_proj;
+    glm::mat4 inv_view_proj;
+    glm::vec4 cam_pos;
+};
+
 class Renderer {
 public:
     /**
@@ -25,7 +32,7 @@ public:
     }
 
     /**
-     * @brief Destructor. Cleans up G-Buffer textures and SSBOS from VRAM.
+     * @brief Destructor. Cleans up G-Buffer textures, shadow maps, and SSBOs from VRAM.
      */
     ~Renderer() noexcept {
         if (m_device) {
@@ -39,6 +46,14 @@ public:
             if (m_default_normal.is_valid())
                 m_device->destroy_texture(m_default_normal);
 
+            if (m_lights_ssbo.is_valid())
+                m_device->destroy_buffer(m_lights_ssbo);
+            if (m_dir_lights_ssbo.is_valid())
+                m_device->destroy_buffer(m_dir_lights_ssbo);
+
+            if (m_shadow_map.is_valid())
+                m_device->destroy_texture(m_shadow_map);
+
             destroy_gbuffer();
         }
     }
@@ -49,17 +64,29 @@ public:
      * @param width Current viewport width.
      * @param height Current viewport height.
      * @param view_proj The combined View-Projection matrix from the active camera.
-     * @param lighting_pipe The pipeline handling the current render pass.
+     * @param cam_pos The transform position of the camera for PBR calculations.
+     * @param lighting_pipe The pipeline handling the deferred lighting composition pass.
+     * @param shadow_pipe The pipeline handling the directional shadow depth pass.
      */
     void render(const RenderQueue &queue, U32 width, U32 height, const glm::mat4 &view_proj,
-                RenderPipelineHandle lighting_pipe) noexcept {
+                const glm::vec3 &cam_pos, RenderPipelineHandle lighting_pipe,
+                RenderPipelineHandle shadow_pipe) noexcept {
         if (queue.is_empty())
             return;
 
+        // RENDER TARGET INITIALIZATION & RESIZING
         if (m_width != width || m_height != height) {
             resize_gbuffer(width, height);
         }
 
+        if (!m_shadow_map.is_valid()) {
+            m_shadow_map = m_device->create_texture_2d(m_shadow_map_size, m_shadow_map_size,
+                                                       TextureFormat::Depth32_Float);
+        }
+
+        // SSBO DATA
+
+        // Transforms SSBO
         auto transforms = queue.get_transforms();
         U32 needed_capacity = static_cast<U32>(transforms.size());
 
@@ -78,23 +105,120 @@ public:
                                           transforms.size() * sizeof(glm::mat4));
         m_device->update_buffer(m_transform_ssbo, transform_bytes);
 
+        // Camera SSBO
+
         if (!m_camera_ssbo.is_valid()) {
             m_camera_ssbo =
-                m_device->create_buffer(Slice<const Byte>(nullptr, sizeof(glm::mat4)), true);
+                m_device->create_buffer(Slice<const Byte>(nullptr, sizeof(CameraData)), true);
         }
+
+        CameraData camera_data = {view_proj, glm::inverse(view_proj), glm::vec4(cam_pos, 1.0f)};
+
         m_device->update_buffer(
             m_camera_ssbo,
-            Slice<const Byte>(reinterpret_cast<const Byte *>(&view_proj), sizeof(glm::mat4)));
+            Slice<const Byte>(reinterpret_cast<const Byte *>(&camera_data), sizeof(CameraData)));
 
+        // Lights SSBO
+        auto lights = queue.get_point_lights();
+        U32 needed_lights = static_cast<U32>(lights.size());
+
+        auto dir_lights = queue.get_directional_lights();
+        U32 needed_dir_lights = static_cast<U32>(dir_lights.size());
+
+        if (needed_lights == 0)
+            needed_lights = 1;
+        if (needed_dir_lights == 0)
+            needed_dir_lights = 1;
+
+        if (needed_lights > m_lights_capacity) {
+            m_lights_capacity = (needed_lights * 200) / 100;
+            if (m_lights_capacity < 64)
+                m_lights_capacity = 64;
+
+            m_device->destroy_buffer(m_lights_ssbo);
+            m_lights_ssbo = m_device->create_buffer(
+                Slice<const Byte>(nullptr, m_lights_capacity * sizeof(PointLightData)), true);
+        }
+
+        if (needed_dir_lights > m_dir_lights_capacity) {
+            m_dir_lights_capacity = (needed_dir_lights * 200) / 100;
+            if (m_dir_lights_capacity < 64)
+                m_dir_lights_capacity = 64;
+
+            m_device->destroy_buffer(m_dir_lights_ssbo);
+            m_dir_lights_ssbo = m_device->create_buffer(
+                Slice<const Byte>(nullptr, m_dir_lights_capacity * sizeof(DirectionalLightData)),
+                true);
+        }
+
+        if (!lights.is_empty()) {
+            Slice<const Byte> light_bytes(reinterpret_cast<const Byte *>(lights.data()),
+                                          lights.size() * sizeof(PointLightData));
+            m_device->update_buffer(m_lights_ssbo, light_bytes);
+        }
+
+        if (!dir_lights.is_empty()) {
+            Slice<const Byte> dir_light_bytes(reinterpret_cast<const Byte *>(dir_lights.data()),
+                                              dir_lights.size() * sizeof(DirectionalLightData));
+            m_device->update_buffer(m_dir_lights_ssbo, dir_light_bytes);
+        }
+
+        // COMMAND BUFFER RECORDING
         CommandBuffer *cmd = m_device->adopt_command_buffer();
 
-        // --------------------------------------------------
+        // SHADOW PASS
+        cmd->begin_render_pass(Slice<const TextureHandle>(), m_shadow_map);
+        cmd->set_viewport(m_shadow_map_size, m_shadow_map_size);
+        cmd->set_pipeline(shadow_pipe);
+
+        cmd->bind_storage_buffer(m_transform_ssbo, 0);
+        cmd->bind_storage_buffer(m_dir_lights_ssbo, 3);
+
+        BufferHandle curr_sh_vbo{};
+        BufferHandle curr_sh_ibo{};
+        TextureHandle curr_sh_albedo{};
+
+        for (const DrawCall &call : queue.get_calls()) {
+            U8 pass_type = static_cast<U8>(call.key.value >> 56);
+            if (pass_type > 1) { // 0 = Opaque, 1 = Masked. Skip transparents/UI
+                continue;
+            }
+
+            if (call.vbo.key != curr_sh_vbo.key) {
+                cmd->bind_vertex_buffer(call.vbo, call.vbo_stride);
+                curr_sh_vbo = call.vbo;
+            }
+            if (call.ibo.key != curr_sh_ibo.key) {
+                cmd->bind_index_buffer(call.ibo);
+                curr_sh_ibo = call.ibo;
+            }
+
+            // Alpha testing requires the albedo map
+            TextureHandle tex_albedo =
+                call.albedo_map.is_valid() ? call.albedo_map : m_default_white;
+            if (tex_albedo.key != curr_sh_albedo.key) {
+                cmd->bind_texture(tex_albedo, 0);
+                curr_sh_albedo = tex_albedo;
+            }
+
+            struct PushConstants {
+                U32 transform_index;
+                U32 shading_model;
+            } push_data = {call.transform_index, call.shading_model};
+
+            Slice<const Byte> push_bytes(reinterpret_cast<const Byte *>(&push_data),
+                                         sizeof(PushConstants));
+            cmd->set_push_constants(push_bytes);
+            cmd->draw_indexed(call.index_count, call.index_offset, call.vertex_offset);
+        }
+        cmd->end_render_pass();
+
         // GEOMETRY PASS
-        // --------------------------------------------------
         TextureHandle gbuffer_targets[] = {m_gbuffer_albedo, m_gbuffer_normal, m_gbuffer_extra};
 
         cmd->begin_render_pass(Slice<const TextureHandle>(gbuffer_targets, 3), m_gbuffer_depth);
         cmd->set_viewport(width, height);
+
         cmd->bind_storage_buffer(m_transform_ssbo, 0);
         cmd->bind_storage_buffer(m_camera_ssbo, 1);
 
@@ -140,6 +264,7 @@ public:
                 U32 transform_index;
                 U32 shading_model;
             } push_data = {call.transform_index, call.shading_model};
+
             Slice<const Byte> push_bytes(reinterpret_cast<const Byte *>(&push_data),
                                          sizeof(PushConstants));
             cmd->set_push_constants(push_bytes);
@@ -147,10 +272,7 @@ public:
         }
         cmd->end_render_pass();
 
-        // --------------------------------------------------
         // LIGHTING PASS
-        // --------------------------------------------------
-        //
         cmd->begin_render_pass(Slice<const TextureHandle>(), TextureHandle{});
         cmd->set_viewport(width, height);
         cmd->set_pipeline(lighting_pipe);
@@ -160,14 +282,22 @@ public:
         cmd->bind_texture(m_gbuffer_extra, 2);
         cmd->bind_texture(m_gbuffer_depth, 3);
 
+        cmd->bind_texture(m_shadow_map, 4);
+
+        cmd->bind_storage_buffer(m_camera_ssbo, 1);
+        cmd->bind_storage_buffer(m_lights_ssbo, 2);
+        cmd->bind_storage_buffer(m_dir_lights_ssbo, 3);
+
         cmd->draw_arrays(3, 0);
 
         cmd->end_render_pass();
+
+        // DISPATCH
         m_device->submit_command_buffer(cmd);
     }
 
     /**
-     * @brief Retrieves the handle to the Albedo/Color gbuffer texture.
+     * @brief Retrieves the handle to the Albedo/Color G-Buffer texture.
      */
     [[nodiscard]] TextureHandle get_albedo_buffer() const noexcept {
         return m_gbuffer_albedo;
@@ -181,7 +311,7 @@ public:
     }
 
     /**
-     * @brief Retrieves the handle to the Extra (Metallic/Roughness/Specular) g-Buffer texture.
+     * @brief Retrieves the handle to the Extra (Metallic/Roughness/Specular) G-Buffer texture.
      */
     [[nodiscard]] TextureHandle get_extra_buffer() const noexcept {
         return m_gbuffer_extra;
@@ -241,12 +371,21 @@ private:
     TextureHandle m_default_white{};
     TextureHandle m_default_normal{};
 
-    // GBUFFER
+    BufferHandle m_lights_ssbo{};
+    U32 m_lights_capacity{0};
+
+    BufferHandle m_dir_lights_ssbo{};
+    U32 m_dir_lights_capacity{0};
+
     U32 m_width{0};
     U32 m_height{0};
     TextureHandle m_gbuffer_albedo{};
     TextureHandle m_gbuffer_normal{};
     TextureHandle m_gbuffer_extra{};
     TextureHandle m_gbuffer_depth{};
+
+    TextureHandle m_shadow_map{};
+    U32 m_shadow_map_size{4096};
 };
+
 } // namespace fr

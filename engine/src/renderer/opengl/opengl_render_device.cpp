@@ -331,6 +331,13 @@ public:
             glTextureParameterf(id, GL_TEXTURE_MAX_ANISOTROPY, max);
         }
 
+        if (format == TextureFormat::Depth32_Float) {
+            glTextureParameteri(id, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+            glTextureParameteri(id, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+            float border[] = {1.0f, 1.0f, 1.0f, 1.0f};
+            glTextureParameterfv(id, GL_TEXTURE_BORDER_COLOR, border);
+        }
+
         return TextureHandle{m_textures.add(id)};
     }
 
@@ -539,8 +546,8 @@ public:
                 break;
             }
 
-                // opengl does not support push constants, but this is a workaround, and more so, it
-                // will work fully properly when vulkan comes
+            // this is very very very very very very slot
+            // and it will need to be rewritten
             case CommandType::SetPushConstants: {
                 GLint current_program;
                 glGetIntegerv(GL_CURRENT_PROGRAM, &current_program);

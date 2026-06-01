@@ -116,6 +116,22 @@ struct alignas(8) DrawCall {
 
 FR_STATIC_ASSERT(sizeof(DrawCall) == 80, "DrawCall must be exactly 80 bytes of size");
 
+/// @brief GPU representation of a point light
+struct alignas(16) PointLightData {
+    glm::vec3 position;
+    F32 radius;
+    glm::vec3 color;
+    F32 intensity;
+};
+
+struct alignas(16) DirectionalLightData {
+    glm::vec3 direction;
+    F32 intensity;
+    glm::vec3 color;
+    F32 padding; // for the 32 bytes of the std140 layout in the shaders
+    glm::mat4 light_view_proj;
+};
+
 class RenderQueue {
 public:
     /**
@@ -125,9 +141,11 @@ public:
     explicit RenderQueue(Alloc *alloc = get_ambient_ctx().alloc) noexcept
         : m_alloc(alloc),
           m_packets(m_alloc),
-          m_transforms(m_alloc) {
+          m_transforms(m_alloc),
+          m_point_lights(m_alloc) {
         m_packets.reserve(4096);
         m_transforms.reserve(4096);
+        m_point_lights.reserve(256);
     }
 
     RenderQueue(const RenderQueue &) = delete;
@@ -141,6 +159,8 @@ public:
     void clear_leftover() noexcept {
         m_packets.clear();
         m_transforms.clear();
+        m_point_lights.clear();
+        m_directional_lights.clear();
     }
 
     /**
@@ -157,6 +177,25 @@ public:
         m_packets.push_back(p);
     }
 
+    /// @brief Submits a point light to the current frame
+    void send_point_light(const PointLightData &light) noexcept {
+        m_point_lights.push_back(light);
+    }
+
+    /// @brief Retrieves a slice of the queued point lights of the frame
+    Slice<const PointLightData> get_point_lights() const noexcept {
+        return m_point_lights.slice();
+    }
+
+    /// @brief Submits a point light to the current frame
+    void send_directional_light(const DirectionalLightData &light) noexcept {
+        m_directional_lights.push_back(light);
+    }
+
+    /// @brief Retrieves a slice of the queued point lights of the frame
+    Slice<const DirectionalLightData> get_directional_lights() const noexcept {
+        return m_directional_lights.slice();
+    }
     /**
      * @brief Sorts the queued draw calls to minimize state changes.
      * @note Future enhancement: Radix sort.
@@ -191,6 +230,8 @@ private:
     Alloc *m_alloc;
     DynamicArray<DrawCall> m_packets;
     DynamicArray<glm::mat4> m_transforms;
+    DynamicArray<PointLightData> m_point_lights;
+    DynamicArray<DirectionalLightData> m_directional_lights;
 };
 
 } // namespace fr

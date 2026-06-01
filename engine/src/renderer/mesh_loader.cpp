@@ -1,6 +1,9 @@
+// THIS WILL BE REMOVED FROM THE ENGINE
+// this is some very very bad code that will be rewritten in the asset loading program (cooker)
 #include "fr/renderer/mesh_loader.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/string.hpp"
+#include "fr/data/asset_manager.hpp"
 #include "fr/renderer/render_queue.hpp"
 #include <cgltf.h>
 
@@ -8,11 +11,23 @@
 
 namespace fr {
 
-MeshData load_mesh_gltf(RenderDevice *device, StringView file_path) {
+static String get_base_path(StringView filepath) {
+    for (USize i = filepath.size(); i > 0; --i) {
+        char c = filepath[i - 1];
+        if (c == '/' || c == '\\') {
+            return String(filepath.view_to(i - 1));
+        }
+    }
+    return String::from_chars("");
+}
+
+MeshData load_mesh_gltf(AssetManager *am, RenderDevice *device, StringView file_path) {
     FR_ASSERT(device != nullptr, "mesh_loader requires valid RenderDevice");
+    FR_ASSERT(am != nullptr, "mesh_loader requires valid AssetManager");
 
     MeshData out_data{};
     String fpath = String::from_view(file_path);
+    String base_path = get_base_path(file_path);
 
     auto cgltf_result_to_string = [](cgltf_result result) {
         switch (result) {
@@ -69,6 +84,19 @@ MeshData load_mesh_gltf(RenderDevice *device, StringView file_path) {
     DynamicArray<MeshRange> mesh_ranges(get_ambient_ctx().alloc);
     DynamicArray<SubMesh> base_submeshes(get_ambient_ctx().alloc);
 
+    // bullshit
+    auto load_tex = [&](const cgltf_texture_view &tex_view, bool srgb) -> TextureHandle {
+        if (tex_view.texture && tex_view.texture->image && tex_view.texture->image->uri) {
+            String uri_str = String::from_chars(tex_view.texture->image->uri);
+            String full_path = base_path + uri_str;
+
+            TextureAssetHandle asset = am->load_texture(full_path.view(), srgb);
+            return am->get_texture_handle(asset);
+        }
+        return TextureHandle{};
+    };
+    // end of bullshit
+
     for (cgltf_size i = 0; i < data->meshes_count; i++) {
         const cgltf_mesh &mesh = data->meshes[i];
 
@@ -84,14 +112,23 @@ MeshData load_mesh_gltf(RenderDevice *device, StringView file_path) {
             submesh.vertex_offset = static_cast<U32>(vertices.size());
             submesh.index_offset = static_cast<U32>(indices.size());
 
-            // material type detection, gbuffer vs forward
             submesh.pass_type = RenderPassType::Opaque;
+
             if (primitive.material != nullptr) {
                 if (primitive.material->alpha_mode == cgltf_alpha_mode_mask) {
                     submesh.pass_type = RenderPassType::Masked;
                 } else if (primitive.material->alpha_mode == cgltf_alpha_mode_blend) {
                     submesh.pass_type = RenderPassType::Transparent;
                 }
+
+                if (primitive.material->has_pbr_metallic_roughness) {
+                    submesh.albedo_map = load_tex(
+                        primitive.material->pbr_metallic_roughness.base_color_texture, true);
+                    submesh.extra_map = load_tex(
+                        primitive.material->pbr_metallic_roughness.metallic_roughness_texture,
+                        false);
+                }
+                submesh.normal_map = load_tex(primitive.material->normal_texture, false);
             }
 
             if (primitive.indices != nullptr) {
@@ -114,7 +151,7 @@ MeshData load_mesh_gltf(RenderDevice *device, StringView file_path) {
                     pos_acc = attr.data;
                 else if (attr.type == cgltf_attribute_type_normal)
                     norm_acc = attr.data;
-                else if (attr.type == cgltf_attribute_type_texcoord)
+                else if (attr.type == cgltf_attribute_type_texcoord && attr.index == 0)
                     uv_acc = attr.data;
             }
 

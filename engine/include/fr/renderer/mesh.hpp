@@ -27,6 +27,10 @@ struct SubMesh {
     glm::mat4 transform{1.0f};
     // g-buffer vs forward
     RenderPassType pass_type{RenderPassType::Opaque};
+
+    TextureHandle albedo_map{};
+    TextureHandle normal_map{};
+    TextureHandle extra_map{};
 };
 
 struct MeshData {

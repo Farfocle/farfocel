@@ -20,7 +20,7 @@ public:
           m_right(1.0f, 0.0f, -1.0f),
           m_fov(fov),
           m_aspect_ratio(aspect_ratio),
-          m_near_plane(0.0001f),
+          m_near_plane(0.1f),
           m_far_plane(1000.0f),
           m_view(1.0f),
           m_proj(1.0f),
