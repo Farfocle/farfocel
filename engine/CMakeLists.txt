@@ -62,6 +62,8 @@ set(ENGINE_HEADERS
 set(ENGINE_SOURCES
 #### core
     "src/core/ctx.cpp"
+#### data
+    "src/data/cmd.cpp"
 )
 
 

@@ -85,7 +85,7 @@ public:
     struct Options {
         Alloc *registry_alloc{get_ambient_ctx().alloc};
         Alloc *system_pool_alloc{get_ambient_ctx().alloc};
-        USize cmd_arena_size{impl::CmdPool::DEFAULT_ARENA_SIZE};
+        USize cmd_arena_size{CmdBatch::DEFAULT_ARENA_SIZE};
     };
 
     World() noexcept;
@@ -266,6 +266,12 @@ public:
     void commit_detach_child_cmds() noexcept;
 
     /**
+     * @brief Commits all commands in a batch (mutate -> destroy -> insert -> relations) then resets
+     * it. Works on any CmdBatch, not just the World's default one.
+     */
+    void commit_batch(CmdBatch &batch) noexcept;
+
+    /**
      * @brief Records a deferred insert command for part T on a thing.
      * @note Does nothing if thing is nil, dead, or already owns T.
      */
@@ -353,7 +359,7 @@ private:
     // -------------------------------------------------------- Member Variables
     Options m_options{};
     impl::Registry m_registry{};
-    impl::CmdPool m_cmd_pool{};
+    CmdBatch m_cmd_batch{};
     impl::SystemPool m_system_pool{};
     Bitset<MAX_PARTS> m_script_registry{};
 };
@@ -400,7 +406,7 @@ inline World::World() noexcept
 inline World::World(const Options &opt) noexcept
     : m_options(opt),
       m_registry(opt.registry_alloc),
-      m_cmd_pool(opt.registry_alloc, opt.cmd_arena_size),
+      m_cmd_batch(opt.registry_alloc, opt.cmd_arena_size),
       m_system_pool(opt.system_pool_alloc),
       m_script_registry(Bitset<MAX_PARTS>::with_zeros()) {
 }
@@ -490,45 +496,54 @@ inline void World::sort_by_hierarchy_depth() noexcept {
 }
 
 inline void World::commit_insert_part_cmds() noexcept {
-    m_cmd_pool.commit_insert_all(&m_registry);
+    m_cmd_batch.commit_insert_all_move(&m_registry);
 }
 
 inline void World::commit_mutate_part_cmds() noexcept {
-    m_cmd_pool.commit_mutate_all(&m_registry);
+    m_cmd_batch.commit_mutate_all(&m_registry);
 }
 
 inline void World::commit_destroy_part_cmds() noexcept {
-    m_cmd_pool.commit_destroy_all(&m_registry);
+    m_cmd_batch.commit_destroy_all(&m_registry);
 }
 
 inline void World::commit_part_cmds() noexcept {
-    commit_mutate_part_cmds();
-    commit_destroy_part_cmds();
-    commit_insert_part_cmds();
-    m_cmd_pool.reset();
+    m_cmd_batch.commit_mutate_all(&m_registry);
+    m_cmd_batch.commit_destroy_all(&m_registry);
+    m_cmd_batch.commit_insert_all_move(&m_registry);
+    m_cmd_batch.reset();
 }
 
 inline void World::commit_attach_child_cmds() noexcept {
-    m_cmd_pool.commit_attach_child_all(this);
+    m_cmd_batch.commit_attach_child_all(this);
 }
 
 inline void World::commit_detach_child_cmds() noexcept {
-    m_cmd_pool.commit_detach_child_all(this);
+    m_cmd_batch.commit_detach_child_all(this);
+}
+
+inline void World::commit_batch(CmdBatch &batch) noexcept {
+    batch.commit_mutate_all(&m_registry);
+    batch.commit_destroy_all(&m_registry);
+    batch.commit_insert_all_move(&m_registry);
+    batch.commit_attach_child_all(this);
+    batch.commit_detach_child_all(this);
+    batch.reset();
 }
 
 template <typename T>
 inline void World::insert(Thing thing, const T &part) noexcept {
-    m_cmd_pool.record_insert<T>(m_registry, thing, part);
+    m_cmd_batch.record_insert<T>(m_registry, thing, part);
 }
 
 template <typename T>
 inline void World::insert(Thing thing, T &&part) noexcept {
-    m_cmd_pool.record_insert<T>(m_registry, thing, std::forward<T>(part));
+    m_cmd_batch.record_insert<T>(m_registry, thing, std::forward<T>(part));
 }
 
 template <typename T>
 inline void World::destroy(Thing thing) noexcept {
-    m_cmd_pool.record_destroy<T>(m_registry, thing);
+    m_cmd_batch.record_destroy<T>(m_registry, thing);
 }
 
 inline void World::attach_child_now(Thing parent, Thing child) noexcept {
@@ -564,7 +579,7 @@ inline void World::attach_child(Thing parent, Thing child) noexcept {
         return;
     }
 
-    m_cmd_pool.record_attach_child(parent, child);
+    m_cmd_batch.record_attach_child(parent, child);
 }
 
 inline void World::detach_child_now(Thing parent, Thing child) noexcept {
@@ -585,7 +600,7 @@ inline void World::detach_child(Thing parent, Thing child) noexcept {
         return;
     }
 
-    m_cmd_pool.record_detach_child(parent, child);
+    m_cmd_batch.record_detach_child(parent, child);
 }
 
 inline void World::update_hierarchy(Thing root) noexcept {
