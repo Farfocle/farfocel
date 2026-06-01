@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "fr/core/ctx.hpp"
 #include "fr/core/format.hpp"
 #include "fr/core/shape.hpp"
@@ -6,8 +8,6 @@
 #include "fr/data/relations.hpp"
 #include "fr/data/thing.hpp"
 #include "fr/data/world.hpp"
-#include <codecvt>
-#include <iostream>
 
 struct Pos {
     F32 x{0.0};
@@ -43,12 +43,20 @@ struct Game {
             fr::Thing child = world.handout();
             world.emplace_now<fr::Relations>(child);
             world.emplace_now<Pos>(child, Pos{.x = static_cast<F32>(i), .y = static_cast<F32>(i)});
-            world.attach_now(player, child);
+
+            for (USize j = 0; j < 3; ++j) {
+                fr::Thing more_so_a_child = world.handout();
+                world.emplace_now<fr::Relations>(more_so_a_child);
+                world.emplace_now<Pos>(more_so_a_child);
+                world.attach_child_now(child, more_so_a_child);
+            }
+
+            world.attach_child_now(player, child);
         }
     }
 
     void run() {
-        for (auto [thing, relations, pos] : world.shallow_query<fr::Relations, Pos>(player)) {
+        for (auto [thing, relations, pos] : world.deep_query<fr::Relations, Pos>(player)) {
             std::cout << "\n\n----\n";
             std::cout << fr::format("thing: {}\nrelations: {}\npos: {}\n", thing, relations, pos);
         }

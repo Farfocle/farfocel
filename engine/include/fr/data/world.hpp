@@ -14,6 +14,7 @@
 #include "fr/core/bitset.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
+#include "fr/core/macros.hpp"
 #include "fr/core/meta.hpp"
 #include "fr/data/cmd.hpp"
 #include "fr/data/part.hpp"
@@ -161,22 +162,7 @@ public:
 
     // --------------------------------------------------------------- Relations
 
-    /// @todo Calculate depth changes.
-    void attach_now(Thing parent, Thing thing) noexcept {
-        Relations &parent_rel = m_registry.get_unchecked<Relations>(parent);
-        Relations &thing_rel = m_registry.get_unchecked<Relations>(thing);
-
-        thing_rel.parent = parent;
-        thing_rel.next_sibling = parent_rel.first_child;
-
-        if (!parent_rel.first_child.is_nil()) {
-            Relations &first_child_rel =
-                m_registry.get_unchecked<Relations>(parent_rel.first_child);
-            first_child_rel.prev_sibling = thing;
-        }
-
-        parent_rel.first_child = thing;
-    }
+    void attach_child_now(Thing parent, Thing child) noexcept;
 
     // ------------------------------------------------- Command Part Operations
 
@@ -281,6 +267,9 @@ public:
     void destroy_script(Thing thing) noexcept;
 
 private:
+    // --------------------------------------------------------------- Internals
+    void do_recompute_hierarchy_depth(HierarchyDepth paren_depth, Thing dirty) noexcept;
+
     // -------------------------------------------------------- Member Variables
     Options m_options{};
     impl::Registry m_registry{};
@@ -413,6 +402,66 @@ inline void World::insert(Thing thing, T &&part) noexcept {
 template <typename T>
 inline void World::destroy(Thing thing) noexcept {
     m_cmd_pool.record_destroy<T>(m_registry, thing);
+}
+
+inline void World::attach_child_now(Thing parent, Thing child) noexcept {
+    Relations &parent_rel = m_registry.get_unchecked<Relations>(parent);
+    Relations &child_rel = m_registry.get_unchecked<Relations>(child);
+
+    if (!child_rel.parent.is_nil()) {
+        Relations &child_parent_rel = m_registry.get_unchecked<Relations>(child_rel.parent);
+        child_parent_rel.first_child = child_rel.next_sibling;
+
+        if (!child_parent_rel.first_child.is_nil()) {
+            Relations &child_next_rel =
+                m_registry.get_unchecked<Relations>(child_parent_rel.first_child);
+            child_next_rel.prev_sibling = Thing::nil();
+        }
+    }
+
+    child_rel.parent = parent;
+    child_rel.next_sibling = parent_rel.first_child;
+
+    if (!parent_rel.first_child.is_nil()) {
+        Relations &first_child_rel = m_registry.get_unchecked<Relations>(parent_rel.first_child);
+        first_child_rel.prev_sibling = child;
+    }
+
+    parent_rel.first_child = child;
+
+    do_recompute_hierarchy_depth(parent_rel.depth, child);
+}
+
+inline void World::do_recompute_hierarchy_depth(HierarchyDepth parent_depth, Thing child) noexcept {
+    Thing curr_thing = child;
+    HierarchyDepth curr_depth = parent_depth + 1;
+
+    while (curr_depth > parent_depth) {
+        Relations &rel = m_registry.get_unchecked<Relations>(curr_thing);
+        if (rel.depth == curr_depth) {
+            curr_thing = rel.parent;
+            --curr_depth;
+            continue;
+        }
+
+        rel.depth = curr_depth;
+
+        if (!rel.first_child.is_nil()) {
+            curr_thing = rel.first_child;
+            ++curr_depth;
+            continue;
+        }
+
+        if (!rel.next_sibling.is_nil()) {
+            curr_thing = rel.next_sibling;
+            continue;
+        }
+
+        FR_ASSERT(!rel.parent.is_nil(), "malformed hierarchy");
+        FR_ASSERT(curr_depth > 0, "malformed hierarchy");
+        curr_thing = rel.parent;
+        --curr_depth;
+    }
 }
 
 template <typename... Include>
