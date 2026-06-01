@@ -75,6 +75,7 @@ set(ENGINE_HEADERS
     "include/fr/logger/sink.hpp"
     "include/fr/logger/log.hpp"
     "include/fr/logger/sinks/standard_sink.hpp"
+    "include/fr/logger/sinks/pretty_sink.hpp"
 )
 
 set(ENGINE_SOURCES
@@ -91,6 +92,7 @@ set(ENGINE_SOURCES
 #### logger
     "src/logger/logger.cpp"
     "src/logger/sinks/standard_sink.cpp"
+    "src/logger/sinks/pretty_sink.cpp"
 )
 
 
