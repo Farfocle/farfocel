@@ -31,7 +31,7 @@ static const char *level_to_string(LogLevel level, bool short_names) {
         case LogLevel::Warning:
             return "[WARNING] ";
         default:
-            return "[LOG]    ";
+            return "[LOG]     ";
         }
     }
 }

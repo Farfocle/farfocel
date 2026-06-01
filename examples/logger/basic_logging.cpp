@@ -1,21 +1,21 @@
+/**
+ * @file basic_logging.cpp
+ * @author Stachu
+ *
+ * @brief Example showcasing the basic logging using StandardSink.
+ */
+
 #include "fr/logger/logger.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/core/unique_ptr.hpp"
-#include "fr/logger/sinks/pretty_sink.hpp"
+#include "fr/logger/sinks/standard_sink.hpp"
 
 S32 main() {
     fr::init_core_ctx();
 
     // setup the enhanced sink and add it to the logger
-    auto enhanced_sink = fr::make_unique<fr::PrettySink>(fr::PrettySink::Options{
-        .timestampFormatOptions =
-            {
-                .date = false,
-                .milliseconds = false,
-            },
-        .shorterLevelNames = true,
-    });
+    auto enhanced_sink = fr::make_unique<fr::StandardSink>(fr::StandardSink::Options{});
     fr::get_ambient_ctx().logger->add_sink(std::move(enhanced_sink));
 
     // use logger

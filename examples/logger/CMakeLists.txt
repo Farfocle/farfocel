@@ -1,5 +1,6 @@
 set(BENCH_SOURCES
-    "logger.cpp"
+    "basic_logging.cpp"
+    "showcase.cpp"
 )
 
 foreach(source ${BENCH_SOURCES})
