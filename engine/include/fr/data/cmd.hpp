@@ -34,45 +34,68 @@ enum class CmdKind : U8 { DestroyPart, InsertPart, MutatePart, AttachChild, Deta
  * @brief Typed view of a recorded destroy command.
  */
 template <typename T>
-struct DestroyPartCmd {
-    using Part = T;
-    Thing thing;
-    Part part;
-};
+struct DestroyPartCmd;
 
 /**
  * @brief Typed view of a recorded insert command.
  */
 template <typename T>
-struct InsertPartCmd {
-    using Part = T;
-    Thing thing;
-    Part part;
-};
+struct InsertPartCmd;
 
 /**
  * @brief Typed view of a recorded mutate command.
  */
 template <typename T>
+struct MutatePartCmd;
+
+/**
+ * @brief Typed view of a recorded attach-child command.
+ */
+struct AttachChildCmd;
+
+/**
+ * @brief Typed view of a recorded detach-child command.
+ */
+struct DetachChildCmd;
+
+template <typename T>
+struct DestroyPartCmd {
+    using Part = T;
+    using Inverse = InsertPartCmd<T>;
+
+    Thing thing;
+    Part part;
+};
+
+template <typename T>
+struct InsertPartCmd {
+    using Part = T;
+    using Inverse = DestroyPartCmd<T>;
+
+    Thing thing;
+    Part part;
+};
+
+template <typename T>
 struct MutatePartCmd {
     using Part = T;
+    using Inverse = MutatePartCmd<T>;
+
     Thing thing;
     Part prev;
     Part next;
 };
 
-/**
- * @brief Typed view of a recorded attach-child command.
- */
 struct AttachChildCmd {
+    using Inverse = DetachChildCmd;
+
     Thing parent;
     Thing child;
 };
 
-/**
- * @brief Typed view of a recorded detach-child command.
- */
 struct DetachChildCmd {
+    using Inverse = AttachChildCmd;
+
     Thing parent;
     Thing child;
 };
