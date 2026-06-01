@@ -56,9 +56,17 @@ struct Game {
     }
 
     void run() {
+        world.sort_by_hierarchy_depth<Pos>();
+
+        std::cout << "---- deep_query\n";
         for (auto [thing, relations, pos] : world.deep_query<fr::Relations, Pos>(player)) {
-            std::cout << "\n\n----\n";
+            std::cout << "\n----\n";
             std::cout << fr::format("thing: {}\nrelations: {}\npos: {}\n", thing, relations, pos);
+        }
+
+        std::cout << "\n---- query<Pos>\n";
+        for (auto [thing, pos] : world.query<Pos>()) {
+            std::cout << fr::format("thing: {}; pos: {}\n", thing, pos);
         }
     }
 };

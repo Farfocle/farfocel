@@ -12,7 +12,7 @@ S32 main() {
     {
         fr::DynamicArray<U32> numbers{9, 8, 7, 6, 5, 4, 3, 3, 2, 2, 1, 0, 0, 0, 14, 0, 56};
 
-        fr::radix_sort_inplace(numbers.slice_mut());
+        fr::radix_sort(numbers.slice_mut());
 
         std::cout << "---- numbers\n";
         std::cout << fr::format("numbers:  {}", numbers) << "\n";

@@ -9,6 +9,7 @@
 
 #include <utility>
 
+#include "fr/core/algo.hpp"
 #include "fr/core/alloc.hpp"
 #include "fr/core/array.hpp"
 #include "fr/core/bitset.hpp"
@@ -18,6 +19,7 @@
 #include "fr/core/meta.hpp"
 #include "fr/data/cmd.hpp"
 #include "fr/data/part.hpp"
+#include "fr/data/part_pool.hpp"
 #include "fr/data/query.hpp"
 #include "fr/data/registry.hpp"
 #include "fr/data/relations.hpp"
@@ -160,6 +162,13 @@ public:
      */
     template <typename T>
     T &get(Thing thing) noexcept;
+
+    /**
+     * @brief Sorts the entire part pool `T` using the hierarchy depth.
+     * @note This allows for BFS-like traversals with a normal forward query for sorted pools.
+     */
+    template <typename T>
+    void sort_by_hierarchy_depth() noexcept;
 
     // --------------------------------------------------------------- Relations
 
@@ -440,6 +449,44 @@ inline T *World::try_get(Thing thing) noexcept {
 template <typename T>
 inline T &World::get(Thing thing) noexcept {
     return m_registry.get_unchecked<T>(thing);
+}
+
+template <typename T>
+inline void World::sort_by_hierarchy_depth() noexcept {
+    impl::PartPool<T> *pool = m_registry.part_pool_mut<T>();
+    if (!pool) {
+        return;
+    }
+
+    Slice<T> parts = pool->parts_mut();
+    Slice<Thing> part_to_thing = pool->part_to_thing_mut();
+    USize n = parts.size();
+
+    if (n == 0) {
+        return;
+    }
+
+    // Build depth key for each part's owning thing (0 if no Relations part).
+    DynamicArray<HierarchyDepth> depths;
+    depths.reserve(n);
+    for (USize i = 0; i < n; ++i) {
+        Relations *rel = m_registry.get_checked<Relations>(part_to_thing[i]);
+        depths.push_back(rel ? rel->depth : ROOT_HIERARCHY_DEPTH);
+    }
+
+    // Argsort: perm[i] = old index of the part that ends up at position i.
+    auto perm = DynamicArray<USize>::from_repeated(n, 0);
+    radix_argsort(depths.slice_mut(), perm.slice_mut());
+
+    // Reorder both dense arrays by the same permutation.
+    apply_permutation(parts, perm.slice_mut());
+    apply_permutation(part_to_thing, perm.slice_mut());
+
+    // Rebuild thing -> part reverse mapping (dense index i == pool index i+1, stub at 0).
+    Slice<USize> t2p = pool->thing_to_part_with_stub_mut();
+    for (USize i = 0; i < n; ++i) {
+        t2p[part_to_thing[i].idx()] = i + 1;
+    }
 }
 
 inline void World::commit_insert_part_cmds() noexcept {
