@@ -73,7 +73,7 @@ set(ENGINE_HEADERS
     "include/fr/data/asset_manager.hpp"
 
 ### scene?
-    "include/fr/scene/components.hpp"
+    "include/fr/scene/render_parts.hpp"
     "include/fr/scene/render_system.hpp"
 )
 
