@@ -44,7 +44,8 @@ set(ENGINE_HEADERS
     "include/fr/core/typetraits.hpp"
     "include/fr/core/unique_ptr.hpp"
     "include/fr/core/slot_map.hpp"
-    
+    "include/fr/core/timestamp.hpp"
+
 #### platform
     "include/fr/platform/window.hpp"
     "include/fr/platform/keycode.hpp"
@@ -68,6 +69,13 @@ set(ENGINE_HEADERS
     "include/fr/data/thing_pool.hpp"
     "include/fr/data/typeidx.hpp"
     "include/fr/data/world.hpp"
+
+### logger
+    "include/fr/logger/logger.hpp"
+    "include/fr/logger/sink.hpp"
+    "include/fr/logger/log.hpp"
+    "include/fr/logger/sinks/standard_sink.hpp"
+    "include/fr/logger/sinks/pretty_sink.hpp"
 )
 
 set(ENGINE_SOURCES
@@ -75,11 +83,16 @@ set(ENGINE_SOURCES
     "src/core/ctx.cpp"
 #### platform
     "src/platform/sdl3/sdl_window.cpp"
-    
+
 #### renderer
     "src/renderer/opengl/opengl_render_device.cpp"
     "src/renderer/mesh.cpp"
     "src/renderer/mesh_loader.cpp"
+
+#### logger
+    "src/logger/logger.cpp"
+    "src/logger/sinks/standard_sink.cpp"
+    "src/logger/sinks/pretty_sink.cpp"
 )
 
 
