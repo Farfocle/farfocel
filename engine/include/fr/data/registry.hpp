@@ -39,6 +39,9 @@ class ShallowHierarchyQuery;
 template <typename... Include>
 class DeepHierarchyQuery;
 
+template <bool IsReverse, typename... Include>
+class GenericDepthHierarchyQuery;
+
 class Registry {
     template <bool IsReverse, typename... Include>
     friend class GenericQuery;
@@ -48,6 +51,9 @@ class Registry {
 
     template <typename... Include>
     friend class DeepHierarchyQuery;
+
+    template <bool IsReverse, typename... Include>
+    friend class GenericDepthHierarchyQuery;
 
 public:
     using AnyPartPool = InlineAny<sizeof(PartPool<Byte>), alignof(PartPool<Byte>)>;
@@ -126,7 +132,7 @@ public:
     /**
      * @brief Returns true if the thing owns part T.
      * @note Returns false if pool is missing or thing is dead.
-     * @note Returns true for nil thing when the pool exists (nil → stub).
+     * @note Returns true for nil thing when the pool exists (nil -> stub).
      */
     template <typename T>
     bool has(Thing thing) const noexcept;
@@ -187,6 +193,20 @@ public:
      */
     template <typename... Include>
     auto reverse_query(QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Creates a top-down (parents first) query over the first Include type's sorted pool.
+     * @note Call World::sort_by_hierarchy_depth<T>() on the first Include type before using.
+     */
+    template <typename... Include>
+    auto top_down_query(QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Creates a bottom-up (leaves first) query over the first Include type's sorted pool.
+     * @note Call World::sort_by_hierarchy_depth<T>() on the first Include type before using.
+     */
+    template <typename... Include>
+    auto bottom_up_query(QueryOptions options = {}) noexcept;
 
 private:
     // -------------------------------------------------------- Internal Helpers
@@ -413,6 +433,16 @@ inline auto Registry::query(QueryOptions options) noexcept {
 template <typename... Include>
 inline auto Registry::reverse_query(QueryOptions options) noexcept {
     return GenericQuery<true, Include...>(this, Signature::from_parts<Include...>(), options);
+}
+
+template <typename... Include>
+inline auto Registry::top_down_query(QueryOptions options) noexcept {
+    return GenericDepthHierarchyQuery<false, Include...>(this, Signature::from_parts<Include...>(), options);
+}
+
+template <typename... Include>
+inline auto Registry::bottom_up_query(QueryOptions options) noexcept {
+    return GenericDepthHierarchyQuery<true, Include...>(this, Signature::from_parts<Include...>(), options);
 }
 
 // ------------------------------------------------------------ Internal Helpers

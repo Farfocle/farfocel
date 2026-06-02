@@ -318,6 +318,20 @@ public:
     template <typename... Include>
     auto deep_query(Thing thing, QueryOptions options = {}) noexcept;
 
+    /**
+     * @brief Creates a top-down (parents first) query over the first Include type's sorted pool.
+     * @note Call sort_by_hierarchy_depth<T>() on the first Include type before using.
+     */
+    template <typename... Include>
+    auto top_down_query(QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Creates a bottom-up (leaves first) query over the first Include type's sorted pool.
+     * @note Call sort_by_hierarchy_depth<T>() on the first Include type before using.
+     */
+    template <typename... Include>
+    auto bottom_up_query(QueryOptions options = {}) noexcept;
+
     // ----------------------------------------------------------------- Systems
 
     /**
@@ -711,6 +725,16 @@ inline auto World::deep_query(Thing thing, QueryOptions options) noexcept {
     return DeepQuery<Include...>(&m_registry, thing, Signature::from_parts<Include...>(), options);
 }
 
+template <typename... Include>
+inline auto World::top_down_query(QueryOptions options) noexcept {
+    return TopDownQuery<Include...>(&m_registry, Signature::from_parts<Include...>(), options);
+}
+
+template <typename... Include>
+inline auto World::bottom_up_query(QueryOptions options) noexcept {
+    return BottomUpQuery<Include...>(&m_registry, Signature::from_parts<Include...>(), options);
+}
+
 inline void World::schedule_sync(Stage stage, const System &system) noexcept {
     m_system_pool.schedule_sync(stage, system);
 }
@@ -899,6 +923,16 @@ inline auto Scope::shallow_query(Thing thing, QueryOptions options) noexcept {
 template <typename... Include>
 inline auto Scope::deep_query(Thing thing, QueryOptions options) noexcept {
     return m_world->deep_query<Include...>(thing, options);
+}
+
+template <typename... Include>
+inline auto Scope::top_down_query(QueryOptions options) noexcept {
+    return m_world->top_down_query<Include...>(options);
+}
+
+template <typename... Include>
+inline auto Scope::bottom_up_query(QueryOptions options) noexcept {
+    return m_world->bottom_up_query<Include...>(options);
 }
 
 template <typename S>

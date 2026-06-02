@@ -13,6 +13,14 @@
 
 namespace fr {
 
+DetachChildCmd AttachChildCmd::inverse() const noexcept {
+    return {parent, child};
+}
+
+AttachChildCmd DetachChildCmd::inverse() const noexcept {
+    return {parent, child};
+}
+
 void CmdBatch::commit_attach_child_all(World *world) noexcept {
     for (const impl::RawCmd &cmd : m_cmds) {
         if (cmd.kind != CmdKind::AttachChild) {

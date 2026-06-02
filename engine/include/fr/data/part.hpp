@@ -14,11 +14,7 @@
 #include "fr/core/meta.hpp"
 
 namespace fr {
-
-// ==================================================================== Typedefs
 constexpr USize MAX_PARTS = 128;
-
-// =================================================================== Signature
 
 /**
  * @brief Interface for a bitset representation of parts owned by a thing.

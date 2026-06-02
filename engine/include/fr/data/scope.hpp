@@ -177,6 +177,20 @@ public:
     template <typename... Include>
     auto deep_query(Thing thing, QueryOptions options = {}) noexcept;
 
+    /**
+     * @brief Creates a top-down (parents first) query over the first Include type's sorted pool.
+     * @note Call World::sort_by_hierarchy_depth<T>() on the first Include type before using.
+     */
+    template <typename... Include>
+    auto top_down_query(QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Creates a bottom-up (leaves first) query over the first Include type's sorted pool.
+     * @note Call World::sort_by_hierarchy_depth<T>() on the first Include type before using.
+     */
+    template <typename... Include>
+    auto bottom_up_query(QueryOptions options = {}) noexcept;
+
     // ----------------------------------------------------------------- Scripts
 
     /**

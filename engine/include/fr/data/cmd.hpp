@@ -14,7 +14,6 @@
 #include "fr/core/arena_alloc.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
-#include "fr/core/macros.hpp"
 #include "fr/core/meta.hpp"
 #include "fr/core/slice.hpp"
 #include "fr/core/typedefs.hpp"
@@ -25,79 +24,61 @@ namespace fr {
 
 // ================================================================ Command Types
 
-/**
- * @brief Different kinds of commands.
- */
 enum class CmdKind : U8 { DestroyPart, InsertPart, MutatePart, AttachChild, DetachChild };
 
-/**
- * @brief Typed view of a recorded destroy command.
- */
 template <typename T>
 struct DestroyPartCmd;
 
-/**
- * @brief Typed view of a recorded insert command.
- */
 template <typename T>
 struct InsertPartCmd;
 
-/**
- * @brief Typed view of a recorded mutate command.
- */
 template <typename T>
 struct MutatePartCmd;
 
-/**
- * @brief Typed view of a recorded attach-child command.
- */
 struct AttachChildCmd;
-
-/**
- * @brief Typed view of a recorded detach-child command.
- */
 struct DetachChildCmd;
 
 template <typename T>
 struct DestroyPartCmd {
-    using Part = T;
-    using Inverse = InsertPartCmd<T>;
-
     Thing thing;
-    Part part;
+    T part;
+
+    InsertPartCmd<T> inverse() const noexcept {
+        return {thing, part};
+    }
 };
 
 template <typename T>
 struct InsertPartCmd {
-    using Part = T;
-    using Inverse = DestroyPartCmd<T>;
-
     Thing thing;
-    Part part;
+    T part;
+
+    DestroyPartCmd<T> inverse() const noexcept {
+        return {thing, part};
+    }
 };
 
 template <typename T>
 struct MutatePartCmd {
-    using Part = T;
-    using Inverse = MutatePartCmd<T>;
-
     Thing thing;
-    Part prev;
-    Part next;
+    T prev;
+    T next;
+
+    MutatePartCmd<T> inverse() const noexcept {
+        return {thing, next, prev};
+    }
 };
 
 struct AttachChildCmd {
-    using Inverse = DetachChildCmd;
-
     Thing parent;
     Thing child;
+    DetachChildCmd inverse() const noexcept;
 };
 
 struct DetachChildCmd {
-    using Inverse = AttachChildCmd;
-
     Thing parent;
     Thing child;
+    AttachChildCmd inverse() const noexcept;
 };
 
 // Forward declaration to break the world.hpp <-> cmd.hpp cycle for relation commits.
@@ -109,9 +90,10 @@ class World;
 
 namespace fr::impl {
 
-/**
- * @brief Type-erased insert command header.
- */
+struct RawInsertPartCmd;
+struct RawDestroyPartCmd;
+struct RawMutatePartCmd;
+
 struct RawInsertPartCmd {
     TypeIdx tidx;
     Thing thing;
@@ -120,11 +102,18 @@ struct RawInsertPartCmd {
     void (*commit_insert_copy)(void *registry, Thing, void *part_ptr) noexcept;
     void (*commit_destroy)(void *registry, Thing) noexcept;
     void (*destroy_part)(void *) noexcept;
+
+    template <typename T>
+    T *try_cast_part() noexcept {
+        TypeIdx cast_tidx = TypeIdx::from_type<T>();
+        if (cast_tidx != tidx) {
+            return nullptr;
+        }
+
+        return static_cast<T *>(part_ptr);
+    }
 };
 
-/**
- * @brief Type-erased destroy command header.
- */
 struct RawDestroyPartCmd {
     TypeIdx tidx;
     Thing thing;
@@ -133,11 +122,18 @@ struct RawDestroyPartCmd {
     void (*commit_insert_move)(void *registry, Thing, void *part_ptr) noexcept;
     void (*commit_insert_copy)(void *registry, Thing, void *part_ptr) noexcept;
     void (*destroy_part)(void *) noexcept;
+
+    template <typename T>
+    T *try_cast_part() noexcept {
+        TypeIdx cast_tidx = TypeIdx::from_type<T>();
+        if (cast_tidx != tidx) {
+            return nullptr;
+        }
+
+        return static_cast<T *>(part_ptr);
+    }
 };
 
-/**
- * @brief Type-erased mutate command header.
- */
 struct RawMutatePartCmd {
     TypeIdx tidx;
     Thing thing;
@@ -145,12 +141,28 @@ struct RawMutatePartCmd {
     void *next_ptr;
     void (*commit_mutate)(void *registry, Thing, void *part_ptr) noexcept;
     void (*destroy_part)(void *) noexcept;
+
+    template <typename T>
+    T *try_cast_prev() noexcept {
+        TypeIdx cast_tidx = TypeIdx::from_type<T>();
+        if (cast_tidx != tidx) {
+            return nullptr;
+        }
+
+        return static_cast<T *>(prev_ptr);
+    }
+
+    template <typename T>
+    T *try_cast_next() noexcept {
+        TypeIdx cast_tidx = TypeIdx::from_type<T>();
+        if (cast_tidx != tidx) {
+            return nullptr;
+        }
+
+        return static_cast<T *>(next_ptr);
+    }
 };
 
-/**
- * @brief Discriminated union over all raw command headers.
- * @note Relation commands reuse their public typed structs directly.
- */
 struct RawCmd {
     CmdKind kind;
     union {
@@ -168,11 +180,10 @@ struct RawCmd {
 
 namespace fr {
 
-/**
- * @brief Self-contained unit of deferred commands.
- */
+/// @brief Self-contained unit of deferred commands.
 class CmdBatch {
 public:
+    // ------------------------------------- Typedefs & Constructors & Operators
     static constexpr USize DEFAULT_ARENA_SIZE = 64 * 1024;
 
     CmdBatch() noexcept
@@ -181,9 +192,6 @@ public:
 
     explicit CmdBatch(Alloc *alloc, USize arena_size = DEFAULT_ARENA_SIZE) noexcept
         : m_alloc(alloc) {
-        FR_ASSERT(alloc != nullptr, "allocator must be non-null");
-        FR_ASSERT(arena_size > 0, "arena size must be non-zero");
-
         Byte *buf = static_cast<Byte *>(alloc->allocate(arena_size, alignof(std::max_align_t)));
         m_arena_buffer = Slice<Byte>(buf, arena_size);
         m_arena = ArenaAlloc(m_arena_buffer.data(), m_arena_buffer.size(), "CmdBatch");
@@ -352,9 +360,7 @@ public:
         m_cmds.push_back(cmd);
     }
 
-    /**
-     * @brief Records an attach-child relation command.
-     */
+    /// @brief Records an attach-child relation command.
     void record_attach_child(Thing parent, Thing child) noexcept {
         impl::RawCmd cmd{};
         cmd.kind = CmdKind::AttachChild;
@@ -362,9 +368,7 @@ public:
         m_cmds.push_back(cmd);
     }
 
-    /**
-     * @brief Records a detach-child relation command.
-     */
+    /// @brief Records a detach-child relation command.
     void record_detach_child(Thing parent, Thing child) noexcept {
         impl::RawCmd cmd{};
         cmd.kind = CmdKind::DetachChild;
@@ -372,11 +376,9 @@ public:
         m_cmds.push_back(cmd);
     }
 
-    // ----------------------------------------------------------------- Commit
+    // ------------------------------------------------------------------ Commit
 
-    /**
-     * @brief Commits all destroy commands.
-     */
+    /// @brief Commits all destroy commands.
     void commit_destroy_all(impl::Registry *registry) noexcept {
         for (const impl::RawCmd &cmd : m_cmds) {
             if (cmd.kind != CmdKind::DestroyPart) {
@@ -418,9 +420,7 @@ public:
         }
     }
 
-    /**
-     * @brief Commits all mutate commands (applies next state).
-     */
+    /// @brief Commits all mutate commands (applies next state).
     void commit_mutate_all(impl::Registry *registry) noexcept {
         for (const impl::RawCmd &cmd : m_cmds) {
             if (cmd.kind != CmdKind::MutatePart) {
@@ -432,21 +432,16 @@ public:
         }
     }
 
-    /**
-     * @brief Commits all attach-child commands.
-     * Implemented in cmd.cpp to avoid a circular include with world.hpp.
-     */
+    /// @brief Commits all attach-child commands.
     void commit_attach_child_all(World *world) noexcept;
 
-    /**
-     * @brief Commits all detach-child commands.
-     * Implemented in cmd.cpp to avoid a circular include with world.hpp.
-     */
+    /// @brief Commits all detach-child commands.
     void commit_detach_child_all(World *world) noexcept;
 
     /**
      * @brief Destroys all arena-allocated part objects and clears the command list.
-     * Safe to call with uncommitted commands - arena objects are properly destroyed regardless.
+     * @note Safe to call with uncommitted commands - arena objects are properly destroyed
+     * regardless.
      */
     void reset() noexcept {
         for (const impl::RawCmd &cmd : m_cmds) {
@@ -520,6 +515,7 @@ public:
     }
 
 private:
+    // --------------------------------------------------------------- Internals
     template <typename T>
     static void do_commit_insert_move(void *registry_ptr, Thing thing, void *part_ptr) noexcept {
         impl::Registry *registry = static_cast<impl::Registry *>(registry_ptr);
@@ -549,6 +545,7 @@ private:
         }
     }
 
+    // -------------------------------------------------------- Member Variables
     Alloc *m_alloc{nullptr};
     Slice<Byte> m_arena_buffer{};
     ArenaAlloc m_arena{};
