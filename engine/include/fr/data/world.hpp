@@ -44,13 +44,10 @@ public:
     SystemPool &operator=(SystemPool &&) = delete;
 
     /// @brief Schedules a system for synchronous execution in the given stage.
-    void schedule_sync(Stage stage, const System &system) noexcept;
+    void schedule(Stage stage, const System &system) noexcept;
 
     /// @brief Runs all systems scheduled for the given stage synchronously.
-    void run_stage_sync(Stage stage, Scope scope);
-
-    /// @brief Runs all systems scheduled for all stages synchronously.
-    void run_all_sync(Scope &scope);
+    void run_stage(Stage stage, Scope scope);
 
 private:
     /// @brief Executes all systems for a given stage index.
@@ -214,26 +211,26 @@ public:
     // ------------------------------------------------- Command Part Operations
 
     /// @brief Apply all recorded insert commands across all part pools.
-    void commit_insert_part_cmds() noexcept;
+    void commit_insert_part() noexcept;
 
     /// @brief Apply all recorded mutate commands across all part pools.
-    void commit_mutate_part_cmds() noexcept;
+    void commit_mutate_part() noexcept;
 
     /// @brief Apply all recorded destroy commands across all part pools.
-    void commit_destroy_part_cmds() noexcept;
+    void commit_destroy_part() noexcept;
 
     /// @brief Apply all recorded attach-child commands.
-    void commit_attach_child_cmds() noexcept;
+    void commit_attach_child() noexcept;
 
     /// @brief Apply all recorded detach-child commands.
-    void commit_detach_child_cmds() noexcept;
+    void commit_detach_child() noexcept;
 
     /// @brief Apply all commands in order: mutate -> destroy -> insert -> attach -> detach.
-    void commit_cmds() noexcept;
+    void commit() noexcept;
 
     /**
-     * @brief Commits all commands in a batch in order: mutate -> destroy -> insert -> attach
-     * -> detach.
+     * @brief Commits the provided batch in order:
+     * mutate -> destroy -> insert -> attach -> detach.
      */
     void commit_batch(CmdBatch &batch) noexcept;
 
@@ -293,13 +290,22 @@ public:
     // ----------------------------------------------------------------- Systems
 
     /// @brief Schedules a system for synchronous execution in the given stage.
-    void schedule_sync(Stage stage, const System &system) noexcept;
+    void schedule(Stage stage, const System &system) noexcept;
 
     /// @brief Runs all systems scheduled for the given stage synchronously.
-    void run_stage_sync(Stage stage) noexcept;
+    void run_stage(Stage stage) noexcept;
 
-    /// @brief Runs all systems scheduled for all stages synchronously.
-    void run_all_sync() noexcept;
+    /**
+     * @brief Runs all cheduled systems.
+     * @note The order of execution:
+     * 1. `PreUpdate`
+     * 2. `PreUpdateScript`
+     * 3. `Update`
+     * 4. `UpdateScript`
+     * 5. `PostUpdate`
+     * 6. `PostUpdateScript`
+     */
+    void run() noexcept;
 
     // ----------------------------------------------------------------- Scripts
 
@@ -340,18 +346,12 @@ inline impl::SystemPool::SystemPool(Alloc *alloc) noexcept {
     }
 }
 
-inline void impl::SystemPool::schedule_sync(Stage stage, const System &system) noexcept {
+inline void impl::SystemPool::schedule(Stage stage, const System &system) noexcept {
     m_stages[static_cast<U8>(stage)].push_back(system);
 }
 
-inline void impl::SystemPool::run_stage_sync(Stage stage, Scope scope) {
+inline void impl::SystemPool::run_stage(Stage stage, Scope scope) {
     do_run_stage(static_cast<U8>(stage), scope);
-}
-
-inline void impl::SystemPool::run_all_sync(Scope &scope) {
-    for (U8 i = 0; i < m_stages.size(); ++i) {
-        do_run_stage(i, scope);
-    }
 }
 
 inline void impl::SystemPool::do_run_stage(U8 stage_idx, Scope scope) noexcept {
@@ -458,41 +458,41 @@ inline void World::sort_by_hierarchy_depth() noexcept {
     }
 }
 
-inline void World::commit_insert_part_cmds() noexcept {
-    m_cmd_batch.commit_insert_all_move(&m_registry);
+inline void World::commit_insert_part() noexcept {
+    m_cmd_batch.commit_insert_move(&m_registry);
 }
 
-inline void World::commit_mutate_part_cmds() noexcept {
-    m_cmd_batch.commit_mutate_all(&m_registry);
+inline void World::commit_mutate_part() noexcept {
+    m_cmd_batch.commit_mutate(&m_registry);
 }
 
-inline void World::commit_destroy_part_cmds() noexcept {
-    m_cmd_batch.commit_destroy_all(&m_registry);
+inline void World::commit_destroy_part() noexcept {
+    m_cmd_batch.commit_destroy(&m_registry);
 }
 
-inline void World::commit_attach_child_cmds() noexcept {
-    m_cmd_batch.commit_attach_child_all(this);
+inline void World::commit_attach_child() noexcept {
+    m_cmd_batch.commit_attach_child(this);
 }
 
-inline void World::commit_detach_child_cmds() noexcept {
-    m_cmd_batch.commit_detach_child_all(this);
+inline void World::commit_detach_child() noexcept {
+    m_cmd_batch.commit_detach_child(this);
 }
 
-inline void World::commit_cmds() noexcept {
-    m_cmd_batch.commit_mutate_all(&m_registry);
-    m_cmd_batch.commit_destroy_all(&m_registry);
-    m_cmd_batch.commit_insert_all_move(&m_registry);
-    m_cmd_batch.commit_attach_child_all(this);
-    m_cmd_batch.commit_detach_child_all(this);
+inline void World::commit() noexcept {
+    m_cmd_batch.commit_mutate(&m_registry);
+    m_cmd_batch.commit_destroy(&m_registry);
+    m_cmd_batch.commit_insert_move(&m_registry);
+    m_cmd_batch.commit_attach_child(this);
+    m_cmd_batch.commit_detach_child(this);
     m_cmd_batch.reset();
 }
 
 inline void World::commit_batch(CmdBatch &batch) noexcept {
-    batch.commit_mutate_all(&m_registry);
-    batch.commit_destroy_all(&m_registry);
-    batch.commit_insert_all_move(&m_registry);
-    batch.commit_attach_child_all(this);
-    batch.commit_detach_child_all(this);
+    batch.commit_mutate(&m_registry);
+    batch.commit_destroy(&m_registry);
+    batch.commit_insert_move(&m_registry);
+    batch.commit_attach_child(this);
+    batch.commit_detach_child(this);
 }
 
 template <typename T>
@@ -685,18 +685,22 @@ inline auto World::bottom_up_query(QueryOptions options) noexcept {
     return BottomUpQuery<Include...>(&m_registry, Signature::from_parts<Include...>(), options);
 }
 
-inline void World::schedule_sync(Stage stage, const System &system) noexcept {
-    m_system_pool.schedule_sync(stage, system);
+inline void World::schedule(Stage stage, const System &system) noexcept {
+    m_system_pool.schedule(stage, system);
 }
 
-inline void World::run_stage_sync(Stage stage) noexcept {
+inline void World::run_stage(Stage stage) noexcept {
     Scope scope{this};
-    m_system_pool.run_stage_sync(stage, scope);
+    m_system_pool.run_stage(stage, scope);
 }
 
-inline void World::run_all_sync() noexcept {
-    Scope scope{this};
-    m_system_pool.run_all_sync(scope);
+inline void World::run() noexcept {
+    run_stage(Stage::PreUpdate);
+    run_stage(Stage::PreUpdateScript);
+    run_stage(Stage::Update);
+    run_stage(Stage::UpdateScript);
+    run_stage(Stage::PostUpdate);
+    run_stage(Stage::PostUpdateScript);
 }
 
 template <IsScript S>
@@ -711,7 +715,7 @@ inline void World::insert_script(Thing thing, S script) noexcept {
 
     if (!m_script_registry.check_bit(tidx.idx())) {
         if constexpr (ScriptHasOnPostUpdate<S>) {
-            schedule_sync(Stage::PreUpdateScript, [](Scope scope) {
+            schedule(Stage::PreUpdateScript, [](Scope scope) {
                 for (auto [t, s] : scope.query<S>()) {
                     s.on_pre_update();
                 }
@@ -719,7 +723,7 @@ inline void World::insert_script(Thing thing, S script) noexcept {
         }
 
         if constexpr (ScriptHasOnUpdate<S>) {
-            schedule_sync(Stage::UpdateScript, [](Scope scope) {
+            schedule(Stage::UpdateScript, [](Scope scope) {
                 for (auto [t, s] : scope.query<S>()) {
                     s.on_update();
                 }
@@ -727,7 +731,7 @@ inline void World::insert_script(Thing thing, S script) noexcept {
         }
 
         if constexpr (ScriptHasOnPostUpdate<S>) {
-            schedule_sync(Stage::PostUpdateScript, [](Scope scope) {
+            schedule(Stage::PostUpdateScript, [](Scope scope) {
                 for (auto [t, s] : scope.query<S>()) {
                     s.on_post_update();
                 }
@@ -816,27 +820,27 @@ inline T &Scope::get(Thing thing) noexcept {
 }
 
 inline void Scope::commit_insert_part_cmds() noexcept {
-    m_world->commit_insert_part_cmds();
+    m_world->commit_insert_part();
 }
 
 inline void Scope::commit_mutate_part_cmds() noexcept {
-    m_world->commit_mutate_part_cmds();
+    m_world->commit_mutate_part();
 }
 
 inline void Scope::commit_destroy_part_cmds() noexcept {
-    m_world->commit_destroy_part_cmds();
+    m_world->commit_destroy_part();
 }
 
 inline void Scope::commit_part_cmds() noexcept {
-    m_world->commit_cmds();
+    m_world->commit();
 }
 
 inline void Scope::commit_attach_child_cmds() noexcept {
-    m_world->commit_attach_child_cmds();
+    m_world->commit_attach_child();
 }
 
 inline void Scope::commit_detach_child_cmds() noexcept {
-    m_world->commit_detach_child_cmds();
+    m_world->commit_detach_child();
 }
 
 template <typename T>

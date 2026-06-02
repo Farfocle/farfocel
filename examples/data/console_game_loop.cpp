@@ -108,16 +108,14 @@ struct Game {
 
         for (USize i = 0; i < iterations; ++i) {
             std::cout << "\n======================= Iteration " << i << "\n\n";
-            run_frame();
+            run();
             std::this_thread::sleep_for(2000ms);
         }
     }
 
-    void run_frame() {
-        world.run_stage_sync(fr::Stage::PreUpdate);
-        world.run_stage_sync(fr::Stage::Update);
-        world.run_stage_sync(fr::Stage::PostUpdate);
-        world.commit_cmds();
+    void run() {
+        world.run();
+        world.commit();
     }
 
 private:
@@ -126,15 +124,15 @@ private:
         world.insert(player, Player{});
         world.insert(player, Health{.max_health = 200, .health = 200});
         world.insert(player, Transform{});
-        world.commit_cmds();
+        world.commit();
     }
 
     void do_init_systems() {
-        world.schedule_sync(fr::Stage::Update, player_update);
-        world.schedule_sync(fr::Stage::Update, minion_update);
-        world.schedule_sync(fr::Stage::Update, clear_dead);
-        world.schedule_sync(fr::Stage::PostUpdate, print_minions);
-        world.schedule_sync(fr::Stage::PostUpdate, print_player);
+        world.schedule(fr::Stage::Update, player_update);
+        world.schedule(fr::Stage::Update, minion_update);
+        world.schedule(fr::Stage::Update, clear_dead);
+        world.schedule(fr::Stage::PostUpdate, print_minions);
+        world.schedule(fr::Stage::PostUpdate, print_player);
     }
 };
 

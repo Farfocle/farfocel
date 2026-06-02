@@ -12,6 +12,7 @@
 
 #include <cstring>
 #include <limits>
+#include <type_traits>
 
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
@@ -23,18 +24,14 @@
 
 namespace fr {
 struct TypeIdx;
+struct TypeMeta;
 
-/**
- * @brief Forward declaration for type index lookup.
- */
 template <typename T>
 TypeIdx lookup_tidx() noexcept;
 
 // ================================================================== Type Index
 
-/**
- * @brief Small handle identifying a registered type.
- */
+/// @brief Monotonic handle identifying registered types.
 struct TypeIdx {
     /// @brief Underlying index type.
     using IDX = U32;
@@ -67,9 +64,7 @@ struct TypeIdx {
         return m_idx == other.m_idx;
     }
 
-    /**
-     * @brief Returns the cached type index for T (first lookup per TU).
-     */
+    /// @brief Returns the cached type index for `T` (first lookup per TU).
     template <typename T>
     static TypeIdx from_type() noexcept {
         static TypeIdx cached_tidx = TypeIdx::nil();
@@ -85,13 +80,14 @@ struct TypeIdx {
     /// @brief Shape protocol for serialization.
     FR_SHAPE(FR_PROP("@tidx", m_idx);)
 
+    /// @brief Returns the TypeMeta for this index from the ambient type registry.
+    const TypeMeta &meta() const noexcept;
+
 private:
-    /// @brief Private constructor for raw index.
     explicit TypeIdx(IDX idx) noexcept
         : m_idx(idx) {
     }
 
-    /// @brief Stored index (nil by default).
     IDX m_idx{nil().idx()};
 };
 
@@ -121,6 +117,9 @@ struct TypeMeta {
 
     /// @brief Move-construct a T from src into dst.
     void (*move_construct)(void *dst, void *src) noexcept {nullptr};
+
+    /// @brief Copy-construct a T at dst from src. Null if T is not nothrow copy constructible.
+    void (*copy_construct)(void *dst, const void *src) noexcept {nullptr};
 
     /// @brief Shape writer hook (JSON).
     void (*json_writer_shape)(JsonWriterArchive &, void *) noexcept {nullptr};
@@ -162,6 +161,13 @@ struct TypeInfo {
     /// @brief Move-construct a T at dst from src.
     static void move_construct(void *dst, void *src) noexcept {
         new (dst) T(std::move(*static_cast<T *>(src)));
+    }
+
+    /// @brief Copy-construct a T at dst from src.
+    static void copy_construct(void *dst, const void *src) noexcept {
+        if constexpr (std::is_nothrow_copy_constructible_v<T>) {
+            new (dst) T(*static_cast<const T *>(src));
+        }
     }
 
     /// @brief Serialize T via shape protocol (writer).
@@ -268,6 +274,8 @@ TypeIdx lookup_tidx_from_registry(TypeRegistry &registry) noexcept {
         .construct = TypeInfo<T>::construct,
         .destroy = TypeInfo<T>::destroy,
         .move_construct = TypeInfo<T>::move_construct,
+        .copy_construct =
+            std::is_nothrow_copy_constructible_v<T> ? &TypeInfo<T>::copy_construct : nullptr,
         .json_writer_shape = TypeInfo<T>::json_writer_shape,
         .json_reader_shape = TypeInfo<T>::json_reader_shape,
     });
@@ -276,13 +284,16 @@ TypeIdx lookup_tidx_from_registry(TypeRegistry &registry) noexcept {
 
 // ====================================================================== Lookup
 
-/**
- * @brief Lookup the type index for T using the ambient registry.
- */
+/// @brief Lookup the type index for T using the ambient registry.
 template <typename T>
 TypeIdx lookup_tidx() noexcept {
     FR_ASSERT(get_ambient_ctx().type_registry, "no type registry on ambient ctx");
     return impl::lookup_tidx_from_registry<T>(*get_ambient_ctx().type_registry);
+}
+
+inline const TypeMeta &TypeIdx::meta() const noexcept {
+    FR_ASSERT(get_ambient_ctx().type_registry, "no type registry on ambient ctx");
+    return get_ambient_ctx().type_registry->meta(*this);
 }
 } // namespace fr
 
@@ -305,6 +316,11 @@ TypeIdx lookup_tidx() noexcept {
         }                                                                                          \
         static void move_construct(void *dst, void *src) noexcept {                                \
             new (dst) T(std::move(*static_cast<T *>(src)));                                        \
+        }                                                                                          \
+        static void copy_construct(void *dst, const void *src) noexcept {                          \
+            if constexpr (std::is_nothrow_copy_constructible_v<T>) {                               \
+                new (dst) T(*static_cast<const T *>(src));                                         \
+            }                                                                                      \
         }                                                                                          \
         static void json_writer_shape(fr::JsonWriterArchive &archive, void *ptr) noexcept {        \
             call_shape(archive, *(static_cast<T *>(ptr)));                                         \

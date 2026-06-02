@@ -56,54 +56,38 @@ public:
 
     // --------------------------------------------------------------------- API
 
-    /**
-     * @brief Sets the thing this script is attached to.
-     */
+    /// @brief Sets the thing this script is attached to.
     void set_self(Thing thing) noexcept;
 
-    /**
-     * @brief Sets the scope this script operates in.
-     */
+    /// @brief Sets the scope this script operates in.
     void set_scope(Scope scope) noexcept;
 
-    /**
-     * @brief Returns the thing this script is attached to.
-     */
+    /// @brief Returns the thing this script is attached to.
     [[nodiscard]] Thing self() const noexcept;
 
-    /**
-     * @brief Returns the scope this script operates in.
-     */
+    /// @brief Returns the scope this script operates in.
     [[nodiscard]] Scope &scope() noexcept;
 
-    /**
-     * @brief Checks if self has part T.
-     */
+    /// @brief Checks if self has part `T`.
     template <typename T>
     bool has() const noexcept;
 
     /**
-     * @brief Returns a reference to part T attached to self.
-     * @warning Asserts if self does not have T.
+     * @brief Returns a reference to part `T` attached to self.
+     * @warning Asserts if self does not have part `T`.
      */
     template <typename T>
     T &get() noexcept;
 
-    /**
-     * @brief Records an insert command for part T on self.
-     */
+    /// @brief Records an insert command for part `T` on self.
     template <typename T>
     void insert(const T &part) noexcept;
 
-    /**
-     * @brief Records an insert command for part T on self.
-     */
+    /// @brief Records an insert command for part `T` on self.
     template <typename T>
     void insert(T &&part) noexcept;
 
-    /**
-     * @brief Records a destroy command for part T on self.
-     */
+    /// @brief Records a destroy command for part `T` on self.
     template <typename T>
     void destroy() noexcept;
 

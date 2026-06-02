@@ -57,8 +57,8 @@ S32 main() {
     {
         fr::World world;
 
-        world.schedule_sync(fr::Stage::PreUpdate, system_a);
-        world.schedule_sync(fr::Stage::PostUpdate, system_b);
+        world.schedule(fr::Stage::PreUpdate, system_a);
+        world.schedule(fr::Stage::PostUpdate, system_b);
 
         fr::Thing a = world.handout();
         world.emplace_now<Pos>(a, Pos{1.0, 2.0});
@@ -71,8 +71,8 @@ S32 main() {
         fr::Thing c = world.handout();
         world.emplace_now<Pos>(c, Pos{5.0, 6.0});
 
-        world.run_stage_sync(fr::Stage::PreUpdate);
-        world.run_stage_sync(fr::Stage::PostUpdate);
+        world.run_stage(fr::Stage::PreUpdate);
+        world.run_stage(fr::Stage::PostUpdate);
     }
 
     fr::shutdown_core_ctx();

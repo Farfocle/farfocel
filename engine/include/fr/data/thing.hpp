@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "fr/core/hash.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
@@ -121,6 +122,13 @@ public:
         return m_thing == 0;
     }
 
+    /**
+     * @brief Hash function for Thing (splitmix64 on the raw 32-bit value).
+     */
+    Hash hash() const noexcept {
+        return Hash::from_raw(impl::splitmix64(static_cast<U64>(m_thing)));
+    }
+
     template <typename Archive>
     void shape(Archive &archive) noexcept {
         if constexpr (Archive::action == ArchiveAction::Write) {
@@ -152,4 +160,5 @@ private:
 
     U32 m_thing{0};
 };
+
 } // namespace fr

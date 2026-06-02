@@ -65,19 +65,12 @@ struct Game {
     void init() {
         player = world.handout();
         world.insert_script(player, PlayerScript(10));
-        world.commit_cmds();
+        world.commit();
     }
 
     void run() {
-        // This is boilerplate for setting stage ordering. In this example only `UpdateScript` will
-        // be used.
-        world.run_stage_sync(fr::Stage::PreUpdate);
-        world.run_stage_sync(fr::Stage::PreUpdateScript);
-        world.run_stage_sync(fr::Stage::Update);
-        world.run_stage_sync(fr::Stage::UpdateScript);
-        world.run_stage_sync(fr::Stage::PostUpdate);
-        world.run_stage_sync(fr::Stage::PostUpdateScript);
-        world.commit_cmds();
+        world.run();
+        world.commit();
     }
 };
 
