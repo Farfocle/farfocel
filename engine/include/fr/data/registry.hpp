@@ -76,134 +76,117 @@ public:
 
     // ------------------------------------------------- Internal Storage Access
 
-    /**
-     * @brief Returns the allocator used by this registry.
-     */
+    /// @brief Returns the allocator used by this registry.
     const Alloc *alloc() const noexcept;
 
-    /**
-     * @brief Returns the thing pool.
-     */
+    /// @brief Returns a reference to the thing pool.
     ThingPool &thing_pool_mut() noexcept;
 
-    /**
-     * @brief Returns the signature pool.
-     */
+    /// @brief Returns a reference to the signature pool.
     SignaturePool &signature_pool_mut() noexcept;
 
     /**
-     * @brief Returns a pointer to the PartPool for T, or nullptr if not yet created.
+     * @brief Returns a pointer to the part pool `T`.
+     * @note If the pointer is not yet created returns nullptr.
      */
     template <typename T>
     PartPool<T> *part_pool_mut() noexcept;
 
-    /**
-     * @brief Returns true if a PartPool for T has been created.
-     */
+    /// @brief Returns true if a part pool for part `T` has been created.
     template <typename T>
-    bool has_part_pool() const noexcept;
+    bool check_part_pool() const noexcept;
 
     // -------------------------------------------------------- Thing Operations
 
-    /**
-     * @brief Returns a fresh, non-nil thing.
-     */
+    /// @brief Returns a fresh, non-nil thing.
     Thing handout() noexcept;
 
     /**
-     * @brief Kills a thing.
-     * Destroys all parts it owns, clears its signature, and recycles its slot.
-     * @note Does nothing for nil or already-dead things.
+     * @brief Kills a thing, destroys all parts it owns, clears its signature, and recycles its
+     * slot.
+     * @note If a thing is nil or dead; does nothing.
      */
     void kill(Thing thing) noexcept;
 
-    /**
-     * @brief Returns true if the thing is alive. Nil thing is always alive.
-     */
+    /// @brief Returns true if the thing is alive. Nil thing is always alive.
     bool is_alive(Thing thing) const noexcept;
 
-    /**
-     * @brief Returns true if the thing is dead. Nil thing is never dead.
-     */
+    /// @brief Returns true if the thing is dead. Nil thing is never dead.
     bool is_dead(Thing thing) const noexcept;
 
     // --------------------------------------------------------- Part Operations
 
     /**
-     * @brief Returns true if the thing owns part T.
+     * @brief Returns true if the thing has part `T`.
      * @note Returns false if pool is missing or thing is dead.
-     * @note Returns true for nil thing when the pool exists (nil -> stub).
+     * @note Returns true for nil thing when the part pool `T` exists.
      */
     template <typename T>
     bool has(Thing thing) const noexcept;
 
     /**
-     * @brief Inserts or overrides part T on a thing.
-     * - Nil thing  : returns the stub pointer.
-     * - Dead thing : returns nullptr.
-     * - Alive, no T: inserts T, returns pointer to it.
-     * - Alive, has T: overrides T in-place, returns pointer to it.
+     * @brief Emplaces or overrides part `T` on a thing.
+     * @note If the thing is nil; returns the stub pointer.
+     * @note If the thing is dead; return nullptr.
+     * @note If the thing does NOT have a part `T`; inserts the new part, returns a pointer to it.
+     * @note If the thing does have a part `T; overrides it, returns a pointer to it`
      */
     template <typename T, typename... Args>
     T *emplace_checked(Thing thing, Args &&...args) noexcept;
 
-    /**
-     * @brief Inserts part T on a thing without any checks.
-     * @pre Caller must ensure: thing is alive (not nil, not dead), thing does NOT yet own T.
-     */
+    /// @brief Emplaces part `T` on a thing without any checks.
     template <typename T, typename... Args>
     T &emplace_unchecked(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Destroys part T on a thing if present.
-     * @return false if thing is nil, dead, pool is missing, or thing does not own T.
+     * @brief Destroys part `T` on a thing if present.
+     * @return false if thing is nil, dead, pool is missing, or thing does not have part `T`, true
+     * otherwise.
      */
     template <typename T>
     bool destroy_checked(Thing thing) noexcept;
 
-    /**
-     * @brief Destroys part T on a thing without any checks.
-     * @pre Caller must ensure: thing is alive, thing DOES own T, pool exists.
-     */
+    /// @brief Destroys part `T` on a thing without any checks.
     template <typename T>
     void destroy_unchecked(Thing thing) noexcept;
 
     /**
-     * @brief Returns a pointer to part T owned by the thing, or nullptr if not found.
-     * @note Returns stub pointer for nil thing when the pool exists.
+     * @brief Returns a pointer to part `T` owned by the thing, or nullptr if not found.
+     * @note If the thing is nil; returns the stub pointer.
      */
     template <typename T>
     T *get_checked(Thing thing) noexcept;
 
-    /**
-     * @brief Returns a reference to part T owned by the thing.
-     * @pre Caller must ensure: thing is alive, thing owns T, pool exists.
-     */
+    /// @brief Returns a reference to part `T` on the thing without any checks.
     template <typename T>
     T &get_unchecked(Thing thing) noexcept;
 
-    /**
-     * @brief Creates a query for things owning all parts in the Include list.
-     */
+    /// @brief Creates a forward query for things owning all parts in the Include list.
     template <typename... Include>
     auto query(QueryOptions options = {}) noexcept;
 
-    /**
-     * @brief Creates a reverse query for things owning all parts in the Include list.
-     */
+    /// @brief Creates a reverse query for things owning all parts in the Include list.
     template <typename... Include>
     auto reverse_query(QueryOptions options = {}) noexcept;
 
+    /// @brief Creates a query over the direct children of a thing.
+    template <typename... Include>
+    auto shallow_query(Thing thing, QueryOptions options = {}) noexcept;
+
+    /// @brief Creates a depth-first query over all descendants of a thing.
+    template <typename... Include>
+    auto deep_query(Thing thing, QueryOptions options = {}) noexcept;
+
     /**
-     * @brief Creates a top-down (parents first) query over the first Include type's sorted pool.
-     * @note Call World::sort_by_hierarchy_depth<T>() on the first Include type before using.
+     * @brief Creates a top-down (parents first) forward query.
+     * @note This works on any part pools - not only the sorted ones.
      */
     template <typename... Include>
     auto top_down_query(QueryOptions options = {}) noexcept;
 
     /**
-     * @brief Creates a bottom-up (leaves first) query over the first Include type's sorted pool.
-     * @note Call World::sort_by_hierarchy_depth<T>() on the first Include type before using.
+     * @brief Creates a bottom-up (leaves first) forward query.
+     * @note This works on any part pools - not only the sorted ones.
      */
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
@@ -211,43 +194,20 @@ public:
 private:
     // -------------------------------------------------------- Internal Helpers
 
-    /**
-     * @brief Returns true if no pool has been created for this type index (pool is absent).
-     */
     bool do_pool_absent(TypeIdx tidx) const noexcept;
-
-    /**
-     * @brief Returns true if the thing's signature contains the given part type.
-     */
     bool do_check_part(Thing thing, TypeIdx tidx) const noexcept;
 
-    /**
-     * @brief Returns the pool for T, creating it if it does not yet exist.
-     */
     template <typename T>
     PartPool<T> &do_ensure_part_pool(TypeIdx tidx) noexcept;
 
-    /**
-     * @brief Creates a new PartPool for T at the given type index slot.
-     * Also registers the type-erased destroy function used by kill().
-     */
     template <typename T>
     void do_create_part_pool(TypeIdx tidx) noexcept;
 
-    /**
-     * @brief Destroys all parts owned by the thing by iterating its signature.
-     * Called by kill() before invalidating the thing.
-     */
     void do_destroy_all_parts(Thing thing) noexcept;
 
-    /**
-     * @brief Type-erased destroy function stored in m_part_destroy_fns.
-     * Casts the pool to PartPool<T> and calls destroy_unchecked.
-     */
     template <typename T>
     static void do_part_destroy_fn(AnyPartPool &pool, Thing thing) noexcept;
 
-    // Used by Query.
     USize do_part_count_by_tidx(TypeIdx tidx) const noexcept;
     Slice<const Thing> do_part_to_thing_slice_by_tidx(TypeIdx tidx) const noexcept;
 
@@ -294,7 +254,7 @@ inline PartPool<T> *Registry::part_pool_mut() noexcept {
 }
 
 template <typename T>
-inline bool Registry::has_part_pool() const noexcept {
+inline bool Registry::check_part_pool() const noexcept {
     return !do_pool_absent(TypeIdx::from_type<T>());
 }
 
@@ -374,13 +334,16 @@ inline bool Registry::destroy_checked(Thing thing) noexcept {
     if (thing.is_nil()) [[unlikely]] {
         return false;
     }
+
     TypeIdx tidx = TypeIdx::from_type<T>();
     if (do_pool_absent(tidx)) [[unlikely]] {
         return false;
     }
+
     if (!m_thing_pool.check(thing)) [[unlikely]] {
         return false;
     }
+
     if (!do_check_part(thing, tidx)) [[unlikely]] {
         return false;
     }
@@ -403,16 +366,20 @@ inline T *Registry::get_checked(Thing thing) noexcept {
     if (do_pool_absent(tidx)) [[unlikely]] {
         return nullptr;
     }
+
     PartPool<T> &pool = m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
     if (thing.is_nil()) [[unlikely]] {
         return &pool.get_stub();
     }
+
     if (!m_thing_pool.check(thing)) [[unlikely]] {
         return nullptr;
     }
+
     if (!do_check_part(thing, tidx)) [[unlikely]] {
         return nullptr;
     }
+
     return pool.get_unchecked(thing);
 }
 
@@ -437,12 +404,14 @@ inline auto Registry::reverse_query(QueryOptions options) noexcept {
 
 template <typename... Include>
 inline auto Registry::top_down_query(QueryOptions options) noexcept {
-    return GenericDepthHierarchyQuery<false, Include...>(this, Signature::from_parts<Include...>(), options);
+    return GenericDepthHierarchyQuery<false, Include...>(this, Signature::from_parts<Include...>(),
+                                                         options);
 }
 
 template <typename... Include>
 inline auto Registry::bottom_up_query(QueryOptions options) noexcept {
-    return GenericDepthHierarchyQuery<true, Include...>(this, Signature::from_parts<Include...>(), options);
+    return GenericDepthHierarchyQuery<true, Include...>(this, Signature::from_parts<Include...>(),
+                                                        options);
 }
 
 // ------------------------------------------------------------ Internal Helpers

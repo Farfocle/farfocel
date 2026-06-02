@@ -29,13 +29,13 @@ TEST_CASE("Registry - thing lifecycle") {
 TEST_CASE("Registry - part pool existence and nil behavior") {
     impl::Registry reg;
 
-    CHECK_FALSE(reg.has_part_pool<Position>());
+    CHECK_FALSE(reg.check_part_pool<Position>());
     CHECK_FALSE(reg.has<Position>(Thing::nil()));
 
     Position *nil_pos = reg.emplace_checked<Position>(Thing::nil(), Position{7});
 
     CHECK(nil_pos != nullptr);
-    CHECK(reg.has_part_pool<Position>());
+    CHECK(reg.check_part_pool<Position>());
     CHECK(reg.has<Position>(Thing::nil()));
     CHECK(reg.part_pool_mut<Position>() != nullptr);
 }
