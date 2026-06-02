@@ -33,11 +33,8 @@ namespace fr {
 // ================================================================== SystemPool
 
 namespace impl {
-
 class SystemPool {
 public:
-    // ----------------------------------------------- Constructors & Destructor
-
     SystemPool() noexcept;
     explicit SystemPool(Alloc *alloc) noexcept;
 
@@ -46,34 +43,22 @@ public:
     SystemPool &operator=(const SystemPool &) = delete;
     SystemPool &operator=(SystemPool &&) = delete;
 
-    // --------------------------------------------------------------------- API
-
-    /**
-     * @brief Schedules a system for synchronous execution in the given stage.
-     */
+    /// @brief Schedules a system for synchronous execution in the given stage.
     void schedule_sync(Stage stage, const System &system) noexcept;
 
-    /**
-     * @brief Runs all systems scheduled for the given stage synchronously.
-     */
+    /// @brief Runs all systems scheduled for the given stage synchronously.
     void run_stage_sync(Stage stage, Scope scope);
 
-    /**
-     * @brief Runs all systems scheduled for all stages synchronously.
-     */
+    /// @brief Runs all systems scheduled for all stages synchronously.
     void run_all_sync(Scope &scope);
 
 private:
-    /**
-     * @brief Executes all systems for a given stage index.
-     */
+    /// @brief Executes all systems for a given stage index.
     void do_run_stage(U8 stage_idx, Scope scope) noexcept;
 
-    // -------------------------------------------------------- Member Variables
     const Alloc *m_alloc{nullptr};
     Array<DynamicArray<System>, STAGE_COUNT> m_stages{};
 };
-
 } // namespace impl
 
 // ======================================================================= World
@@ -98,9 +83,7 @@ public:
 
     // -------------------------------------------------------- Thing Operations
 
-    /**
-     * @brief Returns a fresh, non-nil thing.
-     */
+    /// @brief Returns a fresh, non-nil thing.
     Thing handout() noexcept;
 
     /**
@@ -109,9 +92,7 @@ public:
      */
     void kill(Thing thing) noexcept;
 
-    /**
-     * @brief Returns true if the thing is alive. Nil thing is always alive.
-     */
+    /// @brief Returns true if the thing is alive. Nil thing is always alive.
     bool is_alive(Thing thing) const noexcept;
 
     /**
@@ -121,51 +102,48 @@ public:
 
     // --------------------------------------------------------- Part Operations
 
-    /**
-     * @brief Returns true if the thing owns part T.
-     */
+    /// @brief Returns true if the thing has part `T`.
     template <typename T>
     bool has(Thing thing) const noexcept;
 
     /**
-     * @brief Inserts or overrides part T on a thing immediately.
-     * - Nil thing  : returns the stub pointer.
-     * - Dead thing : returns nullptr.
-     * - Alive thing: inserts T or overrides it if already present.
+     * @brief Inserts or overrides part `T` on a thing immediately.
+     * @note If thing is nil; returns the stub pointer.
+     * @note If thing is dead; returns nullptr.
+     * @note If thing is alive; inserts part `T` or ovverides it if alread present.
      */
     template <typename T, typename... Args>
     T *try_emplace_now(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Inserts part T immediately without any checks.
-     * @pre Caller must ensure: thing is alive, thing does NOT yet own T.
+     * @brief Inserts part `T` immediately without any checks.
+     * @pre Caller must ensure: thing is alive, thing does NOT yet have part `T`.
      */
     template <typename T, typename... Args>
     T &emplace_now(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Destroys part T on a thing immediately.
-     * @return false if thing is nil, dead, or does not own T.
+     * @brief Destroys part `T` on a thing immediately.
+     * @return false if thing is nil, dead, or does NOT have part `T`.
      */
     template <typename T>
     bool destroy_now(Thing thing) noexcept;
 
-    /**
-     * @brief Returns a pointer to part T owned by the thing, or nullptr if not found.
-     */
+    /// @brief Returns a pointer to part `T` owned by the thing, or nullptr if not found.
     template <typename T>
     T *try_get(Thing thing) noexcept;
 
     /**
-     * @brief Returns a reference to part T owned by the thing.
-     * @pre Caller must ensure: thing is alive and owns T.
+     * @brief Returns a reference to part `T` owned by the thing.
+     * @pre Caller must ensure: thing is alive and has `T`.
      */
     template <typename T>
     T &get(Thing thing) noexcept;
 
     /**
      * @brief Sorts the entire part pool `T` using the hierarchy depth.
-     * @note This allows for BFS-like traversals with a normal forward query for sorted pools.
+     * @note This allows for BFS-like traversals with a normal forward and reverse queries for
+     * sorted pools.
      */
     template <typename T>
     void sort_by_hierarchy_depth() noexcept;
@@ -235,132 +213,103 @@ public:
 
     // ------------------------------------------------- Command Part Operations
 
-    /**
-     * @brief Apply all recorded insert commands across all part pools.
-     */
+    /// @brief Apply all recorded insert commands across all part pools.
     void commit_insert_part_cmds() noexcept;
 
-    /**
-     * @brief Apply all recorded mutate commands across all part pools.
-     */
+    /// @brief Apply all recorded mutate commands across all part pools.
     void commit_mutate_part_cmds() noexcept;
 
-    /**
-     * @brief Apply all recorded destroy commands across all part pools.
-     */
+    /// @brief Apply all recorded destroy commands across all part pools.
     void commit_destroy_part_cmds() noexcept;
 
-    /**
-     * @brief Apply all commands in order: mutate → destroy → insert.
-     */
-    void commit_part_cmds() noexcept;
-
-    /**
-     * @brief Apply all recorded attach-child commands.
-     */
+    /// @brief Apply all recorded attach-child commands.
     void commit_attach_child_cmds() noexcept;
 
-    /**
-     * @brief Apply all recorded detach-child commands.
-     */
+    /// @brief Apply all recorded detach-child commands.
     void commit_detach_child_cmds() noexcept;
 
+    /// @brief Apply all commands in order: mutate -> destroy -> insert -> attach -> detach.
+    void commit_cmds() noexcept;
+
     /**
-     * @brief Commits all commands in a batch (mutate -> destroy -> insert -> relations) then resets
-     * it. Works on any CmdBatch, not just the World's default one.
+     * @brief Commits all commands in a batch in order: mutate -> destroy -> insert -> attach
+     * -> detach.
      */
     void commit_batch(CmdBatch &batch) noexcept;
 
     /**
-     * @brief Records a deferred insert command for part T on a thing.
-     * @note Does nothing if thing is nil, dead, or already owns T.
+     * @brief Records a deferred insert command for part `T` on a thing.
+     * @note Does nothing if thing is nil, dead, or already has part `T`.
      */
     template <typename T>
     void insert(Thing thing, const T &part) noexcept;
 
     /**
-     * @brief Records a deferred insert command for part T on a thing.
-     * @note Does nothing if thing is nil, dead, or already owns T.
+     * @brief Records a deferred insert command for part `T` on a thing.
+     * @note Does nothing if thing is nil, dead, or already has part `T`.
      */
     template <typename T>
     void insert(Thing thing, T &&part) noexcept;
 
     /**
-     * @brief Records a deferred destroy command for part T on a thing.
-     * @note Does nothing if thing is nil, dead, or does not own T.
+     * @brief Records a deferred destroy command for part `T` on a thing.
+     * @note Does nothing if thing is nil, dead, or does NOT have part `T`.
      */
     template <typename T>
     void destroy(Thing thing) noexcept;
 
     // ------------------------------------------------------------------- Query
 
-    /**
-     * @brief Creates a forward query for things owning all parts in the Include list.
-     */
+    /// @brief Creates a forward query for things owning all parts in the Include list.
     template <typename... Include>
     auto query(QueryOptions options = {}) noexcept;
 
-    /**
-     * @brief Creates a reverse query for things owning all parts in the Include list.
-     */
+    /// @brief Creates a reverse query for things owning all parts in the Include list.
     template <typename... Include>
     auto reverse_query(QueryOptions options = {}) noexcept;
 
-    /**
-     * @brief Creates a query over the direct children of a thing.
-     */
+    /// @brief Creates a query over the direct children of a thing.
     template <typename... Include>
     auto shallow_query(Thing thing, QueryOptions options = {}) noexcept;
 
-    /**
-     * @brief Creates a depth-first query over all descendants of a thing.
-     */
+    /// @brief Creates a depth-first query over all descendants of a thing.
     template <typename... Include>
     auto deep_query(Thing thing, QueryOptions options = {}) noexcept;
 
     /**
-     * @brief Creates a top-down (parents first) query over the first Include type's sorted pool.
-     * @note Call sort_by_hierarchy_depth<T>() on the first Include type before using.
+     * @brief Creates a top-down (parents first) forward query.
+     * @note This works on any part pools - not only the sorted ones.
      */
     template <typename... Include>
     auto top_down_query(QueryOptions options = {}) noexcept;
 
     /**
-     * @brief Creates a bottom-up (leaves first) query over the first Include type's sorted pool.
-     * @note Call sort_by_hierarchy_depth<T>() on the first Include type before using.
+     * @brief Creates a bottom-up (leaves first) forward query.
+     * @note This works on any part pools - not only the sorted ones.
      */
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
 
     // ----------------------------------------------------------------- Systems
 
-    /**
-     * @brief Schedules a system for synchronous execution in the given stage.
-     */
+    /// @brief Schedules a system for synchronous execution in the given stage.
     void schedule_sync(Stage stage, const System &system) noexcept;
 
-    /**
-     * @brief Runs all systems scheduled for the given stage synchronously.
-     */
+    /// @brief Runs all systems scheduled for the given stage synchronously.
     void run_stage_sync(Stage stage) noexcept;
 
-    /**
-     * @brief Runs all systems scheduled for all stages synchronously.
-     */
+    /// @brief Runs all systems scheduled for all stages synchronously.
     void run_all_sync() noexcept;
 
     // ----------------------------------------------------------------- Scripts
 
-    /**
-     * @brief Attaches a script to a thing and registers its lifecycle systems.
-     * @note Systems are only registered once per script type.
-     */
+    /// @brief Attaches a script to a thing.
     template <IsScript S>
     void insert_script(Thing thing, S script) noexcept;
 
     /**
-     * @brief Removes a script from a thing, calling on_destroy if defined.
-     * @note Does nothing if thing is nil, dead, or does not own script S.
+     * @brief Removes a script from a thing..
+     * @note Does nothing if thing is nil, dead, or does not havescript `S`.
      */
     template <IsScript S>
     void destroy_script(Thing thing) noexcept;
@@ -370,7 +319,7 @@ private:
     void do_update_hierarchy(HierarchyDepth parent_depth, Thing child) noexcept;
     void do_detach_from_hierarchy_unchecked(Thing thing) noexcept;
 
-    // -------------------------------------------------------- Member Variables
+    // ----------------------------------------------------------------- Members
     Options m_options{};
     impl::Registry m_registry{};
     CmdBatch m_cmd_batch{};
@@ -378,7 +327,7 @@ private:
     Bitset<MAX_PARTS> m_script_registry{};
 };
 
-// ========================================= SystemPool Method Implementations
+// =========================================== SystemPool Method Implementations
 
 inline impl::SystemPool::SystemPool() noexcept
     : SystemPool(get_ambient_ctx().alloc) {
@@ -411,7 +360,7 @@ inline void impl::SystemPool::do_run_stage(U8 stage_idx, Scope scope) noexcept {
     }
 }
 
-// ============================================= World Method Implementations
+// ================================================ World Method Implementations
 
 inline World::World() noexcept
     : World(Options{}) {
@@ -521,13 +470,6 @@ inline void World::commit_destroy_part_cmds() noexcept {
     m_cmd_batch.commit_destroy_all(&m_registry);
 }
 
-inline void World::commit_part_cmds() noexcept {
-    m_cmd_batch.commit_mutate_all(&m_registry);
-    m_cmd_batch.commit_destroy_all(&m_registry);
-    m_cmd_batch.commit_insert_all_move(&m_registry);
-    m_cmd_batch.reset();
-}
-
 inline void World::commit_attach_child_cmds() noexcept {
     m_cmd_batch.commit_attach_child_all(this);
 }
@@ -536,13 +478,21 @@ inline void World::commit_detach_child_cmds() noexcept {
     m_cmd_batch.commit_detach_child_all(this);
 }
 
+inline void World::commit_cmds() noexcept {
+    m_cmd_batch.commit_mutate_all(&m_registry);
+    m_cmd_batch.commit_destroy_all(&m_registry);
+    m_cmd_batch.commit_insert_all_move(&m_registry);
+    m_cmd_batch.commit_attach_child_all(this);
+    m_cmd_batch.commit_detach_child_all(this);
+    m_cmd_batch.reset();
+}
+
 inline void World::commit_batch(CmdBatch &batch) noexcept {
     batch.commit_mutate_all(&m_registry);
     batch.commit_destroy_all(&m_registry);
     batch.commit_insert_all_move(&m_registry);
     batch.commit_attach_child_all(this);
     batch.commit_detach_child_all(this);
-    batch.reset();
 }
 
 template <typename T>
@@ -809,8 +759,7 @@ inline void World::destroy_script(Thing thing) noexcept {
     m_registry.destroy_checked<S>(thing);
 }
 
-// ============================================== Scope Method Implementations
-// World must be complete before these can be provided.
+// ================================================ Scope Method Implementations
 
 inline Scope::Scope() noexcept
     : m_world(nullptr) {
@@ -879,7 +828,7 @@ inline void Scope::commit_destroy_part_cmds() noexcept {
 }
 
 inline void Scope::commit_part_cmds() noexcept {
-    m_world->commit_part_cmds();
+    m_world->commit_cmds();
 }
 
 inline void Scope::commit_attach_child_cmds() noexcept {

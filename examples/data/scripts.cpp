@@ -65,7 +65,7 @@ struct Game {
     void init() {
         player = world.handout();
         world.insert_script(player, PlayerScript(10));
-        world.commit_part_cmds();
+        world.commit_cmds();
     }
 
     void run() {
@@ -77,7 +77,7 @@ struct Game {
         world.run_stage_sync(fr::Stage::UpdateScript);
         world.run_stage_sync(fr::Stage::PostUpdate);
         world.run_stage_sync(fr::Stage::PostUpdateScript);
-        world.commit_part_cmds();
+        world.commit_cmds();
     }
 };
 

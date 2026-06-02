@@ -117,7 +117,7 @@ struct Game {
         world.run_stage_sync(fr::Stage::PreUpdate);
         world.run_stage_sync(fr::Stage::Update);
         world.run_stage_sync(fr::Stage::PostUpdate);
-        world.commit_part_cmds();
+        world.commit_cmds();
     }
 
 private:
@@ -126,7 +126,7 @@ private:
         world.insert(player, Player{});
         world.insert(player, Health{.max_health = 200, .health = 200});
         world.insert(player, Transform{});
-        world.commit_part_cmds();
+        world.commit_cmds();
     }
 
     void do_init_systems() {

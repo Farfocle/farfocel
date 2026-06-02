@@ -545,7 +545,7 @@ private:
         }
     }
 
-    // -------------------------------------------------------- Member Variables
+    // ----------------------------------------------------------------- Members
     Alloc *m_alloc{nullptr};
     Slice<Byte> m_arena_buffer{};
     ArenaAlloc m_arena{};
