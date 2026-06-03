@@ -46,10 +46,7 @@ set(ENGINE_HEADERS
 ### data
     "include/fr/data/cmd.hpp"
     "include/fr/data/part.hpp"
-    "include/fr/data/part_pool.hpp"
-    "include/fr/data/query.hpp"
     "include/fr/data/registry.hpp"
-    "include/fr/data/signature_pool.hpp"
     "include/fr/data/thing.hpp"
     "include/fr/data/world.hpp"
     "include/fr/data/relations.hpp"

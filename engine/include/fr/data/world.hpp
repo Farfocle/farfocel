@@ -15,19 +15,19 @@
 #include "fr/core/bitset.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
+#include "fr/core/inline_function.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/meta.hpp"
 #include "fr/data/cmd.hpp"
 #include "fr/data/part.hpp"
-#include "fr/data/part_pool.hpp"
-#include "fr/data/query.hpp"
 #include "fr/data/registry.hpp"
 #include "fr/data/relations.hpp"
 #include "fr/data/thing.hpp"
-#include "fr/core/inline_function.hpp"
 
 namespace fr {
 // ======================================================================= Scope
+
+class World;
 
 /**
  * @brief Scope is a mini version of the World that forwards thing and part operations.
@@ -35,7 +35,7 @@ namespace fr {
  */
 class Scope {
 public:
-    // -------------------------------------------------- Constructors
+    // ------------------------------------------------------------ Constructors
 
     Scope() noexcept;
     Scope(World *world) noexcept;
@@ -213,7 +213,6 @@ private:
 
 template <typename T>
 concept IsScript = std::derived_from<T, Script>;
-
 
 // ================================================================== SystemPool
 
@@ -1092,7 +1091,6 @@ template <typename S>
 inline void Scope::destroy_script(Thing thing) noexcept {
     m_world->destroy_script<S>(thing);
 }
-
 
 inline void Script::set_self(Thing thing) noexcept {
     m_self = thing;
