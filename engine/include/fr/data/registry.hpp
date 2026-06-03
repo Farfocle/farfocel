@@ -23,7 +23,7 @@ namespace fr {
 
 /**
  * @brief Filtering options for a query.
- * @note Use Signature::from_parts<...>() to construct the fields.
+ * @note Use `Signature::from_parts<...>()`` to construct the fields.
  */
 struct QueryOptions {
     Signature with{};

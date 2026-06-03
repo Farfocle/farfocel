@@ -47,81 +47,185 @@ public:
 
     // -------------------------------------------------------- Thing Operations
 
+    /// @brief Returns a fresh, non-nil thing.
     Thing handout() noexcept;
 
+    /**
+     * @brief Kills a thing and destroys all of its parts.
+     * @note If the thing is nil od dead; does nothing.
+     */
     void kill(Thing thing) noexcept;
 
+    /**
+     * @brief Returns true if a thing is alive.
+     * @note The nil thing is alive.
+     */
     bool is_alive(Thing thing) const noexcept;
 
+    /**
+     * @brief Returns true if a thing is dead.
+     * @note The nil thing is not dead.
+     */
     bool is_dead(Thing thing) const noexcept;
 
     // --------------------------------------------------------- Part Operations
 
+    /// @brief Returns true if the thing has part `T`.
     template <typename T>
     bool has(Thing thing) const noexcept;
 
+    /**
+     * @brief Inserts or overrides part `T` on a thing immediately.
+     * @note If thing is nil; returns the stub pointer.
+     * @note If thing is dead; returns nullptr.
+     * @note If thing is alive; inserts part `T` or ovverides it if alread present.
+     */
     template <typename T, typename... Args>
     T *try_emplace_now(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Inserts part T immediately without any checks.
-     * @pre Caller must ensure: thing is alive, thing does NOT yet own T.
+     * @brief Inserts part `T` immediately without any checks.
+     * @pre Caller must ensure: thing is alive, thing does NOT yet have part `T`.
      */
     template <typename T, typename... Args>
     T &emplace_now(Thing thing, Args &&...args) noexcept;
 
+    /**
+     * @brief Destroys part `T` on a thing immediately.
+     * @return false if thing is nil, dead, or does NOT have part `T`.
+     */
     template <typename T>
     bool destroy_now(Thing thing) noexcept;
 
+    /// @brief Returns a pointer to part `T` owned by the thing, or nullptr if not found.
     template <typename T>
     T *try_get(Thing thing) noexcept;
 
+    /**
+     * @brief Returns a reference to part `T` owned by the thing.
+     * @pre Caller must ensure: thing is alive and has `T`.
+     */
     template <typename T>
     T &get(Thing thing) noexcept;
 
+    // --------------------------------------------------------------- Relations
+
+    /**
+     * @brief Attaches a child to the parent. Updates hierarchy.
+     * @param parent The parent thing.
+     * @pre `parent` must have `Relations` part.
+     * @param child The child thing.
+     * @pre `child` must have `Relations` part.
+     *
+     * @note If `parent` is nil; does nothing.
+     * @note If `child` is nil; does nothing.
+     */
+    void attach_child_now(Thing parent, Thing child) noexcept;
+
+    /**
+     * @brief Emits a `AttachChild` command.
+     * @param parent The parent thing.
+     * @pre `parent` must have `Relations` part.
+     * @param child The child thing.
+     * @pre `child` must have `Relations` part.
+     *
+     * @note If `parent` is nil; does nothing.
+     * @note If `child` is nil; does nothing.
+     */
+    void attach_child(Thing parent, Thing child) noexcept;
+
+    /**
+     * @brief Detaches a child from a parent. Updates hierarchy.
+     * @param parent The parent thing.
+     * @pre `parent` must have `Relations` part.
+     * @param child The child thing.
+     * @pre `child` must have `Relations` part.
+     *
+     * @note If `child` is not a real child of the `parent`; does nothing.
+     * @note If `parent` is nil; does nothing.
+     * @note If `child` is nil; does nothing.
+     */
+    void detach_child_now(Thing parent, Thing child) noexcept;
+
+    /**
+     * @brief Emits a `DetachChild` command.
+     * @param parent The parent thing.
+     * @pre `parent` must have `Relations` part.
+     * @param child The child thing.
+     * @pre `child` must have `Relations` part.
+     *
+     * @note If `child` is not a real child of the `parent`; does nothing.
+     * @note If `parent` is nil; does nothing.
+     * @note If `child` is nil; does nothing.
+     */
+    void detach_child(Thing parent, Thing child) noexcept;
+
     // ------------------------------------------------- Command Part Operations
 
-    void commit_insert_part_cmds() noexcept;
-    void commit_mutate_part_cmds() noexcept;
-    void commit_destroy_part_cmds() noexcept;
-    void commit_part_cmds() noexcept;
-    void commit_attach_child_cmds() noexcept;
-    void commit_detach_child_cmds() noexcept;
-
+    /**
+     * @brief Records a deferred insert command for part `T` on a thing.
+     * @note Does nothing if thing is nil, dead, or already has part `T`.
+     */
     template <typename T>
     void insert(Thing thing, const T &part) noexcept;
 
+    /**
+     * @brief Records a deferred insert command for part `T` on a thing.
+     * @note Does nothing if thing is nil, dead, or already has part `T`.
+     */
     template <typename T>
     void insert(Thing thing, T &&part) noexcept;
 
+    /**
+     * @brief Records a deferred destroy command for part `T` on a thing.
+     * @note Does nothing if thing is nil, dead, or does NOT have part `T`.
+     */
     template <typename T>
     void destroy(Thing thing) noexcept;
 
     // ------------------------------------------------------------------- Query
 
+    /// @brief Creates a forward query for things owning all parts in the Include list.
     template <typename... Include>
     auto query(QueryOptions options = {}) noexcept;
 
+    /// @brief Creates a reverse query for things owning all parts in the Include list.
     template <typename... Include>
     auto reverse_query(QueryOptions options = {}) noexcept;
 
+    /// @brief Creates a query over the direct children of a thing.
     template <typename... Include>
     auto shallow_query(Thing thing, QueryOptions options = {}) noexcept;
 
+    /// @brief Creates a depth-first query over all descendants of a thing.
     template <typename... Include>
     auto deep_query(Thing thing, QueryOptions options = {}) noexcept;
 
+    /**
+     * @brief Creates a top-down (parents first) forward query.
+     * @note This works on any part pools - not only the sorted ones.
+     */
     template <typename... Include>
     auto top_down_query(QueryOptions options = {}) noexcept;
 
+    /**
+     * @brief Creates a bottom-up (leaves first) forward query.
+     * @note This works on any part pools - not only the sorted ones.
+     */
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
 
     // ----------------------------------------------------------------- Scripts
 
+    /// @brief Attaches a script to a thing.
+    template <typename S>
+    void insert_script(Thing thing, S script) noexcept;
+
     /**
-     * @brief Removes a script from a thing, calling on_destroy if defined.
-     * @note Does nothing if thing is nil, dead, or does not own script S.
+     * @brief Removes a script from a thing..
+     * @note If the thing is dead; does nothing.
+     * @note If the thing is nil; does nothing.
+     * @note If the thing does have a script `S`; does nothing.
      */
     template <typename S>
     void destroy_script(Thing thing) noexcept;
@@ -284,15 +388,19 @@ public:
 
     /**
      * @brief Kills a thing and destroys all of its parts.
-     * @note Does nothing for nil or already-dead things.
+     * @note If the thing is nil od dead; does nothing.
      */
     void kill(Thing thing) noexcept;
 
-    /// @brief Returns true if the thing is alive. Nil thing is always alive.
+    /**
+     * @brief Returns true if a thing is alive.
+     * @note The nil thing is alive.
+     */
     bool is_alive(Thing thing) const noexcept;
 
     /**
-     * @brief Returns true if the thing is dead. Nil thing is never dead.
+     * @brief Returns true if a thing is dead.
+     * @note The nil thing is not dead.
      */
     bool is_dead(Thing thing) const noexcept;
 
@@ -514,7 +622,9 @@ public:
 
     /**
      * @brief Removes a script from a thing..
-     * @note Does nothing if thing is nil, dead, or does not havescript `S`.
+     * @note If the thing is dead; does nothing.
+     * @note If the thing is nil; does nothing.
+     * @note If the thing does have a script `S`; does nothing.
      */
     template <IsScript S>
     void destroy_script(Thing thing) noexcept;
@@ -1018,28 +1128,20 @@ inline T &Scope::get(Thing thing) noexcept {
     return m_world->get<T>(thing);
 }
 
-inline void Scope::commit_insert_part_cmds() noexcept {
-    m_world->commit_insert_part();
+inline void Scope::attach_child_now(Thing parent, Thing child) noexcept {
+    m_world->attach_child_now(parent, child);
 }
 
-inline void Scope::commit_mutate_part_cmds() noexcept {
-    m_world->commit_mutate_part();
+inline void Scope::attach_child(Thing parent, Thing child) noexcept {
+    m_world->attach_child(parent, child);
 }
 
-inline void Scope::commit_destroy_part_cmds() noexcept {
-    m_world->commit_destroy_part();
+inline void Scope::detach_child_now(Thing parent, Thing child) noexcept {
+    m_world->detach_child_now(parent, child);
 }
 
-inline void Scope::commit_part_cmds() noexcept {
-    m_world->commit();
-}
-
-inline void Scope::commit_attach_child_cmds() noexcept {
-    m_world->commit_attach_child();
-}
-
-inline void Scope::commit_detach_child_cmds() noexcept {
-    m_world->commit_detach_child();
+inline void Scope::detach_child(Thing parent, Thing child) noexcept {
+    m_world->detach_child(parent, child);
 }
 
 template <typename T>
@@ -1085,6 +1187,11 @@ inline auto Scope::top_down_query(QueryOptions options) noexcept {
 template <typename... Include>
 inline auto Scope::bottom_up_query(QueryOptions options) noexcept {
     return m_world->bottom_up_query<Include...>(options);
+}
+
+template <typename S>
+inline void Scope::insert_script(Thing thing, const S script) noexcept {
+    m_world->insert_script(thing, script);
 }
 
 template <typename S>
