@@ -26,7 +26,6 @@
 #include "fr/data/part.hpp"
 #include "fr/data/part_pool.hpp"
 #include "fr/data/signature_pool.hpp"
-#include "fr/data/thing_pool.hpp"
 
 namespace fr::impl {
 

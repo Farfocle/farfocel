@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "fr/core/ctx.hpp"
 #include "fr/core/format.hpp"
 #include "fr/core/shape.hpp"
@@ -5,7 +7,6 @@
 #include "fr/data/relations.hpp"
 #include "fr/data/thing.hpp"
 #include "fr/data/world.hpp"
-#include <iostream>
 
 struct Pos {
     F32 x{0.0};

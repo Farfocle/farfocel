@@ -20,11 +20,10 @@ namespace fr {
 namespace impl {
 
 inline bool check_signature(const Signature &sig, const Signature &ret,
-                            const QueryOptions &opts) noexcept {
+                            const QueryOptions &opt) noexcept {
     const auto &bits = sig.bitset();
     return (bits & ret.bitset()) == ret.bitset() &&
-           (bits & opts.with.bitset()) == opts.with.bitset() &&
-           (bits & opts.without.bitset()).none();
+           (bits & opt.with.bitset()) == opt.with.bitset() && (bits & opt.without.bitset()).none();
 }
 
 // ================================================================ GenericQuery

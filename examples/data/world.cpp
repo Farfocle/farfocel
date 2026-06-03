@@ -1,10 +1,3 @@
-/**
- * @file registry.cpp
- * @author Kiju
- *
- * @brief Example testing the basic capabilities of ECS.
- */
-
 #include <iostream>
 
 #include "fr/core/ctx.hpp"

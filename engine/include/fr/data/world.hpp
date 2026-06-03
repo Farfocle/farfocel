@@ -23,14 +23,214 @@
 #include "fr/data/query.hpp"
 #include "fr/data/registry.hpp"
 #include "fr/data/relations.hpp"
-#include "fr/data/scope.hpp"
-#include "fr/data/script.hpp"
-#include "fr/data/stage.hpp"
 #include "fr/data/thing.hpp"
+#include "fr/core/inline_function.hpp"
 
 namespace fr {
+// ======================================================================= Scope
+
+/**
+ * @brief Scope is a mini version of the World that forwards thing and part operations.
+ * It is safe to pass around inside systems for world mutation.
+ */
+class Scope {
+public:
+    // -------------------------------------------------- Constructors
+
+    Scope() noexcept;
+    Scope(World *world) noexcept;
+
+    Scope(const Scope &) noexcept = default;
+    Scope(Scope &&) noexcept = default;
+    Scope &operator=(const Scope &) noexcept = default;
+    Scope &operator=(Scope &&) noexcept = default;
+
+    // -------------------------------------------------------- Thing Operations
+
+    Thing handout() noexcept;
+
+    void kill(Thing thing) noexcept;
+
+    bool is_alive(Thing thing) const noexcept;
+
+    bool is_dead(Thing thing) const noexcept;
+
+    // --------------------------------------------------------- Part Operations
+
+    template <typename T>
+    bool has(Thing thing) const noexcept;
+
+    template <typename T, typename... Args>
+    T *try_emplace_now(Thing thing, Args &&...args) noexcept;
+
+    /**
+     * @brief Inserts part T immediately without any checks.
+     * @pre Caller must ensure: thing is alive, thing does NOT yet own T.
+     */
+    template <typename T, typename... Args>
+    T &emplace_now(Thing thing, Args &&...args) noexcept;
+
+    template <typename T>
+    bool destroy_now(Thing thing) noexcept;
+
+    template <typename T>
+    T *try_get(Thing thing) noexcept;
+
+    template <typename T>
+    T &get(Thing thing) noexcept;
+
+    // ------------------------------------------------- Command Part Operations
+
+    void commit_insert_part_cmds() noexcept;
+    void commit_mutate_part_cmds() noexcept;
+    void commit_destroy_part_cmds() noexcept;
+    void commit_part_cmds() noexcept;
+    void commit_attach_child_cmds() noexcept;
+    void commit_detach_child_cmds() noexcept;
+
+    template <typename T>
+    void insert(Thing thing, const T &part) noexcept;
+
+    template <typename T>
+    void insert(Thing thing, T &&part) noexcept;
+
+    template <typename T>
+    void destroy(Thing thing) noexcept;
+
+    // ------------------------------------------------------------------- Query
+
+    template <typename... Include>
+    auto query(QueryOptions options = {}) noexcept;
+
+    template <typename... Include>
+    auto reverse_query(QueryOptions options = {}) noexcept;
+
+    template <typename... Include>
+    auto shallow_query(Thing thing, QueryOptions options = {}) noexcept;
+
+    template <typename... Include>
+    auto deep_query(Thing thing, QueryOptions options = {}) noexcept;
+
+    template <typename... Include>
+    auto top_down_query(QueryOptions options = {}) noexcept;
+
+    template <typename... Include>
+    auto bottom_up_query(QueryOptions options = {}) noexcept;
+
+    // ----------------------------------------------------------------- Scripts
+
+    /**
+     * @brief Removes a script from a thing, calling on_destroy if defined.
+     * @note Does nothing if thing is nil, dead, or does not own script S.
+     */
+    template <typename S>
+    void destroy_script(Thing thing) noexcept;
+
+private:
+    // -------------------------------------------------------- Member Variables
+    World *m_world{nullptr};
+};
+
+// ====================================================================== Script
+
+template <typename T>
+concept ScriptHasOnPreUpdate = requires(T script) {
+    { script.on_pre_update() } -> std::same_as<void>;
+};
+
+template <typename T>
+concept ScriptHasOnUpdate = requires(T script) {
+    { script.on_update() } -> std::same_as<void>;
+};
+
+template <typename T>
+concept ScriptHasOnPostUpdate = requires(T script) {
+    { script.on_post_update() } -> std::same_as<void>;
+};
+
+template <typename T>
+concept ScriptHasOnInit = requires(T script) {
+    { script.on_init() } -> std::same_as<void>;
+};
+
+template <typename T>
+concept ScriptHasOnDestroy = requires(T script) {
+    { script.on_destroy() } -> std::same_as<void>;
+};
+
+class Script {
+public:
+    // ----------------------------------------------- Constructors & Destructor
+    Script() noexcept = default;
+    Script(const Script &) noexcept = default;
+    Script(Script &&) noexcept = default;
+    Script &operator=(const Script &) noexcept = default;
+    Script &operator=(Script &&) noexcept = default;
+    virtual ~Script() noexcept = default;
+
+    // --------------------------------------------------------------------- API
+
+    /// @brief Sets the thing this script is attached to.
+    void set_self(Thing thing) noexcept;
+
+    /// @brief Sets the scope this script operates in.
+    void set_scope(Scope scope) noexcept;
+
+    /// @brief Returns the thing this script is attached to.
+    [[nodiscard]] Thing self() const noexcept;
+
+    /// @brief Returns the scope this script operates in.
+    [[nodiscard]] Scope &scope() noexcept;
+
+    /// @brief Checks if self has part `T`.
+    template <typename T>
+    bool has() const noexcept;
+
+    /**
+     * @brief Returns a reference to part `T` attached to self.
+     * @warning Asserts if self does not have part `T`.
+     */
+    template <typename T>
+    T &get() noexcept;
+
+    /// @brief Records an insert command for part `T` on self.
+    template <typename T>
+    void insert(const T &part) noexcept;
+
+    /// @brief Records an insert command for part `T` on self.
+    template <typename T>
+    void insert(T &&part) noexcept;
+
+    /// @brief Records a destroy command for part `T` on self.
+    template <typename T>
+    void destroy() noexcept;
+
+private:
+    // -------------------------------------------------------- Member Variables
+    Scope m_scope{};
+    Thing m_self{Thing::nil()};
+};
+
+template <typename T>
+concept IsScript = std::derived_from<T, Script>;
+
 
 // ================================================================== SystemPool
+
+using StageStorageType = U8;
+
+enum class Stage : StageStorageType {
+    PreUpdate,
+    PreUpdateScript,
+    Update,
+    UpdateScript,
+    PostUpdate,
+    PostUpdateScript
+};
+
+constexpr U8 STAGE_COUNT = 6;
+
+using System = Fn128<void(Scope)>;
 
 namespace impl {
 class SystemPool {
@@ -893,4 +1093,45 @@ inline void Scope::destroy_script(Thing thing) noexcept {
     m_world->destroy_script<S>(thing);
 }
 
+
+inline void Script::set_self(Thing thing) noexcept {
+    m_self = thing;
+}
+
+inline void Script::set_scope(Scope scope) noexcept {
+    m_scope = scope;
+}
+
+inline Thing Script::self() const noexcept {
+    return m_self;
+}
+
+inline Scope &Script::scope() noexcept {
+    return m_scope;
+}
+
+template <typename T>
+inline bool Script::has() const noexcept {
+    return m_scope.has<T>(m_self);
+}
+
+template <typename T>
+inline T &Script::get() noexcept {
+    return m_scope.get<T>(m_self);
+}
+
+template <typename T>
+inline void Script::insert(const T &part) noexcept {
+    m_scope.insert(m_self, part);
+}
+
+template <typename T>
+inline void Script::insert(T &&part) noexcept {
+    m_scope.insert(m_self, std::move(part));
+}
+
+template <typename T>
+inline void Script::destroy() noexcept {
+    m_scope.destroy<T>(m_self);
+}
 } // namespace fr
