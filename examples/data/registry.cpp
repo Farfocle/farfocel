@@ -45,7 +45,7 @@ S32 main() {
     fr::init_core_ctx();
 
     {
-        fr::impl::Registry registry;
+        fr::impl::Registry registry{fr::get_ambient_ctx().alloc};
 
         fr::Thing a = registry.handout();
         registry.emplace_checked<Pos>(a, Pos{42.0, 67.0});

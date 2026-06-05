@@ -30,12 +30,9 @@ namespace fr {
  */
 constexpr USize MAX_PARTS = 128;
 
-/**
- * @brief Interface for a bitset representation of parts owned by a thing.
- */
+/// @brief Interface for a bitset representation of parts owned by a thing.
 class Signature {
 public:
-    // ------------------------------------ Typedefs & Constructors & Destructor
     using Storage = Bitset<MAX_PARTS>;
 
     Signature() = default;
@@ -51,8 +48,6 @@ public:
         (signature.insert(TypeIdx::from_type<Parts>()), ...);
         return signature;
     }
-
-    // ------------------------------------------------------------ Operatations
 
     /// @brief Returns the underlying bitset.
     const Storage &bitset() const noexcept {
@@ -109,8 +104,13 @@ public:
         return !(a == b);
     }
 
+    /// @brief Shape protocol — serializes as the underlying Bitset<MAX_PARTS>.
+    template <typename Archive>
+    void shape(Archive &archive) noexcept {
+        m_bits.shape(archive);
+    }
+
 private:
-    // ----------------------------------------------------------------- Members
     Storage m_bits{};
 };
 
@@ -149,23 +149,17 @@ public:
 
     // ---------------------------------------------------------- Storage Access
 
-    /**
-     * @brief Returns the allocator used by this pool.
-     */
+    /// @brief Returns the allocator used by this pool.
     const Alloc *alloc() const noexcept {
         return m_alloc;
     }
 
-    /**
-     * @brief Returns the capacity of this pool - the maximum number of things (MAX_THINGS).
-     */
+    /// @brief Returns the capacity of this pool - the maximum number of things (MAX_THINGS).
     USize capacity() const noexcept {
         return MAX_THINGS;
     }
 
-    /**
-     * @brief Returns a reference to the signature storage.
-     */
+    /// @brief Returns a reference to the signature storage.
     const Storage &signatures() const noexcept {
         return *m_signatures;
     }
@@ -257,19 +251,19 @@ public:
     /// @brief Slice of parts excluding the stub.
     Slice<T> parts_mut() noexcept;
 
-    /// @brief Sparse slice mapping thing index → part index; includes stub entry.
+    /// @brief Sparse slice mapping thing index -> part index; includes stub entry.
     Slice<USize> thing_to_part_with_stub_mut() noexcept;
 
-    /// @brief Sparse slice mapping thing index → part index; excludes stub entry.
+    /// @brief Sparse slice mapping thing index -> part index; excludes stub entry.
     Slice<USize> thing_to_part_mut() noexcept;
 
-    /// @brief Dense slice mapping part index → owning thing; includes stub entry.
+    /// @brief Dense slice mapping part index -> owning thing; includes stub entry.
     Slice<Thing> part_to_thing_with_stub_mut() noexcept;
 
-    /// @brief Dense slice mapping part index → owning thing; includes stub entry (const).
+    /// @brief Dense slice mapping part index -> owning thing; includes stub entry (const).
     Slice<const Thing> part_to_thing_with_stub() const noexcept;
 
-    /// @brief Dense slice mapping part index → owning thing; excludes stub entry.
+    /// @brief Dense slice mapping part index -> owning thing; excludes stub entry.
     Slice<Thing> part_to_thing_mut() noexcept;
 
     // ------------------------------------------------------------ Part Getters
@@ -330,16 +324,17 @@ public:
     bool destroy_checked(Thing thing) noexcept;
 
 private:
-    // -------------------------------------------------------- Member Variables
+    // ----------------------------------------------------------------- Members
+
     Alloc *m_alloc{get_ambient_ctx().alloc};
 
-    /// Dense part storage; index 0 is the permanent stub.
+    /// @brief Dense part storage; index 0 is the permanent stub.
     DynamicArray<T> m_parts{};
 
-    /// Sparse map: thing.idx() → index in m_parts (0 = not owned / stub).
+    /// @brief Sparse map: thing.idx() -> index in m_parts (0 = not owned / stub).
     DynamicArray<USize> m_thing_to_part{};
 
-    /// Dense map: part index → owning thing (mirrors m_parts).
+    /// @brief Dense map: part index -> owning thing (mirrors m_parts).
     DynamicArray<Thing> m_part_to_thing{};
 };
 
@@ -359,8 +354,12 @@ inline PartPool<T>::PartPool(Alloc *alloc) noexcept {
     m_thing_to_part = DynamicArray<USize>::with_alloc(alloc);
     m_part_to_thing = DynamicArray<Thing>::with_alloc(alloc);
 
-    m_parts.push_back(T{});       // stub part at index 0
-    m_thing_to_part.push_back(0); // nil thing maps to stub
+    // Stub part at index 0
+    m_parts.push_back(T{});
+
+    // nil thing maps to stub
+    m_thing_to_part.push_back(0);
+
     m_part_to_thing.push_back(Thing::nil());
 }
 
@@ -440,10 +439,12 @@ inline T *PartPool<T>::get_checked(Thing thing) noexcept {
     if (idx >= m_thing_to_part.size()) {
         return nullptr;
     }
+
     USize part_idx = m_thing_to_part[idx];
     if (part_idx == 0) {
         return nullptr;
     }
+
     return &m_parts[part_idx];
 }
 
@@ -528,6 +529,7 @@ inline bool PartPool<T>::destroy_checked(Thing thing) noexcept {
     if (!get_checked(thing)) {
         return false;
     }
+
     destroy_unchecked(thing);
     return true;
 }

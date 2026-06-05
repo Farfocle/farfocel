@@ -2,7 +2,12 @@
  * @file cmd.hpp
  * @author Kiju
  *
- * @brief Commands and command batch for the data layer.
+ * @brief Command types and deferred command buffers for the data layer.
+ *
+ * CmdBatch and CmdSheaf are pure data holders. They record typed operations into an
+ * arena-backed list. World (or any caller) drives the actual commit by iterating over
+ * the command list and calling Registry's type-erased insert_raw / destroy_raw / get_raw
+ * methods backed by PartMeta function pointers.
  */
 
 #pragma once
@@ -11,204 +16,107 @@
 
 #include "fr/core/alloc.hpp"
 #include "fr/core/arena_alloc.hpp"
-#include "fr/core/array.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
-#include "fr/core/hash_map.hpp"
 #include "fr/core/meta.hpp"
 #include "fr/core/slice.hpp"
 #include "fr/core/typedefs.hpp"
-#include "fr/data/registry.hpp"
 #include "fr/data/thing.hpp"
 
 namespace fr {
 
-// ================================================================ Command Types
+// =================================================================== Constants
 
-/// @brief Maximum number of commands in a CmdBatch.
 static constexpr USize MAX_CMDS = 1 << 16;
-
-/// @brief Maximum number of commands recorded per thing in a CmdBatch.
 static constexpr USize MAX_CMDS_PER_THING = 16;
+static constexpr USize DEFAULT_CMD_BATCH_ARENA_SIZE = 1 << 16;
 
 /// @brief Index into the CmdBatch command list.
 using CmdIdx = U16;
 
-enum class CmdKind : U8 { Nil, DestroyPart, InsertPart, MutatePart, AttachChild, DetachChild };
+// ===================================================================== CmdKind
 
+/// @brief Discriminant for the Cmd union.
+enum class CmdKind : U8 {
+    Nil,
+    DestroyPart,
+    InsertPart,
+    MutatePart,
+    AttachChild,
+    DetachChild,
+    Handout,
+    Kill,
+};
+
+/// @brief Returns the nil command kind (ADL nil protocol).
 inline CmdKind nil(CmdKind *) noexcept {
     return CmdKind::Nil;
 }
 
+/// @brief Returns true if the command kind is nil (ADL nil protocol).
 inline bool is_nil(CmdKind v) noexcept {
     return v == CmdKind::Nil;
 }
 
-template <typename T>
-struct DestroyPartCmd;
+// ==================================================================== Commands
 
-template <typename T>
-
-struct InsertPartCmd;
-template <typename T>
-struct MutatePartCmd;
-
+struct InsertCmd;
+struct DestroyCmd;
+struct MutateCmd;
 struct AttachChildCmd;
 struct DetachChildCmd;
+struct HandoutCmd;
+struct KillCmd;
 
-template <typename T>
-struct DestroyPartCmd {
-    Thing thing;
-    T part;
-
-    InsertPartCmd<T> inverse() const noexcept {
-        return {thing, part};
-    }
-
-    static DestroyPartCmd nil() noexcept
-        requires std::is_nothrow_default_constructible_v<T>
-    {
-        return {Thing::nil(), T{}};
-    }
-
-    bool is_nil() const noexcept {
-        return thing.is_nil();
-    }
-};
-
-template <typename T>
-struct InsertPartCmd {
-    Thing thing;
-    T part;
-
-    DestroyPartCmd<T> inverse() const noexcept {
-        return {thing, part};
-    }
-
-    static InsertPartCmd nil() noexcept
-        requires std::is_nothrow_default_constructible_v<T>
-    {
-        return {Thing::nil(), T{}};
-    }
-
-    bool is_nil() const noexcept {
-        return thing.is_nil();
-    }
-};
-
-template <typename T>
-struct MutatePartCmd {
-    Thing thing;
-    T prev;
-    T next;
-
-    MutatePartCmd<T> inverse() const noexcept {
-        return {thing, next, prev};
-    }
-
-    static MutatePartCmd nil() noexcept
-        requires std::is_nothrow_default_constructible_v<T>
-    {
-        return {Thing::nil(), T{}, T{}};
-    }
-
-    bool is_nil() const noexcept {
-        return thing.is_nil();
-    }
-};
-
-struct AttachChildCmd {
-    Thing parent;
-    Thing child;
-
-    DetachChildCmd inverse() const noexcept;
-
-    static AttachChildCmd nil() noexcept {
-        return {Thing::nil(), Thing::nil()};
-    }
-
-    bool is_nil() const noexcept {
-        return parent.is_nil();
-    }
-};
-
-struct DetachChildCmd {
-    Thing parent;
-    Thing child;
-
-    AttachChildCmd inverse() const noexcept;
-
-    static DetachChildCmd nil() noexcept {
-        return {Thing::nil(), Thing::nil()};
-    }
-
-    bool is_nil() const noexcept {
-        return parent.is_nil();
-    }
-};
-
-class World;
-class CmdSheaf;
-} // namespace fr
-
-// ================================================================ Raw Command Types
-
-namespace fr::impl {
-
-struct RawInsertPartCmd;
-struct RawDestroyPartCmd;
-struct RawMutatePartCmd;
-
-struct RawInsertPartCmd {
+/// @brief Payload for a deferred part insert.
+struct InsertCmd {
     TypeIdx tidx;
     Thing thing;
-    USize part_offset; ///< Byte offset of the part in the arena buffer.
-    void (*commit_insert_move)(void *registry, Thing, void *part_ptr) noexcept;
-    void (*commit_insert_copy)(void *registry, Thing, void *part_ptr) noexcept;
-    void (*commit_destroy)(void *registry, Thing) noexcept;
+    USize offset;
 
-    RawDestroyPartCmd invert() const noexcept;
+    /// Returns the equivalent destroy command (for undo / inverse commit).
+    DestroyCmd invert() const noexcept;
 
     /// @brief Cast the part pointer from the arena. Returns nullptr on type mismatch.
     template <typename T>
-    T *try_cast_part(Byte *arena_base) noexcept {
+    T *try_cast(Byte *arena_base) noexcept {
         if (TypeIdx::from_type<T>() != tidx) {
             return nullptr;
         }
 
-        return static_cast<T *>(static_cast<void *>(arena_base + part_offset));
+        return static_cast<T *>(static_cast<void *>(arena_base + offset));
     }
 };
 
-struct RawDestroyPartCmd {
+/// @brief Payload for a deferred part destroy (snapshots the current part value).
+struct DestroyCmd {
     TypeIdx tidx;
     Thing thing;
-    USize part_offset;
-    void (*commit_destroy)(void *registry, Thing) noexcept;
-    void (*commit_insert_move)(void *registry, Thing, void *part_ptr) noexcept;
-    void (*commit_insert_copy)(void *registry, Thing, void *part_ptr) noexcept;
+    USize offset;
 
-    RawInsertPartCmd invert() const noexcept;
+    /// Returns the equivalent insert command (for undo / inverse commit).
+    InsertCmd invert() const noexcept;
 
     /// @brief Cast the part pointer from the arena. Returns nullptr on type mismatch.
     template <typename T>
-    T *try_cast_part(Byte *arena_base) noexcept {
+    T *try_cast(Byte *arena_base) noexcept {
         if (TypeIdx::from_type<T>() != tidx) {
             return nullptr;
         }
 
-        return static_cast<T *>(static_cast<void *>(arena_base + part_offset));
+        return static_cast<T *>(static_cast<void *>(arena_base + offset));
     }
 };
 
-struct RawMutatePartCmd {
+/// @brief Payload for a deferred part mutate (captures prev and next values).
+struct MutateCmd {
     TypeIdx tidx;
     Thing thing;
     USize prev_offset;
     USize next_offset;
-    void (*commit_mutate)(void *registry, Thing, void *part_ptr) noexcept;
 
-    RawMutatePartCmd invert() const noexcept;
+    /// Returns a mutate command with prev/next swapped (for undo / inverse commit).
+    MutateCmd invert() const noexcept;
 
     template <typename T>
     T *try_cast_prev(Byte *arena_base) noexcept {
@@ -229,18 +137,99 @@ struct RawMutatePartCmd {
     }
 };
 
-struct RawCmd {
+/// @brief Payload for a deferred attach-child relation command.
+struct AttachChildCmd {
+    Thing parent;
+    Thing child;
+
+    DetachChildCmd inverse() const noexcept;
+
+    static AttachChildCmd nil() noexcept {
+        return {Thing::nil(), Thing::nil()};
+    }
+
+    bool is_nil() const noexcept {
+        return parent.is_nil();
+    }
+};
+
+/// @brief Payload for a deferred detach-child relation command.
+struct DetachChildCmd {
+    Thing parent;
+    Thing child;
+
+    AttachChildCmd inverse() const noexcept;
+
+    static DetachChildCmd nil() noexcept {
+        return {Thing::nil(), Thing::nil()};
+    }
+
+    bool is_nil() const noexcept {
+        return parent.is_nil();
+    }
+};
+
+/**
+ * @brief Records a thing that was handed out (created).
+ *
+ * @note `handout_deferred()` creates the thing immediately so the handle is usable right away,
+ * then records this command in the batch for tracking and undo purposes.
+ * The commit step (`commit_handout`) is a no-op since the thing is already alive.
+ * @note The inverse is a `KillCmd` that destroys the thing.
+ */
+struct HandoutCmd {
+    Thing thing;
+
+    KillCmd inverse() const noexcept;
+
+    static HandoutCmd nil() noexcept {
+        return {Thing::nil()};
+    }
+
+    bool is_nil() const noexcept {
+        return thing.is_nil();
+    }
+};
+
+/**
+ * @brief Defers the kill of a thing until commit time.
+ *
+ * @note `kill_deferred()` records this command in the batch. At commit, `kill()` is called on the
+ * thing, destroying all its parts and recycling its slot. This avoids killing things while
+ * iterating over part pools.
+ * @note The inverse is a `HandoutCmd` (re-creation of the thing handle).
+ */
+struct KillCmd {
+    Thing thing;
+
+    HandoutCmd inverse() const noexcept;
+
+    static KillCmd nil() noexcept {
+        return {Thing::nil()};
+    }
+
+    bool is_nil() const noexcept {
+        return thing.is_nil();
+    }
+};
+
+// ========================================================================= Cmd
+
+/// @brief Discriminated union of all command types.
+struct Cmd {
     CmdKind kind{CmdKind::Nil};
     union {
-        RawInsertPartCmd insert_part;
-        RawDestroyPartCmd destroy_part;
-        RawMutatePartCmd mutate_part;
+        InsertCmd insert_part;
+        DestroyCmd destroy_part;
+        MutateCmd mutate_part;
         AttachChildCmd attach_child;
         DetachChildCmd detach_child;
+        HandoutCmd handout;
+        KillCmd kill;
     };
 
-    static RawCmd nil() noexcept {
-        RawCmd cmd{};
+    static Cmd nil() noexcept {
+        Cmd cmd{};
         cmd.kind = CmdKind::Nil;
         return cmd;
     }
@@ -248,207 +237,156 @@ struct RawCmd {
     bool is_nil() const noexcept {
         return kind == CmdKind::Nil;
     }
+
+    /// @brief Returns the primary thing associated with this command.
+    Thing thing() const noexcept {
+        switch (kind) {
+        case CmdKind::InsertPart:
+            return insert_part.thing;
+        case CmdKind::DestroyPart:
+            return destroy_part.thing;
+        case CmdKind::MutatePart:
+            return mutate_part.thing;
+        case CmdKind::AttachChild:
+            return attach_child.parent;
+        case CmdKind::DetachChild:
+            return detach_child.parent;
+        case CmdKind::Handout:
+            return handout.thing;
+        case CmdKind::Kill:
+            return kill.thing;
+        default:
+            return Thing::nil();
+        }
+    }
 };
 
-/// @brief Tracks which command indices belong to a given thing.
-struct ThingCmdEntry {
-    Array<CmdIdx, MAX_CMDS_PER_THING> indices{};
-    U8 count{0};
-};
+// Forward declarations needed by CmdSheaf constructor.
+class World;
+class CmdBatch;
 
-// ================================================= Shared Commit Helpers (cmd.cpp)
+// ==================================================================== CmdBatch
 
-/// @brief Commits all DestroyPart commands — removes each part from the registry.
-void commit_raw_destroy(const DynamicArray<RawCmd> &cmds, Registry *registry) noexcept;
-
-/// @brief Commits DestroyPart inverses in reverse order — re-inserts parts via copy.
-void commit_raw_destroy_inverse(const DynamicArray<RawCmd> &cmds, Byte *base,
-                                Registry *registry) noexcept;
-
-/// @brief Commits InsertPart commands by moving each part from the arena into the registry.
-void commit_raw_insert_move(const DynamicArray<RawCmd> &cmds, Byte *base,
-                            Registry *registry) noexcept;
-
-/// @brief Commits InsertPart inverses in reverse order — removes inserted parts.
-void commit_raw_insert_inverse(const DynamicArray<RawCmd> &cmds, Registry *registry) noexcept;
-
-/// @brief Commits InsertPart commands by copying each part from the arena into the registry.
-void commit_raw_insert_copy(const DynamicArray<RawCmd> &cmds, Byte *base,
-                            Registry *registry) noexcept;
-
-/// @brief Commits MutatePart commands by writing the next-state part into the registry.
-void commit_raw_mutate(const DynamicArray<RawCmd> &cmds, Byte *base, Registry *registry) noexcept;
-
-/// @brief Commits MutatePart inverses in reverse order — restores the prev-state part.
-void commit_raw_mutate_inverse(const DynamicArray<RawCmd> &cmds, Byte *base,
-                               Registry *registry) noexcept;
-
-/// @brief Commits AttachChild commands — attaches each child to its parent.
-void commit_raw_attach_child(const DynamicArray<RawCmd> &cmds, World *world) noexcept;
-
-/// @brief Commits AttachChild inverses in reverse order — detaches children.
-void commit_raw_attach_child_inverse(const DynamicArray<RawCmd> &cmds, World *world) noexcept;
-
-/// @brief Commits DetachChild commands — detaches each child from its parent.
-void commit_raw_detach_child(const DynamicArray<RawCmd> &cmds, World *world) noexcept;
-
-/// @brief Commits DetachChild inverses in reverse order — re-attaches children.
-void commit_raw_detach_child_inverse(const DynamicArray<RawCmd> &cmds, World *world) noexcept;
-
-/// @brief Destroys all arena-stored parts and resets the arena. Does NOT clear the thing map.
-void reset_raw_cmds(DynamicArray<RawCmd> &cmds, Byte *base, ArenaAlloc &arena) noexcept;
-
-} // namespace fr::impl
-
-// ================================================================ CmdBatch
-
-namespace fr {
-
-/// @brief Self-contained unit of deferred commands.
+/**
+ * @brief Self-contained, arena-backed deferred command buffer.
+ *
+ * CmdBatch is a pure data holder. It records typed part and relation commands into an
+ * internal arena without needing a registry reference. The caller (typically World) is
+ * responsible for iterating `cmds()` and applying each command via Registry's type-erased
+ * operations (`insert_raw`, `destroy_raw`, `get_raw`).
+ *
+ * Part values are placement-new'd into the arena at record time and destroyed on `reset()`.
+ */
 class CmdBatch {
 public:
-    // ------------------------------------- Typedefs & Constructors & Operators
-    static constexpr USize DEFAULT_ARENA_SIZE = 64 * 1024;
+    // ----------------------------------------------- Constructors & Destructor
 
+    /// @brief Construct using the ambient allocator with the default arena size.
     CmdBatch() noexcept;
-    explicit CmdBatch(Alloc *alloc, USize arena_size = DEFAULT_ARENA_SIZE) noexcept;
+
+    /// @brief Construct with an explicit allocator and arena size.
+    explicit CmdBatch(Alloc *alloc, USize arena_size = DEFAULT_CMD_BATCH_ARENA_SIZE) noexcept;
+
     ~CmdBatch() noexcept;
 
-    CmdBatch(const CmdBatch &) = delete;
-    CmdBatch(CmdBatch &&) = delete;
+    /**
+     * @brief Copy constructor.
+     * Computes a fitted arena by scanning `other`'s commands, allocates it, then
+     * copy-constructs every part snapshot into the new arena with patched offsets.
+     * Non-part commands (attach/detach/handout/kill) are copied as they are.
+     */
+    CmdBatch(const CmdBatch &other) noexcept;
+
+    /**
+     * @brief Move constructor.
+     * Steals the allocator, the arena buffer, and the command list from `other`.
+     * The ArenaAlloc is reconstructed over the stolen buffer with the bump pointer
+     * advanced to match the source's used bytes, so future record calls are safe.
+     * Source is left in a valid, empty state (no buffer, no commands).
+     */
+    CmdBatch(CmdBatch &&other) noexcept;
+
     CmdBatch &operator=(const CmdBatch &) = delete;
     CmdBatch &operator=(CmdBatch &&) = delete;
 
-    // ----------------------------------------------------------------- Record
+    // ------------------------------------------------------------------ Record
 
     /**
-     * @brief Records a destroy command for part `T` on a thing.
-     * Captures the current part value into the arena.
-     * @note Does nothing if thing is nil, dead, or does not have part `T`.
+     * @brief Records a deferred insert for part `T` (copy).
+     * @note Does NOT check for duplicate parts - the commit step handles that.
      */
     template <typename T>
-    void record_destroy(impl::Registry &registry, Thing thing) noexcept {
-        if (thing.is_nil()) [[unlikely]] {
-            return;
-        }
-
-        if (!registry.is_alive(thing)) [[unlikely]] {
-            return;
-        }
-
-        T *current = registry.get_checked<T>(thing);
-        if (!current) [[unlikely]] {
-            return;
-        }
-
-        void *ptr = m_arena.allocate(sizeof(T), alignof(T));
-        USize offset = static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
-        new (ptr) T(*current);
-
-        impl::RawCmd cmd{};
-        cmd.kind = CmdKind::DestroyPart;
-        cmd.destroy_part = impl::RawDestroyPartCmd{
-            .tidx = TypeIdx::from_type<T>(),
-            .thing = thing,
-            .part_offset = offset,
-            .commit_destroy = &CmdBatch::do_commit_destroy<T>,
-            .commit_insert_move = &CmdBatch::do_commit_insert_move<T>,
-            .commit_insert_copy = &CmdBatch::do_commit_insert_copy<T>,
-        };
-
-        do_push_cmd(thing, cmd);
-    }
-
-    /**
-     * @brief Records an insert command for part `T` (copy) on a thing.
-     * @note Does nothing if thing is nil, dead, or already has part `T`.
-     */
-    template <typename T>
-    void record_insert(impl::Registry &registry, Thing thing, const T &part) noexcept {
-        if (thing.is_nil()) [[unlikely]] {
-            return;
-        }
-
-        if (!registry.is_alive(thing)) [[unlikely]] {
-            return;
-        }
-
-        if (registry.has<T>(thing)) [[unlikely]] {
-            return;
-        }
+    void record_insert(Thing thing, const T &part) noexcept {
+        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
 
         void *ptr = m_arena.allocate(sizeof(T), alignof(T));
         USize offset = static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
         new (ptr) T(part);
 
-        impl::RawCmd cmd{};
+        Cmd cmd{};
         cmd.kind = CmdKind::InsertPart;
-        cmd.insert_part = impl::RawInsertPartCmd{
+        cmd.insert_part = InsertCmd{
             .tidx = TypeIdx::from_type<T>(),
             .thing = thing,
-            .part_offset = offset,
-            .commit_insert_move = &CmdBatch::do_commit_insert_move<T>,
-            .commit_insert_copy = &CmdBatch::do_commit_insert_copy<T>,
-            .commit_destroy = &CmdBatch::do_commit_destroy<T>,
+            .offset = offset,
         };
 
-        do_push_cmd(thing, cmd);
+        m_cmds.push_back(cmd);
     }
 
     /**
-     * @brief Records an insert command for part `T` (move) on a thing.
-     * @note Does nothing if thing is nil, dead, or already has part `T`.
+     * @brief Records a deferred insert for part `T` (move).
+     * @note Does NOT check for duplicate parts - the commit step handles that.
      */
     template <typename T>
-    void record_insert(impl::Registry &registry, Thing thing, T &&part) noexcept {
-        if (thing.is_nil()) [[unlikely]] {
-            return;
-        }
-
-        if (!registry.is_alive(thing)) [[unlikely]] {
-            return;
-        }
-
-        if (registry.has<T>(thing)) [[unlikely]] {
-            return;
-        }
+    void record_insert(Thing thing, T &&part) noexcept {
+        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
 
         void *ptr = m_arena.allocate(sizeof(T), alignof(T));
         USize offset = static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
         new (ptr) T(std::move(part));
 
-        impl::RawCmd cmd{};
+        Cmd cmd{};
         cmd.kind = CmdKind::InsertPart;
-        cmd.insert_part = impl::RawInsertPartCmd{
+        cmd.insert_part = InsertCmd{
             .tidx = TypeIdx::from_type<T>(),
             .thing = thing,
-            .part_offset = offset,
-            .commit_insert_move = &CmdBatch::do_commit_insert_move<T>,
-            .commit_insert_copy = &CmdBatch::do_commit_insert_copy<T>,
-            .commit_destroy = &CmdBatch::do_commit_destroy<T>,
+            .offset = offset,
         };
 
-        do_push_cmd(thing, cmd);
+        m_cmds.push_back(cmd);
     }
 
     /**
-     * @brief Records a mutate command (prev -> next) for part `T` on a thing.
-     * @note Does nothing if thing is nil, dead, or does not have part `T`.
+     * @brief Records a deferred destroy for part `T`, snapshotting `current` into the arena.
+     * @note The snapshot enables inverse commits (undo).
      */
     template <typename T>
-    void record_mutate(impl::Registry &registry, Thing thing, const T &prev,
-                       const T &next) noexcept {
-        if (thing.is_nil()) [[unlikely]] {
-            return;
-        }
+    void record_destroy(Thing thing, const T &current) noexcept {
+        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
 
-        if (!registry.is_alive(thing)) [[unlikely]] {
-            return;
-        }
+        void *ptr = m_arena.allocate(sizeof(T), alignof(T));
+        USize offset = static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
+        new (ptr) T(current);
 
-        if (!registry.has<T>(thing)) [[unlikely]] {
-            return;
-        }
+        Cmd cmd{};
+        cmd.kind = CmdKind::DestroyPart;
+        cmd.destroy_part = DestroyCmd{
+            .tidx = TypeIdx::from_type<T>(),
+            .thing = thing,
+            .offset = offset,
+        };
+
+        m_cmds.push_back(cmd);
+    }
+
+    /**
+     * @brief Records a deferred mutate for part `T`, capturing both `prev` and `next` values.
+     * @note Both values are copy-constructed into the arena. `prev` enables undo.
+     */
+    template <typename T>
+    void record_mutate(Thing thing, const T &prev, const T &next) noexcept {
+        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
 
         void *prev_ptr = m_arena.allocate(sizeof(T), alignof(T));
         USize prev_offset =
@@ -460,186 +398,251 @@ public:
             static_cast<USize>(static_cast<Byte *>(next_ptr) - m_arena_buffer.data());
         new (next_ptr) T(next);
 
-        impl::RawCmd cmd{};
+        Cmd cmd{};
         cmd.kind = CmdKind::MutatePart;
-        cmd.mutate_part = impl::RawMutatePartCmd{
+        cmd.mutate_part = MutateCmd{
             .tidx = TypeIdx::from_type<T>(),
             .thing = thing,
             .prev_offset = prev_offset,
             .next_offset = next_offset,
-            .commit_mutate = &CmdBatch::do_commit_mutate<T>,
         };
 
-        do_push_cmd(thing, cmd);
+        m_cmds.push_back(cmd);
     }
 
-    /// @brief Records an attach-child relation command.
+    /// @brief Records a deferred attach-child relation command.
     void record_attach_child(Thing parent, Thing child) noexcept {
-        impl::RawCmd cmd{};
+        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
+
+        Cmd cmd{};
         cmd.kind = CmdKind::AttachChild;
-        cmd.attach_child = AttachChildCmd{.parent = parent, .child = child};
-        do_push_cmd(parent, cmd);
+        cmd.attach_child = AttachChildCmd{parent, child};
+
+        m_cmds.push_back(cmd);
     }
 
-    /// @brief Records a detach-child relation command.
+    /// @brief Records a deferred detach-child relation command.
     void record_detach_child(Thing parent, Thing child) noexcept {
-        impl::RawCmd cmd{};
+        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
+
+        Cmd cmd{};
         cmd.kind = CmdKind::DetachChild;
-        cmd.detach_child = DetachChildCmd{.parent = parent, .child = child};
-        do_push_cmd(parent, cmd);
+        cmd.detach_child = DetachChildCmd{parent, child};
+
+        m_cmds.push_back(cmd);
     }
-
-    // ------------------------------------------------------------------ Commit
-
-    /// @brief Commits destroy commands.
-    void commit_destroy(impl::Registry *registry) noexcept;
-
-    /// @brief Commits inverses of destroy commands in reverse order (re-inserts parts).
-    void commit_destroy_inverse(impl::Registry *registry) noexcept;
-
-    /// @brief Commits insert commands by moving arena data. Do not commit again after this.
-    void commit_insert_move(impl::Registry *registry) noexcept;
-
-    /// @brief Commits inverses of insert commands in reverse order (destroys parts).
-    void commit_insert_inverse(impl::Registry *registry) noexcept;
-
-    void commit_insert_copy(impl::Registry *registry) noexcept;
-
-    void commit_mutate(impl::Registry *registry) noexcept;
-
-    /// @brief Commits inverses of mutate commands in reverse order (applies prev state).
-    void commit_mutate_inverse(impl::Registry *registry) noexcept;
-
-    /// @brief Commits attatch child commands.
-    void commit_attach_child(World *world) noexcept;
-
-    /// @brief Commits inverses of attach child commands in reverse order (detaches children).
-    void commit_attach_child_inverse(World *world) noexcept;
-
-    /// @brief Commits detach child commands.
-    void commit_detach_child(World *world) noexcept;
-
-    /// @brief Commits inverses of detach child commands in reverse order (attaches children).
-    void commit_detach_child_inverse(World *world) noexcept;
 
     /**
-     * @brief Destroys all arena-allocated part objects and clears the command list.
-     * @note Safe to call with uncommitted commands - parts are properly destroyed.
+     * @brief Records that `thing` was handed out (for undo tracking).
+     * @note The thing is already alive at this point; commit_handout() is a no-op.
+     */
+    void record_handout(Thing thing) noexcept {
+        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
+
+        Cmd cmd{};
+        cmd.kind = CmdKind::Handout;
+        cmd.handout = HandoutCmd{thing};
+
+        m_cmds.push_back(cmd);
+    }
+
+    /**
+     * @brief Records a deferred kill - `thing` is killed at commit time.
+     * @note Kills are applied after all part mutations and destructions in `commit()`.
+     */
+    void record_kill(Thing thing) noexcept {
+        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
+
+        Cmd cmd{};
+        cmd.kind = CmdKind::Kill;
+        cmd.kill = KillCmd{thing};
+
+        m_cmds.push_back(cmd);
+    }
+
+    // --------------------------------------------------------------- Access
+
+    /// @brief Returns a read-only view of all recorded commands.
+    Slice<const Cmd> cmds() const noexcept {
+        return m_cmds.slice();
+    }
+
+    /// @brief Returns the base of the arena buffer for pointer reconstruction.
+    Byte *arena() noexcept {
+        return m_arena_buffer.data();
+    }
+
+    const Byte *arena() const noexcept {
+        return m_arena_buffer.data();
+    }
+
+    // ------------------------------------------------------------------- Reset
+
+    /**
+     * @brief Destroys all arena-stored part objects and clears the command list.
+     * @note Safe to call with uncommitted commands — all snapshots are properly destroyed.
      */
     void reset() noexcept;
 
-    // ----------------------------------------------------------------- Collect
-
-    /// @brief Returns the base of the arena buffer for pointer reconstruction.
-    Byte *arena_data() noexcept {
-        return m_arena_buffer.data();
-    }
-
-    const Byte *arena_data() const noexcept {
-        return m_arena_buffer.data();
-    }
-
-    /// @brief Collects all raw insert commands into a new dynamic array.
-    DynamicArray<impl::RawInsertPartCmd> collect_insert_part_cmds() const noexcept;
-
-    /// @brief Collects all raw destroy commands into a new dynamic array.
-    DynamicArray<impl::RawDestroyPartCmd> collect_destroy_part_cmds() const noexcept;
-
-    /// @brief Collects all raw mutate commands into a new dynamic array.
-    DynamicArray<impl::RawMutatePartCmd> collect_mutate_part_cmds() const noexcept;
-
-    /// @brief Collects all attach-child commands into a new dynamic array.
-    DynamicArray<AttachChildCmd> collect_attach_child_cmds() const noexcept;
-
-    /// @brief Collects all detach-child commands into a new dynamic array.
-    DynamicArray<DetachChildCmd> collect_detach_child_cmds() const noexcept;
-
 private:
-    // --------------------------------------------------------------- Internals
-
-    /// @brief Push a command and register it in the per-thing lookup table.
-    void do_push_cmd(Thing thing, impl::RawCmd cmd) noexcept {
-        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
-        CmdIdx idx = static_cast<CmdIdx>(m_cmds.size());
-        m_cmds.push_back(cmd);
-
-        if (!thing.is_nil()) {
-            impl::ThingCmdEntry &entry = m_thing_cmds[thing];
-            FR_ASSERT(entry.count < MAX_CMDS_PER_THING, "too many commands for one thing");
-            entry.indices[entry.count++] = idx;
-        }
-    }
-
-    template <typename T>
-    static void do_commit_insert_move(void *registry_ptr, Thing thing, void *part_ptr) noexcept {
-        impl::Registry *registry = static_cast<impl::Registry *>(registry_ptr);
-        registry->emplace_checked<T>(thing, std::move(*static_cast<T *>(part_ptr)));
-    }
-
-    template <typename T>
-    static void do_commit_insert_copy(void *registry_ptr, Thing thing, void *part_ptr) noexcept {
-        impl::Registry *registry = static_cast<impl::Registry *>(registry_ptr);
-        registry->emplace_checked<T>(thing, *static_cast<T *>(part_ptr));
-    }
-
-    template <typename T>
-    static void do_commit_destroy(void *registry_ptr, Thing thing) noexcept {
-        impl::Registry *registry = static_cast<impl::Registry *>(registry_ptr);
-        registry->destroy_checked<T>(thing);
-    }
-
-    template <typename T>
-    static void do_commit_mutate(void *registry_ptr, Thing thing, void *part_ptr) noexcept {
-        impl::Registry *registry = static_cast<impl::Registry *>(registry_ptr);
-        T *part = registry->get_checked<T>(thing);
-        if (part) [[likely]] {
-            *part = std::move(*static_cast<T *>(part_ptr));
-        }
-    }
-
-    // ----------------------------------------------------------------- Members
     Alloc *m_alloc{nullptr};
     Slice<Byte> m_arena_buffer{};
     ArenaAlloc m_arena{};
-    DynamicArray<impl::RawCmd> m_cmds{};
-    HashMap<Thing, impl::ThingCmdEntry> m_thing_cmds{};
-
-    friend class CmdSheaf;
+    DynamicArray<Cmd> m_cmds{};
 };
 
 // ================================================================ CmdSheaf
 
-/// @brief Command container scoped to a single thing.
+/**
+ * @brief Command buffer scoped to a single thing.
+ *
+ * @note Like `CmdBatch` but constrained to one thing. Provides a convenient record API where
+ * the thing is implicit. Can be extracted from a CmdBatch via the
+ * `CmdSheaf(Alloc*, const CmdBatch&, Thing)` constructor, which scans the batch for
+ * commands belonging to the given thing and copies all part snapshots into a fitted arena.
+ */
 class CmdSheaf {
 public:
     static constexpr USize DEFAULT_ARENA_SIZE = 1024;
 
-    /**
-     * @brief Construct an empty `CmdSheaf` for a specific thing.
-     * @param alloc Allocator to use.
-     * @param thing The thing this sheaf belongs to.
-     * @param arena_size Size of the arena in bytes.
-     */
+    // ----------------------------------------------- Constructors & Destructor
+
+    /// @brief Construct an empty sheaf for a specific thing.
     CmdSheaf(Alloc *alloc, Thing thing, USize arena_size = DEFAULT_ARENA_SIZE) noexcept;
 
     /**
-     * @brief Extract and copy the commands for a specific thing from a CmdBatch.
+     * @brief Extract and copy all commands for `thing` from a CmdBatch.
      *
-     * @param alloc Allocator to use.
-     * @param batch Source batch to extract from.
-     * @param thing Thing whose commands are extracted.
-     *
-     * @note Computes a fitted arena from the batch's type metadata and copies each part.
-     * The resulting sheaf is fully self-contained; the batch may be reset or destroyed freely.
+     * Computes a fitted arena from type metadata (via `TypeIdx::meta()`), then
+     * copy-constructs each part snapshot into the local arena. The resulting sheaf is
+     * fully self-contained; the source batch may be reset or destroyed freely afterwards.
      */
     CmdSheaf(Alloc *alloc, const CmdBatch &batch, Thing thing) noexcept;
 
     ~CmdSheaf() noexcept;
 
-    CmdSheaf(const CmdSheaf &) = delete;
-    CmdSheaf(CmdSheaf &&) = delete;
+    /**
+     * @brief Copy constructor.
+     * Computes a fitted arena by scanning `other`'s commands, allocates it, then
+     * copy-constructs every part snapshot into the new arena with patched offsets.
+     * Non-part commands (attach/detach/handout/kill) are copied as they are.
+     */
+    CmdSheaf(const CmdSheaf &other) noexcept;
+
+    /**
+     * @brief Move constructor.
+     * @note Steals `m_alloc`, `m_thing`, the arena buffer, and the command list from `other`.
+     * Source is left in a valid, empty state (no buffer, no commands).
+     */
+    CmdSheaf(CmdSheaf &&other) noexcept;
+
     CmdSheaf &operator=(const CmdSheaf &) = delete;
     CmdSheaf &operator=(CmdSheaf &&) = delete;
+
+    // ------------------------------------------------------------------ Record
+
+    /// @brief Records a deferred insert for part `T` (copy). Thing is implicit (`this->thing()`).
+    template <typename T>
+    void record_insert(const T &part) noexcept {
+        void *ptr = m_arena.allocate(sizeof(T), alignof(T));
+        USize offset = static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
+        new (ptr) T(part);
+
+        Cmd cmd{};
+        cmd.kind = CmdKind::InsertPart;
+        cmd.insert_part = InsertCmd{
+            .tidx = TypeIdx::from_type<T>(),
+            .thing = m_thing,
+            .offset = offset,
+        };
+
+        m_cmds.push_back(cmd);
+    }
+
+    /// @brief Records a deferred insert for part `T` (move). Thing is implicit.
+    template <typename T>
+    void record_insert(T &&part) noexcept {
+        void *ptr = m_arena.allocate(sizeof(T), alignof(T));
+        USize offset = static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
+        new (ptr) T(std::move(part));
+
+        Cmd cmd{};
+        cmd.kind = CmdKind::InsertPart;
+        cmd.insert_part = InsertCmd{
+            .tidx = TypeIdx::from_type<T>(),
+            .thing = m_thing,
+            .offset = offset,
+        };
+
+        m_cmds.push_back(cmd);
+    }
+
+    /// @brief Records a deferred destroy, snapshotting `current`. Thing is implicit.
+    template <typename T>
+    void record_destroy(const T &current) noexcept {
+        void *ptr = m_arena.allocate(sizeof(T), alignof(T));
+        USize offset = static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
+        new (ptr) T(current);
+
+        Cmd cmd{};
+        cmd.kind = CmdKind::DestroyPart;
+        cmd.destroy_part = DestroyCmd{
+            .tidx = TypeIdx::from_type<T>(),
+            .thing = m_thing,
+            .offset = offset,
+        };
+
+        m_cmds.push_back(cmd);
+    }
+
+    /// @brief Records a deferred mutate with both old and new values. Thing is implicit.
+    template <typename T>
+    void record_mutate(const T &prev, const T &next) noexcept {
+        void *prev_ptr = m_arena.allocate(sizeof(T), alignof(T));
+        USize prev_offset =
+            static_cast<USize>(static_cast<Byte *>(prev_ptr) - m_arena_buffer.data());
+        new (prev_ptr) T(prev);
+
+        void *next_ptr = m_arena.allocate(sizeof(T), alignof(T));
+        USize next_offset =
+            static_cast<USize>(static_cast<Byte *>(next_ptr) - m_arena_buffer.data());
+        new (next_ptr) T(next);
+
+        Cmd cmd{};
+        cmd.kind = CmdKind::MutatePart;
+        cmd.mutate_part = MutateCmd{
+            .tidx = TypeIdx::from_type<T>(),
+            .thing = m_thing,
+            .prev_offset = prev_offset,
+            .next_offset = next_offset,
+        };
+
+        m_cmds.push_back(cmd);
+    }
+
+    /// @brief Records a deferred attach-child relation (explicit parent and child).
+    void record_attach_child(Thing parent, Thing child) noexcept {
+        Cmd cmd{};
+        cmd.kind = CmdKind::AttachChild;
+        cmd.attach_child = AttachChildCmd{parent, child};
+        m_cmds.push_back(cmd);
+    }
+
+    /// @brief Records a deferred detach-child relation (explicit parent and child).
+    void record_detach_child(Thing parent, Thing child) noexcept {
+        Cmd cmd{};
+        cmd.kind = CmdKind::DetachChild;
+        cmd.detach_child = DetachChildCmd{parent, child};
+        m_cmds.push_back(cmd);
+    }
+
+    /// @brief Records a deferred kill for `m_thing` (applied at commit time).
+    void record_kill() noexcept {
+        Cmd cmd{};
+        cmd.kind = CmdKind::Kill;
+        cmd.kill = KillCmd{m_thing};
+        m_cmds.push_back(cmd);
+    }
 
     // ------------------------------------------------------------------ Access
 
@@ -648,42 +651,35 @@ public:
         return m_thing;
     }
 
-    /// @brief Returns the base of the arena buffer.
+    /// @brief Returns a read-only view of all recorded commands.
+    Slice<const Cmd> cmds() const noexcept {
+        return m_cmds.slice();
+    }
+
+    /// @brief Returns the base of the arena buffer for pointer reconstruction.
     Byte *arena() noexcept {
         return m_arena_buffer.data();
     }
 
-    /// @brief Returns the base of the arena buffer.
     const Byte *arena() const noexcept {
         return m_arena_buffer.data();
     }
 
-    // ------------------------------------------------------------------ Commit
+    // ------------------------------------------------------------------- Reset
 
-    void commit_destroy(impl::Registry *registry) noexcept;
-    void commit_destroy_inverse(impl::Registry *registry) noexcept;
-
-    void commit_insert_move(impl::Registry *registry) noexcept;
-    void commit_insert_inverse(impl::Registry *registry) noexcept;
-    void commit_insert_copy(impl::Registry *registry) noexcept;
-
-    void commit_mutate(impl::Registry *registry) noexcept;
-    void commit_mutate_inverse(impl::Registry *registry) noexcept;
-
-    void commit_attach_child(World *world) noexcept;
-    void commit_attach_child_inverse(World *world) noexcept;
-
-    void commit_detach_child(World *world) noexcept;
-    void commit_detach_child_inverse(World *world) noexcept;
-
-    /// @brief Destroys all arena-allocated part objects and clears the command list.
+    /**
+     * @brief Destroys all arena-stored part objects and clears the command list.
+     * @note Safe to call with uncommitted commands.
+     */
     void reset() noexcept;
 
 private:
+    // ----------------------------------------------------------------- Members
     Alloc *m_alloc{nullptr};
     Thing m_thing{};
     Slice<Byte> m_arena_buffer{};
     ArenaAlloc m_arena{};
-    DynamicArray<impl::RawCmd> m_cmds{};
+    DynamicArray<Cmd> m_cmds{};
 };
+
 } // namespace fr

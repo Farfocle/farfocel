@@ -47,14 +47,20 @@ public:
 
     // -------------------------------------------------------- Thing Operations
 
-    /// @brief Returns a fresh, non-nil thing.
+    /// @brief Returns a fresh, non-nil thing immediately.
     Thing handout() noexcept;
 
+    /// @brief Hands out a new thing immediately and records it in the batch for tracking.
+    Thing handout_deferred() noexcept;
+
     /**
-     * @brief Kills a thing and destroys all of its parts.
-     * @note If the thing is nil od dead; does nothing.
+     * @brief Kills a thing and destroys all of its parts immediately.
+     * @note If the thing is nil or dead; does nothing.
      */
     void kill(Thing thing) noexcept;
+
+    /// @brief Records a deferred kill — applied during the next `commit()`.
+    void kill_deferred(Thing thing) noexcept;
 
     /**
      * @brief Returns true if a thing is alive.
@@ -89,6 +95,24 @@ public:
      */
     template <typename T, typename... Args>
     T &emplace_now(Thing thing, Args &&...args) noexcept;
+
+    /**
+     * @brief Inserts or overrides part `T` on a thing immediately (copy).
+     * @note If thing is nil; does nothing.
+     * @note If thing is dead; does nothing.
+     * @note If thing is alive; inserts part `T` or overrides it if already present.
+     */
+    template <typename T>
+    void insert_now(Thing thing, const T &part) noexcept;
+
+    /**
+     * @brief Inserts or overrides part `T` on a thing immediately (move).
+     * @note If thing is nil; does nothing.
+     * @note If thing is dead; does nothing.
+     * @note If thing is alive; inserts part `T` or overrides it if already present.
+     */
+    template <typename T>
+    void insert_now(Thing thing, T &&part) noexcept;
 
     /**
      * @brief Destroys part `T` on a thing immediately.
@@ -370,7 +394,7 @@ public:
     struct Options {
         Alloc *registry_alloc{get_ambient_ctx().alloc};
         Alloc *system_pool_alloc{get_ambient_ctx().alloc};
-        USize cmd_arena_size{CmdBatch::DEFAULT_ARENA_SIZE};
+        USize cmd_batch_arena_size{DEFAULT_CMD_BATCH_ARENA_SIZE};
     };
 
     World() noexcept;
@@ -383,14 +407,29 @@ public:
 
     // -------------------------------------------------------- Thing Operations
 
-    /// @brief Returns a fresh, non-nil thing.
+    /// @brief Returns a fresh, non-nil thing immediately.
     Thing handout() noexcept;
 
     /**
-     * @brief Kills a thing and destroys all of its parts.
-     * @note If the thing is nil od dead; does nothing.
+     * @brief Hands out a new thing immediately, then records it in the batch for tracking.
+     * @return The newly created thing (already alive).
+     * @note The thing is created now so the handle is usable right away. The batch entry
+     * enables undo (its inverse is a deferred kill) and batch introspection.
+     */
+    Thing handout_deferred() noexcept;
+
+    /**
+     * @brief Kills a thing and destroys all of its parts immediately.
+     * @note If the thing is nil or dead; does nothing.
      */
     void kill(Thing thing) noexcept;
+
+    /**
+     * @brief Records a deferred kill — the thing is killed during the next `commit()`.
+     * @note Safe to call while iterating over part pools; the actual kill is postponed.
+     * @note If thing is nil; does nothing.
+     */
+    void kill_deferred(Thing thing) noexcept;
 
     /**
      * @brief Returns true if a thing is alive.
@@ -425,6 +464,24 @@ public:
      */
     template <typename T, typename... Args>
     T &emplace_now(Thing thing, Args &&...args) noexcept;
+
+    /**
+     * @brief Inserts or overrides part `T` on a thing immediately (copy).
+     * @note If thing is nil; does nothing.
+     * @note If thing is dead; does nothing.
+     * @note If thing is alive; inserts part `T` or overrides it if already present.
+     */
+    template <typename T>
+    void insert_now(Thing thing, const T &part) noexcept;
+
+    /**
+     * @brief Inserts or overrides part `T` on a thing immediately (move).
+     * @note If thing is nil; does nothing.
+     * @note If thing is dead; does nothing.
+     * @note If thing is alive; inserts part `T` or overrides it if already present.
+     */
+    template <typename T>
+    void insert_now(Thing thing, T &&part) noexcept;
 
     /**
      * @brief Destroys part `T` on a thing immediately.
@@ -518,13 +575,13 @@ public:
     // ------------------------------------------------- Command Part Operations
 
     /// @brief Apply all recorded insert commands across all part pools.
-    void commit_insert_part() noexcept;
+    void commit_insert() noexcept;
 
     /// @brief Apply all recorded mutate commands across all part pools.
-    void commit_mutate_part() noexcept;
+    void commit_mutate() noexcept;
 
     /// @brief Apply all recorded destroy commands across all part pools.
-    void commit_destroy_part() noexcept;
+    void commit_destroy() noexcept;
 
     /// @brief Apply all recorded attach-child commands.
     void commit_attach_child() noexcept;
@@ -532,14 +589,14 @@ public:
     /// @brief Apply all recorded detach-child commands.
     void commit_detach_child() noexcept;
 
-    /// @brief Apply all commands in order: mutate -> destroy -> insert -> attach -> detach.
-    void commit() noexcept;
+    /// @brief No-op (things are already alive). Exists for symmetry and future use.
+    void commit_handout() noexcept;
 
-    /**
-     * @brief Commits the provided batch in order:
-     * mutate -> destroy -> insert -> attach -> detach.
-     */
-    void commit_batch(CmdBatch &batch) noexcept;
+    /// @brief Kill all things recorded via `kill_deferred()`.
+    void commit_kill() noexcept;
+
+    /// @brief Apply all commands: mutate -> destroy -> insert -> attach -> detach -> kill.
+    void commit() noexcept;
 
     /**
      * @brief Records a deferred insert command for part `T` on a thing.
@@ -594,6 +651,14 @@ public:
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
 
+    // ------------------------------------------------------------------- Shape
+
+    /// @brief Ensures the part pool for the given type exists so it can be deserialized.
+    template <typename T>
+    void ensure() noexcept {
+        m_registry.ensure<T>();
+    }
+
     // ----------------------------------------------------------------- Systems
 
     /// @brief Schedules a system for synchronous execution in the given stage.
@@ -636,10 +701,10 @@ private:
 
     // ----------------------------------------------------------------- Members
     Options m_options{};
-    impl::Registry m_registry{};
-    CmdBatch m_cmd_batch{};
+    impl::Registry m_registry;
     impl::SystemPool m_system_pool{};
     Bitset<MAX_PARTS> m_script_registry{};
+    CmdBatch m_cmd_batch;
 };
 
 // =========================================== SystemPool Method Implementations
@@ -678,17 +743,29 @@ inline World::World() noexcept
 inline World::World(const Options &opt) noexcept
     : m_options(opt),
       m_registry(opt.registry_alloc),
-      m_cmd_batch(opt.registry_alloc, opt.cmd_arena_size),
       m_system_pool(opt.system_pool_alloc),
-      m_script_registry(Bitset<MAX_PARTS>::with_zeros()) {
+      m_script_registry(Bitset<MAX_PARTS>::with_zeros()),
+      m_cmd_batch(opt.registry_alloc, opt.cmd_batch_arena_size) {
 }
 
 inline Thing World::handout() noexcept {
     return m_registry.handout();
 }
 
+inline Thing World::handout_deferred() noexcept {
+    Thing thing = m_registry.handout();
+    m_cmd_batch.record_handout(thing);
+    return thing;
+}
+
 inline void World::kill(Thing thing) noexcept {
     m_registry.kill(thing);
+}
+
+inline void World::kill_deferred(Thing thing) noexcept {
+    if (thing.is_nil()) [[unlikely]]
+        return;
+    m_cmd_batch.record_kill(thing);
 }
 
 inline bool World::is_alive(Thing thing) const noexcept {
@@ -715,6 +792,16 @@ inline T &World::emplace_now(Thing thing, Args &&...args) noexcept {
 }
 
 template <typename T>
+inline void World::insert_now(Thing thing, const T &part) noexcept {
+    m_registry.emplace_checked<T>(thing, part);
+}
+
+template <typename T>
+inline void World::insert_now(Thing thing, T &&part) noexcept {
+    m_registry.emplace_checked<T>(thing, std::forward<T>(part));
+}
+
+template <typename T>
 inline bool World::destroy_now(Thing thing) noexcept {
     return m_registry.destroy_checked<T>(thing);
 }
@@ -731,7 +818,7 @@ inline T &World::get(Thing thing) noexcept {
 
 template <typename T>
 inline void World::sort_by_hierarchy_depth() noexcept {
-    impl::PartPool<T> *pool = m_registry.part_pool_mut<T>();
+    impl::PartPool<T> *pool = m_registry.try_part_pool_mut<T>();
     if (!pool) {
         return;
     }
@@ -767,56 +854,107 @@ inline void World::sort_by_hierarchy_depth() noexcept {
     }
 }
 
-inline void World::commit_insert_part() noexcept {
-    m_cmd_batch.commit_insert_move(&m_registry);
+inline void World::commit_insert() noexcept {
+    Byte *base = m_cmd_batch.arena();
+    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+        if (cmd.kind != CmdKind::InsertPart) {
+            continue;
+        }
+
+        const InsertCmd &c = cmd.insert_part;
+        m_registry.insert_raw(c.tidx, c.thing, base + c.offset);
+    }
 }
 
-inline void World::commit_mutate_part() noexcept {
-    m_cmd_batch.commit_mutate(&m_registry);
+inline void World::commit_mutate() noexcept {
+    Byte *base = m_cmd_batch.arena();
+    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+        if (cmd.kind != CmdKind::MutatePart) {
+            continue;
+        }
+
+        const MutateCmd &c = cmd.mutate_part;
+        if (m_registry.part_meta().has(c.tidx)) {
+            m_registry.part_meta().get(c.tidx).commit_mutate(static_cast<void *>(&m_registry),
+                                                             c.thing, base + c.next_offset);
+        }
+    }
 }
 
-inline void World::commit_destroy_part() noexcept {
-    m_cmd_batch.commit_destroy(&m_registry);
+inline void World::commit_destroy() noexcept {
+    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+        if (cmd.kind != CmdKind::DestroyPart) {
+            continue;
+        }
+
+        const DestroyCmd &c = cmd.destroy_part;
+        m_registry.destroy_raw(c.tidx, c.thing);
+    }
 }
 
 inline void World::commit_attach_child() noexcept {
-    m_cmd_batch.commit_attach_child(this);
+    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+        if (cmd.kind != CmdKind::AttachChild) {
+            continue;
+        }
+
+        attach_child_now(cmd.attach_child.parent, cmd.attach_child.child);
+    }
 }
 
 inline void World::commit_detach_child() noexcept {
-    m_cmd_batch.commit_detach_child(this);
+    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+        if (cmd.kind != CmdKind::DetachChild) {
+            continue;
+        }
+
+        detach_child_now(cmd.detach_child.parent, cmd.detach_child.child);
+    }
+}
+
+inline void World::commit_handout() noexcept {
+    // No-op: things handed out via `handout_deferred()` are already alive.
+    // This method exists for symmetry and potential future hooks.
+}
+
+inline void World::commit_kill() noexcept {
+    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+        if (cmd.kind != CmdKind::Kill) {
+            continue;
+        }
+
+        m_registry.kill(cmd.kill.thing);
+    }
 }
 
 inline void World::commit() noexcept {
-    m_cmd_batch.commit_mutate(&m_registry);
-    m_cmd_batch.commit_destroy(&m_registry);
-    m_cmd_batch.commit_insert_move(&m_registry);
-    m_cmd_batch.commit_attach_child(this);
-    m_cmd_batch.commit_detach_child(this);
+    commit_mutate();
+    commit_destroy();
+    commit_insert();
+    commit_attach_child();
+    commit_detach_child();
+    commit_kill();
     m_cmd_batch.reset();
-}
-
-inline void World::commit_batch(CmdBatch &batch) noexcept {
-    batch.commit_mutate(&m_registry);
-    batch.commit_destroy(&m_registry);
-    batch.commit_insert_move(&m_registry);
-    batch.commit_attach_child(this);
-    batch.commit_detach_child(this);
 }
 
 template <typename T>
 inline void World::insert(Thing thing, const T &part) noexcept {
-    m_cmd_batch.record_insert<T>(m_registry, thing, part);
+    m_registry.ensure<T>(); // lazily register pool + PartMeta on first use
+    m_cmd_batch.record_insert<T>(thing, part);
 }
 
 template <typename T>
 inline void World::insert(Thing thing, T &&part) noexcept {
-    m_cmd_batch.record_insert<T>(m_registry, thing, std::forward<T>(part));
+    m_registry.ensure<T>();
+    m_cmd_batch.record_insert<T>(thing, std::forward<T>(part));
 }
 
 template <typename T>
 inline void World::destroy(Thing thing) noexcept {
-    m_cmd_batch.record_destroy<T>(m_registry, thing);
+    T *current = m_registry.get_checked<T>(thing);
+    if (current) [[likely]] {
+        m_cmd_batch.record_destroy<T>(thing, *current);
+    }
 }
 
 inline void World::attach_child_now(Thing parent, Thing child) noexcept {
@@ -851,7 +989,6 @@ inline void World::attach_child(Thing parent, Thing child) noexcept {
     if (parent.is_nil() || child.is_nil()) {
         return;
     }
-
     m_cmd_batch.record_attach_child(parent, child);
 }
 
@@ -1086,8 +1223,16 @@ inline Thing Scope::handout() noexcept {
     return m_world->handout();
 }
 
+inline Thing Scope::handout_deferred() noexcept {
+    return m_world->handout_deferred();
+}
+
 inline void Scope::kill(Thing thing) noexcept {
     m_world->kill(thing);
+}
+
+inline void Scope::kill_deferred(Thing thing) noexcept {
+    m_world->kill_deferred(thing);
 }
 
 inline bool Scope::is_alive(Thing thing) const noexcept {
@@ -1111,6 +1256,16 @@ inline T *Scope::try_emplace_now(Thing thing, Args &&...args) noexcept {
 template <typename T, typename... Args>
 inline T &Scope::emplace_now(Thing thing, Args &&...args) noexcept {
     return m_world->emplace_now<T>(thing, std::forward<Args>(args)...);
+}
+
+template <typename T>
+inline void Scope::insert_now(Thing thing, const T &part) noexcept {
+    m_world->insert_now(thing, part);
+}
+
+template <typename T>
+inline void Scope::insert_now(Thing thing, T &&part) noexcept {
+    m_world->insert_now(thing, std::forward<T>(part));
 }
 
 template <typename T>

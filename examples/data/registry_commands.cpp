@@ -34,7 +34,7 @@ S32 main() {
         fr::Thing a = world.handout();
         world.insert<Pos>(a, Pos{42.0, 67.0});
 
-        world.commit_insert_part();
+        world.commit_insert();
 
         fr::Thing b = world.handout();
         world.insert<Pos>(b, Pos{42.0, 69.0});
@@ -47,7 +47,7 @@ S32 main() {
             std::cout << fr::format("thing: {}; pos: {}", thing, pos) << "\n";
         }
 
-        world.commit_insert_part();
+        world.commit_insert();
 
         std::cout << "--- commit 1\n";
         for (auto [thing, pos] : world.query<Pos>()) {

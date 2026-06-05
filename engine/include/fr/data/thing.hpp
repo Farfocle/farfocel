@@ -258,6 +258,42 @@ public:
         return thing.gen() == things[thing.idx()].gen();
     }
 
+    // --------------------------------------------------------------- Protocols
+
+    /**
+     * @brief Compact shape protocol for ThingPool.
+     * @note Serializes alive_count, free_count, free_next, and the used portion of the slots array.
+     * @note Signatures are derived state (set by PartPool inserts) — not serialized here.
+     */
+    template <typename Archive>
+    void shape(Archive &archive) noexcept {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            archive.prop("alive_count", m_alive_count);
+            archive.prop("free_count", m_free_count);
+            archive.prop("free_next", m_free_next);
+            archive.list("slots", [&](Archive &la) {
+                for (USize i = 0; i < m_alive_count; ++i) {
+                    ThingRaw raw = (*m_things)[i].as_raw();
+                    la.prop("", raw);
+                }
+            });
+        } else {
+            archive.prop("alive_count", m_alive_count);
+            archive.prop("free_count", m_free_count);
+            archive.prop("free_next", m_free_next);
+            using Things = Array<Thing, MAX_THINGS>;
+            std::memset(m_things, 0, sizeof(Things));
+            archive.list("slots", [&](Archive &la) {
+                USize n = la.current_list_size();
+                for (USize i = 0; i < n; ++i) {
+                    ThingRaw raw = 0;
+                    la.prop("", raw);
+                    (*m_things)[i] = Thing::from_raw(raw);
+                }
+            });
+        }
+    }
+
 private:
     // --------------------------------------------------------------- Internals
 
