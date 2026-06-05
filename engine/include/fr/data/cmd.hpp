@@ -75,7 +75,7 @@ struct InsertCmd {
     USize offset;
 
     /// Returns the equivalent destroy command (for undo / inverse commit).
-    DestroyCmd invert() const noexcept;
+    DestroyCmd inverse() const noexcept;
 
     /// @brief Cast the part pointer from the arena. Returns nullptr on type mismatch.
     template <typename T>
@@ -95,7 +95,7 @@ struct DestroyCmd {
     USize offset;
 
     /// Returns the equivalent insert command (for undo / inverse commit).
-    InsertCmd invert() const noexcept;
+    InsertCmd inverse() const noexcept;
 
     /// @brief Cast the part pointer from the arena. Returns nullptr on type mismatch.
     template <typename T>
@@ -116,7 +116,7 @@ struct MutateCmd {
     USize next_offset;
 
     /// Returns a mutate command with prev/next swapped (for undo / inverse commit).
-    MutateCmd invert() const noexcept;
+    MutateCmd inverse() const noexcept;
 
     template <typename T>
     T *try_cast_prev(Byte *arena_base) noexcept {
@@ -259,6 +259,48 @@ struct Cmd {
             return Thing::nil();
         }
     }
+
+    Cmd inverse() const noexcept {
+        switch (kind) {
+        case CmdKind::InsertPart:
+            return {
+                .kind = CmdKind::DestroyPart,
+                .destroy_part = insert_part.inverse(),
+            };
+        case CmdKind::DestroyPart:
+            return {
+                .kind = CmdKind::InsertPart,
+                .insert_part = destroy_part.inverse(),
+            };
+        case CmdKind::MutatePart:
+            return {
+                .kind = CmdKind::MutatePart,
+                .mutate_part = mutate_part.inverse(),
+            };
+        case CmdKind::AttachChild:
+            return {
+                .kind = CmdKind::DetachChild,
+                .detach_child = attach_child.inverse(),
+            };
+        case CmdKind::DetachChild:
+            return {
+                .kind = CmdKind::AttachChild,
+                .attach_child = detach_child.inverse(),
+            };
+        case CmdKind::Handout:
+            return {
+                .kind = CmdKind::Kill,
+                .kill = handout.inverse(),
+            };
+        case CmdKind::Kill:
+            return {
+                .kind = CmdKind::Handout,
+                .handout = kill.inverse(),
+            };
+        default:
+            return nil();
+        }
+    };
 };
 
 // Forward declarations needed by CmdSheaf constructor.
@@ -541,7 +583,8 @@ public:
 
     // ------------------------------------------------------------------ Record
 
-    /// @brief Records a deferred insert for part `T` (copy). Thing is implicit (`this->thing()`).
+    /// @brief Records a deferred insert for part `T` (copy). Thing is implicit
+    /// (`this->thing()`).
     template <typename T>
     void record_insert(const T &part) noexcept {
         void *ptr = m_arena.allocate(sizeof(T), alignof(T));
@@ -683,6 +726,23 @@ private:
 };
 
 // ============================================================ CmdBatchTimeline
+
+class CmdBatchTimeline {
+    Alloc *m_alloc{get_ambient_ctx().alloc};
+
+public:
+    CmdBatchTimeline() noexcept = default;
+    explicit CmdBatchTimeline(Alloc *alloc) noexcept
+        : m_alloc(alloc) {
+    }
+
+    CmdBatchTimeline(const CmdBatchTimeline &) = delete;
+    CmdBatchTimeline(CmdBatchTimeline &&) = delete;
+    CmdBatchTimeline &operator=(const CmdBatchTimeline &) = delete;
+    CmdBatchTimeline &operator=(CmdBatchTimeline &&) = delete;
+
+    ~CmdBatchTimeline() noexcept = default;
+};
 
 // ============================================================ CmdSheafTimeline
 

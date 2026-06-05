@@ -64,12 +64,12 @@ struct Game {
     void init() {
         player = world.handout();
         world.insert_script(player, PlayerScript(10));
-        world.commit();
+        world.commit_future();
     }
 
     void run() {
         world.run();
-        world.commit();
+        world.commit_future();
     }
 };
 

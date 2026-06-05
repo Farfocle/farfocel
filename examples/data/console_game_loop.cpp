@@ -115,7 +115,7 @@ struct Game {
 
     void run() {
         world.run();
-        world.commit();
+        world.commit_future();
     }
 
 private:
@@ -124,7 +124,7 @@ private:
         world.insert(player, Player{});
         world.insert(player, Health{.max_health = 200, .health = 200});
         world.insert(player, Transform{});
-        world.commit();
+        world.commit_future();
     }
 
     void do_init_systems() {

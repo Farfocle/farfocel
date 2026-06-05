@@ -28,16 +28,16 @@ HandoutCmd KillCmd::inverse() const noexcept {
 }
 
 // `RawInsertPartCmd` and `RawDestroyPartCmd` mirror each other as inverses.
-DestroyCmd InsertCmd::invert() const noexcept {
+DestroyCmd InsertCmd::inverse() const noexcept {
     return {.tidx = tidx, .thing = thing, .offset = offset};
 }
 
-InsertCmd DestroyCmd::invert() const noexcept {
+InsertCmd DestroyCmd::inverse() const noexcept {
     return {.tidx = tidx, .thing = thing, .offset = offset};
 }
 
 // Mutate inverse swaps prev and next.
-MutateCmd MutateCmd::invert() const noexcept {
+MutateCmd MutateCmd::inverse() const noexcept {
     return {
         .tidx = tidx,
         .thing = thing,

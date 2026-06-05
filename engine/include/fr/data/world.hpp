@@ -602,29 +602,107 @@ public:
 
     // ------------------------------------------------- Command Part Operations
 
-    /// @brief Apply all recorded insert commands across all part pools.
-    void commit_insert() noexcept;
+    /**
+     * @brief Apply all insert commands from the provided batch across all part pools.
+     * @note If `invert` is true, applies inverse insert commands (destroy).
+     */
+    void commit_insert_from(CmdBatch &batch, bool invert = false) noexcept;
 
-    /// @brief Apply all recorded mutate commands across all part pools.
-    void commit_mutate() noexcept;
+    /**
+     * @brief Apply all destroy commands from the provided batch across all part pools.
+     * @note If `invert` is true, applies inverse destroy commands (insert).
+     */
+    void commit_destroy_from(CmdBatch &batch, bool invert = false) noexcept;
+
+    /**
+     * @brief Apply all mutate commands from the provided batch across all part pools.
+     * @note If `invert` is true, applies inverse mutate commands.
+     */
+    void commit_mutate_from(CmdBatch &batch, bool invert = false) noexcept;
+
+    /**
+     * @brief Apply all attach-child commands from the provided batch.
+     * @note If `invert` is true, applies inverse attach-child commands (detach).
+     */
+    void commit_attach_child_from(CmdBatch &batch, bool invert = false) noexcept;
+
+    /**
+     * @brief Apply all detach-child commands from the provided batch.
+     * @note If `invert` is true, applies inverse detach-child commands (attach).
+     */
+    void commit_detach_child_from(CmdBatch &batch, bool invert = false) noexcept;
+
+    /**
+     * @brief Apply all handout commands from the provided batch.
+     * @note No-op; exists for symmetry and future hooks.
+     */
+    void commit_handout_from(CmdBatch &batch, bool invert = false) noexcept;
+
+    /**
+     * @brief Apply all kill commands from the provided batch.
+     * @note If `invert` is true, applies inverse kill commands (handout).
+     */
+    void commit_kill_from(CmdBatch &batch, bool invert = false) noexcept;
+
+    /**
+     * @brief Apply all commands in the provided batch: mutate -> destroy -> insert -> attach ->
+     * detach -> kill.
+     */
+    void commit_future_from(CmdBatch &batch) noexcept;
+
+    /**
+     * @brief Apply all inverse commands from the provided batch:
+     * kill' -> detach' -> attach' -> insert' -> destroy' -> mutate'
+     */
+    void commit_past_from(CmdBatch &batch) noexcept;
+
+    /// @brief Apply all recorded insert commands across all part pools.
+    void commit_insert(bool invert = false) noexcept {
+        commit_insert_from(m_cmd_batch, invert);
+    }
 
     /// @brief Apply all recorded destroy commands across all part pools.
-    void commit_destroy() noexcept;
+    void commit_destroy(bool invert = false) noexcept {
+        commit_destroy_from(m_cmd_batch, invert);
+    }
+
+    /// @brief Apply all recorded mutate commands across all part pools.
+    void commit_mutate(bool invert = false) noexcept {
+        commit_mutate_from(m_cmd_batch, invert);
+    }
 
     /// @brief Apply all recorded attach-child commands.
-    void commit_attach_child() noexcept;
+    void commit_attach_child(bool invert = false) noexcept {
+        commit_attach_child_from(m_cmd_batch, invert);
+    }
 
     /// @brief Apply all recorded detach-child commands.
-    void commit_detach_child() noexcept;
+    void commit_detach_child(bool invert = false) noexcept {
+        commit_detach_child_from(m_cmd_batch, invert);
+    }
 
     /// @brief No-op (things are already alive). Exists for symmetry and future use.
-    void commit_handout() noexcept;
+    void commit_handout(bool invert = false) noexcept {
+        commit_handout_from(m_cmd_batch, invert);
+    }
 
     /// @brief Kill all things recorded via `kill_deferred()`.
-    void commit_kill() noexcept;
+    void commit_kill(bool invert = false) noexcept {
+        commit_kill_from(m_cmd_batch, invert);
+    }
 
     /// @brief Apply all commands: mutate -> destroy -> insert -> attach -> detach -> kill.
-    void commit() noexcept;
+    void commit_future() noexcept {
+        commit_future_from(m_cmd_batch);
+    }
+
+    /**
+     * @brief Apply all inverse commands:
+     * kill' -> detach' -> attach' -> insert' -> destroy' -> mutate'
+     */
+    void commit_past() noexcept {
+        commit_past_from(m_cmd_batch);
+    }
 
     /**
      * @brief Records a deferred insert command for part `T` on a thing.
@@ -970,9 +1048,24 @@ inline void World::sort_by_hierarchy_depth() noexcept {
     }
 }
 
-inline void World::commit_insert() noexcept {
-    Byte *base = m_cmd_batch.arena();
-    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+inline void World::commit_insert_from(CmdBatch &batch, bool invert) noexcept {
+    auto cmds = batch.cmds();
+    if (invert) {
+        for (USize i = cmds.size(); i-- > 0;) {
+            const Cmd &cmd = cmds[i];
+            if (cmd.kind != CmdKind::InsertPart) {
+                continue;
+            }
+
+            Cmd inverse = cmd.inverse();
+            const InsertCmd &c = inverse.insert_part;
+            m_registry.destroy_raw(c.tidx, c.thing);
+        }
+        return;
+    }
+
+    Byte *base = batch.arena();
+    for (const Cmd &cmd : cmds) {
         if (cmd.kind != CmdKind::InsertPart) {
             continue;
         }
@@ -982,9 +1075,53 @@ inline void World::commit_insert() noexcept {
     }
 }
 
-inline void World::commit_mutate() noexcept {
-    Byte *base = m_cmd_batch.arena();
-    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+inline void World::commit_destroy_from(CmdBatch &batch, bool invert) noexcept {
+    auto cmds = batch.cmds();
+    if (invert) {
+        Byte *base = batch.arena();
+        for (USize i = cmds.size(); i-- > 0;) {
+            const Cmd &cmd = cmds[i];
+            if (cmd.kind != CmdKind::DestroyPart) {
+                continue;
+            }
+
+            Cmd inverse = cmd.inverse();
+            const InsertCmd &c = inverse.insert_part;
+            m_registry.insert_raw(c.tidx, c.thing, base + c.offset);
+        }
+        return;
+    }
+
+    for (const Cmd &cmd : cmds) {
+        if (cmd.kind != CmdKind::DestroyPart) {
+            continue;
+        }
+
+        const DestroyCmd &c = cmd.destroy_part;
+        m_registry.destroy_raw(c.tidx, c.thing);
+    }
+}
+
+inline void World::commit_mutate_from(CmdBatch &batch, bool invert) noexcept {
+    auto cmds = batch.cmds();
+    Byte *base = batch.arena();
+    if (invert) {
+        for (USize i = cmds.size(); i-- > 0;) {
+            const Cmd &cmd = cmds[i];
+            if (cmd.kind != CmdKind::MutatePart) {
+                continue;
+            }
+
+            const MutateCmd &c = cmd.mutate_part.inverse();
+            if (m_registry.part_meta().has(c.tidx)) {
+                m_registry.part_meta().get(c.tidx).commit_mutate(static_cast<void *>(&m_registry),
+                                                                 c.thing, base + c.next_offset);
+            }
+        }
+        return;
+    }
+
+    for (const Cmd &cmd : cmds) {
         if (cmd.kind != CmdKind::MutatePart) {
             continue;
         }
@@ -997,19 +1134,22 @@ inline void World::commit_mutate() noexcept {
     }
 }
 
-inline void World::commit_destroy() noexcept {
-    for (const Cmd &cmd : m_cmd_batch.cmds()) {
-        if (cmd.kind != CmdKind::DestroyPart) {
-            continue;
+inline void World::commit_attach_child_from(CmdBatch &batch, bool invert) noexcept {
+    auto cmds = batch.cmds();
+    if (invert) {
+        for (USize i = cmds.size(); i-- > 0;) {
+            const Cmd &cmd = cmds[i];
+            if (cmd.kind != CmdKind::AttachChild) {
+                continue;
+            }
+
+            Cmd inverse = cmd.inverse();
+            detach_child_now(inverse.attach_child.parent, inverse.attach_child.child);
         }
-
-        const DestroyCmd &c = cmd.destroy_part;
-        m_registry.destroy_raw(c.tidx, c.thing);
+        return;
     }
-}
 
-inline void World::commit_attach_child() noexcept {
-    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+    for (const Cmd &cmd : cmds) {
         if (cmd.kind != CmdKind::AttachChild) {
             continue;
         }
@@ -1018,8 +1158,22 @@ inline void World::commit_attach_child() noexcept {
     }
 }
 
-inline void World::commit_detach_child() noexcept {
-    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+inline void World::commit_detach_child_from(CmdBatch &batch, bool invert) noexcept {
+    auto cmds = batch.cmds();
+    if (invert) {
+        for (USize i = cmds.size(); i-- > 0;) {
+            const Cmd &cmd = cmds[i];
+            if (cmd.kind != CmdKind::DetachChild) {
+                continue;
+            }
+
+            Cmd inverse = cmd.inverse();
+            detach_child_now(inverse.detach_child.parent, inverse.detach_child.child);
+        }
+        return;
+    }
+
+    for (const Cmd &cmd : cmds) {
         if (cmd.kind != CmdKind::DetachChild) {
             continue;
         }
@@ -1028,13 +1182,29 @@ inline void World::commit_detach_child() noexcept {
     }
 }
 
-inline void World::commit_handout() noexcept {
+inline void World::commit_handout_from(CmdBatch & /*batch*/, bool /* invert */) noexcept {
     // No-op: things handed out via `handout_deferred()` are already alive.
     // This method exists for symmetry and potential future hooks.
 }
 
-inline void World::commit_kill() noexcept {
-    for (const Cmd &cmd : m_cmd_batch.cmds()) {
+inline void World::commit_kill_from(CmdBatch &batch, bool invert) noexcept {
+    auto cmds = batch.cmds();
+    if (invert) {
+        for (USize i = cmds.size(); i-- > 0;) {
+            const Cmd &cmd = cmds[i];
+            if (cmd.kind != CmdKind::Kill) {
+                continue;
+            }
+
+            /// @todo Implement syntetic thing creation.
+            Cmd inverse = cmd.inverse();
+            m_registry.handout();
+            (void)inverse;
+        }
+        return;
+    }
+
+    for (const Cmd &cmd : cmds) {
         if (cmd.kind != CmdKind::Kill) {
             continue;
         }
@@ -1043,14 +1213,24 @@ inline void World::commit_kill() noexcept {
     }
 }
 
-inline void World::commit() noexcept {
-    commit_mutate();
-    commit_destroy();
-    commit_insert();
-    commit_attach_child();
-    commit_detach_child();
-    commit_kill();
-    m_cmd_batch.reset();
+inline void World::commit_future_from(CmdBatch &batch) noexcept {
+    commit_mutate_from(batch);
+    commit_destroy_from(batch);
+    commit_insert_from(batch);
+    commit_attach_child_from(batch);
+    commit_detach_child_from(batch);
+    commit_kill_from(batch);
+    batch.reset();
+}
+
+inline void World::commit_past_from(CmdBatch &batch) noexcept {
+    commit_kill_from(batch, true);
+    commit_detach_child_from(batch, true);
+    commit_attach_child_from(batch, true);
+    commit_insert_from(batch, true);
+    commit_destroy_from(batch, true);
+    commit_mutate_from(batch, true);
+    batch.reset();
 }
 
 template <typename T>
