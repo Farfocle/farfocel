@@ -47,14 +47,16 @@ set(ENGINE_HEADERS
     "include/fr/data/cmd.hpp"
     "include/fr/data/part.hpp"
     "include/fr/data/registry.hpp"
+    "include/fr/data/relations.hpp"
+    "include/fr/data/resource.hpp"
     "include/fr/data/thing.hpp"
     "include/fr/data/world.hpp"
-    "include/fr/data/relations.hpp"
 )
 
 set(ENGINE_SOURCES
 #### core
     "src/core/ctx.cpp"
+
 #### data
     "src/data/cmd.cpp"
 )

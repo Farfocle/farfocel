@@ -682,4 +682,8 @@ private:
     DynamicArray<Cmd> m_cmds{};
 };
 
+// ============================================================ CmdBatchTimeline
+
+// ============================================================ CmdSheafTimeline
+
 } // namespace fr

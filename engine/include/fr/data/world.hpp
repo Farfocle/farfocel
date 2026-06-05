@@ -22,6 +22,7 @@
 #include "fr/data/part.hpp"
 #include "fr/data/registry.hpp"
 #include "fr/data/relations.hpp"
+#include "fr/data/resource.hpp"
 #include "fr/data/thing.hpp"
 
 namespace fr {
@@ -254,6 +255,32 @@ public:
     template <typename S>
     void destroy_script(Thing thing) noexcept;
 
+    // ---------------------------------------------------------------- Resources
+
+    /**
+     * @brief Tries to get a resource of type `T` from the pool.
+     * @tparam T The type of the resource to get.
+     * @return A pointer to the resource if it exists, `nullptr` otherwise.
+     */
+    template <typename T>
+    T *try_get_resource() noexcept;
+
+    /**
+     * @brief Gets a resource of type `T` from the pool.
+     * @tparam T The type of the resource to get.
+     * @return A reference to the resource.
+     */
+    template <typename T>
+    T &get_resource() noexcept;
+
+    /**
+     * @brief Checks if a resource of type `T` exists in the pool.
+     * @tparam T The type of the resource to check.
+     * @return `true` if the resource exists, `false` otherwise.
+     */
+    template <typename T>
+    bool check_resource() noexcept;
+
 private:
     // -------------------------------------------------------- Member Variables
     World *m_world{nullptr};
@@ -394,6 +421,7 @@ public:
     struct Options {
         Alloc *registry_alloc{get_ambient_ctx().alloc};
         Alloc *system_pool_alloc{get_ambient_ctx().alloc};
+        Alloc *resource_pool_alloc{get_ambient_ctx().alloc};
         USize cmd_batch_arena_size{DEFAULT_CMD_BATCH_ARENA_SIZE};
     };
 
@@ -694,6 +722,92 @@ public:
     template <IsScript S>
     void destroy_script(Thing thing) noexcept;
 
+    // --------------------------------------------------------------- Resources
+
+    /**
+     * @brief Emplaces a resource `T` with the given arguments.
+     *
+     * @tparam T The type of the resource to emplace.
+     * @tparam Args The types of the arguments to pass to the constructor of `T`.
+     * @param args The arguments to pass to the constructor of `T`.
+     * @return A reference to the emplaced resource.
+     *
+     * @note If a resource `T` already exists, it will be destroyed and replaced with the
+     * new resource.
+     */
+    template <typename T, typename... Args>
+    T &emplace_resource(Args &&...args) noexcept {
+        return m_resource_pool.emplace<T>(std::forward<Args>(args)...);
+    };
+
+    /**
+     * @brief Inserts a resource `T` into the pool.
+     *
+     * @tparam T The type of the resource to insert.
+     * @param t The resource to insert.
+     *
+     * @note If a resource of type `T` already exists, it will be destroyed and replaced with the
+     * new resource.
+     */
+    template <typename T>
+    void insert_resource(T &&t) noexcept {
+        m_resource_pool.insert<T>(std::move<T>(t));
+    }
+
+    /**
+     * @brief Inserts a resource `T` into the pool.
+     *
+     * @tparam T The type of the resource to insert.
+     * @param t The resource to insert.
+     *
+     * @note If a resource of type `T` already exists, it will be destroyed and replaced with the
+     * new resource.
+     */
+    template <typename T>
+    void insert_resource(const T &t) noexcept {
+        m_resource_pool.insert<T>(t);
+    }
+
+    /**
+     * @brief Destroys a resource of type `T` from the pool.
+     * @tparam T The type of the resource to destroy.
+     * @return `true` if the resource was destroyed, `false` if it was not found.
+     */
+    template <typename T>
+    bool destroy() {
+        return m_resource_pool.destroy<T>();
+    }
+
+    /**
+     * @brief Checks if a resource of type `T` exists in the pool.
+     * @tparam T The type of the resource to check.
+     * @return `true` if the resource exists, `false` otherwise.
+     */
+    template <typename T>
+    bool check_resource() {
+        return m_resource_pool.check<T>();
+    }
+
+    /**
+     * @brief Tries to get a resource of type `T` from the pool.
+     * @tparam T The type of the resource to get.
+     * @return A pointer to the resource if it exists, `nullptr` otherwise.
+     */
+    template <typename T>
+    T *try_get_resource() {
+        return m_resource_pool.try_get<T>();
+    }
+
+    /**
+     * @brief Gets a resource of type `T` from the pool.
+     * @tparam T The type of the resource to get.
+     * @return A reference to the resource.
+     */
+    template <typename T>
+    T &get_resource() {
+        return m_resource_pool.get<T>();
+    }
+
 private:
     // --------------------------------------------------------------- Internals
     void do_update_hierarchy(HierarchyDepth parent_depth, Thing child) noexcept;
@@ -705,6 +819,7 @@ private:
     impl::SystemPool m_system_pool{};
     Bitset<MAX_PARTS> m_script_registry{};
     CmdBatch m_cmd_batch;
+    impl::ResourcePool m_resource_pool{};
 };
 
 // =========================================== SystemPool Method Implementations
@@ -745,7 +860,8 @@ inline World::World(const Options &opt) noexcept
       m_registry(opt.registry_alloc),
       m_system_pool(opt.system_pool_alloc),
       m_script_registry(Bitset<MAX_PARTS>::with_zeros()),
-      m_cmd_batch(opt.registry_alloc, opt.cmd_batch_arena_size) {
+      m_cmd_batch(opt.registry_alloc, opt.cmd_batch_arena_size),
+      m_resource_pool(opt.resource_pool_alloc) {
 }
 
 inline Thing World::handout() noexcept {
@@ -1352,6 +1468,21 @@ inline void Scope::insert_script(Thing thing, const S script) noexcept {
 template <typename S>
 inline void Scope::destroy_script(Thing thing) noexcept {
     m_world->destroy_script<S>(thing);
+}
+
+template <typename T>
+inline T *Scope::try_get_resource() noexcept {
+    return m_world->try_get_resource<T>();
+}
+
+template <typename T>
+inline T &Scope::get_resource() noexcept {
+    return m_world->get_resource<T>();
+}
+
+template <typename T>
+inline bool Scope::check_resource() noexcept {
+    return m_world->check_resource<T>();
 }
 
 inline void Script::set_self(Thing thing) noexcept {
