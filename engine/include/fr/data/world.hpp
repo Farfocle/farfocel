@@ -51,16 +51,16 @@ public:
     /// @brief Returns a fresh, non-nil thing immediately.
     Thing handout() noexcept;
 
-    /// @brief Hands out a new thing immediately and records it in the batch for tracking.
+    /// @brief Hands out a new thing immediately and records it.
     Thing handout_deferred() noexcept;
 
     /**
      * @brief Kills a thing and destroys all of its parts immediately.
-     * @note If the thing is nil or dead; does nothing.
+     * @note If `thing` is nil or dead; does nothing.
      */
     void kill(Thing thing) noexcept;
 
-    /// @brief Records a deferred kill — applied during the next `commit()`.
+    /// @brief Records a deferred kill.
     void kill_deferred(Thing thing) noexcept;
 
     /**
@@ -441,8 +441,7 @@ public:
     /**
      * @brief Hands out a new thing immediately, then records it in the batch for tracking.
      * @return The newly created thing (already alive).
-     * @note The thing is created now so the handle is usable right away. The batch entry
-     * enables undo (its inverse is a deferred kill) and batch introspection.
+     * @note The thing is created now so the handle is usable right away.
      */
     Thing handout_deferred() noexcept;
 
@@ -453,9 +452,9 @@ public:
     void kill(Thing thing) noexcept;
 
     /**
-     * @brief Records a deferred kill — the thing is killed during the next `commit()`.
+     * @brief Records a deferred kill.
      * @note Safe to call while iterating over part pools; the actual kill is postponed.
-     * @note If thing is nil; does nothing.
+     * @note If `thing` is nil; does nothing.
      */
     void kill_deferred(Thing thing) noexcept;
 
@@ -645,14 +644,14 @@ public:
     void commit_kill_from(CmdBatch &batch, bool invert = false) noexcept;
 
     /**
-     * @brief Apply all commands in the provided batch: mutate -> destroy -> insert -> attach ->
-     * detach -> kill.
+     * @brief Apply all commands in the provided batch:
+     * mutate -> destroy -> insert -> attach -> detach -> kill.
      */
     void commit_future_from(CmdBatch &batch) noexcept;
 
     /**
      * @brief Apply all inverse commands from the provided batch:
-     * kill' -> detach' -> attach' -> insert' -> destroy' -> mutate'
+     * kill' -> detach' -> attach' -> insert' -> destroy' -> mutate'.
      */
     void commit_past_from(CmdBatch &batch) noexcept;
 
@@ -764,6 +763,12 @@ public:
     void ensure() noexcept {
         m_registry.ensure<T>();
     }
+
+    /// @brief Serializes the world (things, parts, resources) to JSON.
+    void shape(JsonWriterArchive &archive) noexcept;
+
+    /// @brief Deserializes the world from JSON. Call ensure<T>() for each part type first.
+    void shape(JsonReaderArchive &archive) noexcept;
 
     // ----------------------------------------------------------------- Systems
 
@@ -1050,10 +1055,11 @@ inline void World::sort_by_hierarchy_depth() noexcept {
 
 inline void World::commit_insert_from(CmdBatch &batch, bool invert) noexcept {
     auto cmds = batch.cmds();
+
     if (invert) {
         for (USize i = cmds.size(); i-- > 0;) {
             const Cmd &cmd = cmds[i];
-            if (cmd.kind != CmdKind::InsertPart) {
+            if (cmd.kind != CmdKind::Insert) {
                 continue;
             }
 
@@ -1061,12 +1067,13 @@ inline void World::commit_insert_from(CmdBatch &batch, bool invert) noexcept {
             const InsertCmd &c = inverse.insert_part;
             m_registry.destroy_raw(c.tidx, c.thing);
         }
+
         return;
     }
 
     Byte *base = batch.arena();
     for (const Cmd &cmd : cmds) {
-        if (cmd.kind != CmdKind::InsertPart) {
+        if (cmd.kind != CmdKind::Insert) {
             continue;
         }
 
@@ -1081,7 +1088,7 @@ inline void World::commit_destroy_from(CmdBatch &batch, bool invert) noexcept {
         Byte *base = batch.arena();
         for (USize i = cmds.size(); i-- > 0;) {
             const Cmd &cmd = cmds[i];
-            if (cmd.kind != CmdKind::DestroyPart) {
+            if (cmd.kind != CmdKind::Destroy) {
                 continue;
             }
 
@@ -1093,7 +1100,7 @@ inline void World::commit_destroy_from(CmdBatch &batch, bool invert) noexcept {
     }
 
     for (const Cmd &cmd : cmds) {
-        if (cmd.kind != CmdKind::DestroyPart) {
+        if (cmd.kind != CmdKind::Destroy) {
             continue;
         }
 
@@ -1108,7 +1115,7 @@ inline void World::commit_mutate_from(CmdBatch &batch, bool invert) noexcept {
     if (invert) {
         for (USize i = cmds.size(); i-- > 0;) {
             const Cmd &cmd = cmds[i];
-            if (cmd.kind != CmdKind::MutatePart) {
+            if (cmd.kind != CmdKind::Mutate) {
                 continue;
             }
 
@@ -1122,7 +1129,7 @@ inline void World::commit_mutate_from(CmdBatch &batch, bool invert) noexcept {
     }
 
     for (const Cmd &cmd : cmds) {
-        if (cmd.kind != CmdKind::MutatePart) {
+        if (cmd.kind != CmdKind::Mutate) {
             continue;
         }
 
@@ -1196,7 +1203,7 @@ inline void World::commit_kill_from(CmdBatch &batch, bool invert) noexcept {
                 continue;
             }
 
-            /// @todo Implement syntetic thing creation.
+            /// @todo Implement synthetic thing creation (???).
             Cmd inverse = cmd.inverse();
             m_registry.handout();
             (void)inverse;
@@ -1434,6 +1441,16 @@ inline void World::schedule(Stage stage, const System &system) noexcept {
 inline void World::run_stage(Stage stage) noexcept {
     Scope scope{this};
     m_system_pool.run_stage(stage, scope);
+}
+
+inline void World::shape(JsonWriterArchive &archive) noexcept {
+    archive.prop("registry", m_registry);
+    archive.prop("resources", m_resource_pool);
+}
+
+inline void World::shape(JsonReaderArchive &archive) noexcept {
+    archive.prop("registry", m_registry);
+    archive.prop("resources", m_resource_pool);
 }
 
 inline void World::run() noexcept {

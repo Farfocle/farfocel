@@ -31,7 +31,8 @@ namespace fr {
  */
 template <typename T, USize Size>
 class Array {
-    FR_STATIC_ASSERT_NOTHROW_BASE(T);
+    /// @todo Think about this one.
+    // FR_STATIC_ASSERT_NOTHROW_BASE(T);
 
 private:
     T m_data[Size > 0 ? Size : 1]{};

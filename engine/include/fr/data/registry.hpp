@@ -23,7 +23,7 @@ namespace fr {
 
 /**
  * @brief Filtering options for a query.
- * @note Use `Signature::from_parts<...>()`` to construct the fields.
+ * @note Use `Signature::from_parts<...>()` to construct the fields.
  */
 struct QueryOptions {
     Signature with{};
@@ -32,17 +32,11 @@ struct QueryOptions {
 
 // ================================================================== PartMeta
 
-/**
- * @brief Type-erased metadata for a single part type.
- *
- * Populated via `PartMetaRegistry::register_part<T>()`, which is called lazily by
- * `Registry::ensure<T>()`. Every function pointer takes a void* receiver so callers
- * are not templated on T.
- */
+/// @brief Type-erased metadata for a single part type.
 struct PartMeta {
-    const char *name{nullptr}; ///< Stable type name (non-null iff registered).
-    USize size{0};             ///< sizeof(T).
-    USize alignment{0};        ///< alignof(T).
+    const char *name{nullptr};
+    USize size{0};
+    USize alignment{0};
 
     /// Destroy the part object at `part`.
     void (*destroy)(void *part) noexcept {nullptr};
@@ -64,13 +58,6 @@ struct PartMeta {
 
     /// Destroy the part owned by `thing` directly through its PartPool slot.
     void (*pool_destroy)(void *pool, Thing thing) noexcept {nullptr};
-
-    /// Serialize all parts in a pool to a JSON writer archive.
-    void (*pool_json_write)(void *pool, JsonWriterArchive &archive) noexcept {nullptr};
-
-    /// Deserialize parts from a JSON reader archive into the registry.
-    void (*pool_json_read)(void *registry, TypeIdx tidx,
-                           JsonReaderArchive &archive) noexcept {nullptr};
 
     /// Return a raw pointer to the part owned by `thing`, or nullptr if not present.
     void *(*get_raw)(void *registry, Thing thing) noexcept {nullptr};
@@ -98,10 +85,7 @@ public:
         return m_parts[tidx.idx()];
     }
 
-    /**
-     * @brief Register metadata for part type T (idempotent - safe to call multiple times).
-     * @note Implementation is deferred below the Registry class (needs impl::PartPool<T>).
-     */
+    /// @brief Registers metadata for part `T` (safe to call multiple times).
     template <typename T>
     void ensure() noexcept;
 
@@ -112,6 +96,12 @@ private:
 } // namespace fr
 
 namespace fr::impl {
+
+struct PoolSerializeFns {
+    const char *name{nullptr};
+    void (*write)(void *pool, JsonWriterArchive &archive) noexcept {nullptr};
+    void (*read)(void *registry, TypeIdx tidx, JsonReaderArchive &archive) noexcept {nullptr};
+};
 
 template <bool IsReverse, typename... Include>
 class GenericQuery;
@@ -125,7 +115,7 @@ class DeepHierarchyQuery;
 template <bool IsReverse, typename... Include>
 class GenericDepthHierarchyQuery;
 
-// ======================================================================= Registry
+// ==================================================================== Registry
 
 class Registry {
     template <bool IsReverse, typename... Include>
@@ -176,9 +166,6 @@ public:
      */
     template <typename T>
     PartPool<T> &part_pool_mut() noexcept;
-
-    template <typename T>
-    PartPool<T> &ensure_part_pool(TypeIdx tidx) noexcept;
 
     /// @brief Returns true if a part pool for part `T` has been created.
     template <typename T>
@@ -279,7 +266,7 @@ public:
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
 
-    // ----------------------------------------------------------------- Shape
+    // ------------------------------------------------------------------- Shape
 
     /// @brief Serializes the registry (things + all part pools that have shape) to JSON.
     void shape(JsonWriterArchive &archive) noexcept;
@@ -297,10 +284,12 @@ public:
      * @note Idempotent - safe to call before any insert, destroy, or query on part `T`.
      */
     template <typename T>
-    void ensure() noexcept {
+    PartPool<T> &ensure() noexcept {
         TypeIdx tidx = TypeIdx::from_type<T>();
-        ensure_part_pool<T>(tidx);
-        m_meta_registry.ensure<T>();
+        FR_ASSERT(tidx.idx() < MAX_PARTS, "part type index out of range");
+        if (do_pool_absent(tidx)) [[unlikely]]
+            do_create_part_pool<T>(tidx);
+        return m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
     }
 
     // -------------------------------------------- Type-Erased Part Operations
@@ -362,6 +351,7 @@ private:
     // ----------------------------------------------------------------- Members
     Alloc *m_alloc{nullptr};
     Array<AnyPartPool, MAX_PARTS> m_part_pools{};
+    Array<PoolSerializeFns, MAX_PARTS> m_pool_serialize_fns{};
     PartMetaRegistry m_meta_registry{};
     ThingPool m_thing_pool;
     SignaturePool m_signature_pool;
@@ -405,17 +395,6 @@ inline PartPool<T> &Registry::part_pool_mut() noexcept {
     }
 
     return &m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
-}
-
-template <typename T>
-inline PartPool<T> &Registry::ensure_part_pool(TypeIdx tidx) noexcept {
-    FR_ASSERT(tidx.idx() < MAX_PARTS, "part type index out of range");
-
-    if (do_pool_absent(tidx)) [[unlikely]] {
-        do_create_part_pool<T>(tidx);
-    }
-
-    return m_part_pools[tidx.idx()].cast_ref<PartPool<T>>();
 }
 
 template <typename T>
@@ -472,7 +451,7 @@ inline bool Registry::has(Thing thing) const noexcept {
 template <typename T, typename... Args>
 inline T *Registry::emplace_checked(Thing thing, Args &&...args) noexcept {
     TypeIdx tidx = TypeIdx::from_type<T>();
-    PartPool<T> &pool = ensure_part_pool<T>(tidx);
+    PartPool<T> &pool = ensure<T>();
 
     if (thing.is_nil()) [[unlikely]] {
         return &pool.get_stub();
@@ -492,7 +471,8 @@ inline T *Registry::emplace_checked(Thing thing, Args &&...args) noexcept {
 template <typename T, typename... Args>
 inline T &Registry::emplace_unchecked(Thing thing, Args &&...args) noexcept {
     TypeIdx tidx = TypeIdx::from_type<T>();
-    PartPool<T> &pool = ensure_part_pool<T>(tidx);
+    PartPool<T> &pool = ensure<T>();
+
     m_signature_pool.insert(thing, tidx);
     return pool.emplace_unchecked(thing, std::forward<Args>(args)...);
 }
@@ -573,6 +553,23 @@ inline bool Registry::do_check_part(Thing thing, TypeIdx tidx) const noexcept {
 template <typename T>
 inline void Registry::do_create_part_pool(TypeIdx tidx) noexcept {
     m_part_pools[tidx.idx()].template emplace<PartPool<T>>(m_alloc);
+    m_meta_registry.ensure<T>();
+
+    PoolSerializeFns &fns = m_pool_serialize_fns[tidx.idx()];
+    fns.name = TypeInfo<T>::name();
+    if constexpr (IsShape<JsonWriterArchive, T>) {
+        fns.write = +[](void *pool_v, JsonWriterArchive &archive) noexcept {
+            static_cast<AnyPartPool *>(pool_v)->cast_ref<PartPool<T>>().shape(archive);
+        };
+    }
+
+    if constexpr (IsShape<JsonReaderArchive, T>) {
+        fns.read = +[](void *reg_v, TypeIdx tidx, JsonReaderArchive &archive) noexcept {
+            Registry *registry = static_cast<Registry *>(reg_v);
+            PartPool<T> &pool = registry->ensure<T>();
+            pool.shape(archive, registry->signature_pool_mut(), tidx);
+        };
+    }
 }
 
 inline void Registry::do_destroy_all_parts(Thing thing) noexcept {
@@ -1146,7 +1143,7 @@ inline auto Registry::bottom_up_query(QueryOptions options) noexcept {
 } // namespace fr::impl
 
 // =================================== DataMeta::register_part<T> Implementation
-// Placed here because it needs impl::Registry and impl::PartPool<T> to be fully defined.
+// Placed here because it needs `impl::Registry` and `impl::PartPool<T>` to be fully defined.
 
 namespace fr {
 
@@ -1196,50 +1193,62 @@ inline void PartMetaRegistry::ensure() noexcept {
     pm.get_raw = +[](void *reg, Thing thing) noexcept -> void * {
         return static_cast<impl::Registry *>(reg)->get_checked<T>(thing);
     };
-
-    if constexpr (IsShape<JsonWriterArchive, T>) {
-        pm.pool_json_write = +[](void *pool_v, JsonWriterArchive &archive) noexcept {
-            impl::PartPool<T> &pool =
-                static_cast<impl::Registry::AnyPartPool *>(pool_v)->cast_ref<impl::PartPool<T>>();
-            Slice<T> parts = pool.parts_with_stub_mut();
-            Slice<const Thing> things = pool.part_to_thing_with_stub();
-
-            archive.list("@entries", [&](JsonWriterArchive &la) {
-                for (USize i = 1; i < parts.size(); ++i) {
-                    la.dict("", [&](JsonWriterArchive &ea) {
-                        ThingRaw raw = things[i].as_raw();
-                        ea.prop("thing", raw);
-                        ea.prop("part", parts[i]);
-                    });
-                }
-            });
-        };
-    }
-
-    if constexpr (IsShape<JsonReaderArchive, T>) {
-        pm.pool_json_read = +[](void *reg_v, TypeIdx tidx, JsonReaderArchive &archive) noexcept {
-            impl::Registry *registry = static_cast<impl::Registry *>(reg_v);
-            registry->ensure<T>();
-            impl::PartPool<T> &pool = registry->ensure_part_pool<T>(tidx);
-
-            archive.list("@entries", [&](JsonReaderArchive &entries_ar) {
-                USize n = entries_ar.current_list_size();
-                for (USize i = 0; i < n; ++i) {
-                    entries_ar.dict("", [&](JsonReaderArchive &entry_ar) {
-                        ThingRaw raw = 0;
-                        T part{};
-                        entry_ar.prop("thing", raw);
-                        entry_ar.prop("part", part);
-                        pool.emplace_unchecked(Thing::from_raw(raw), std::move(part));
-                        registry->signature_pool_mut().insert(Thing::from_raw(raw), tidx);
-                    });
-                }
-            });
-        };
-    }
 }
 
 } // namespace fr
+
+// ========================================================== Registry::shape Implementations
+
+namespace fr::impl {
+
+inline void Registry::shape(JsonWriterArchive &archive) noexcept {
+    archive.prop("@things", m_thing_pool);
+    archive.list("@parts", [&](JsonWriterArchive &la) {
+        for (USize i = 0; i < MAX_PARTS; ++i) {
+            if (m_part_pools[i].is_nil()) {
+                continue;
+            }
+
+            const PoolSerializeFns &fns = m_pool_serialize_fns[i];
+            if (!fns.write) {
+                continue;
+            }
+
+            la.dict("", [&](JsonWriterArchive &ea) {
+                ea.prop("@typename", fns.name);
+                fns.write(static_cast<void *>(&m_part_pools[i]), ea);
+            });
+        }
+    });
+}
+
+inline void Registry::shape(JsonReaderArchive &archive) noexcept {
+    archive.prop("@things", m_thing_pool);
+    archive.list("@parts", [&](JsonReaderArchive &la) {
+        USize n = la.current_list_size();
+        for (USize i = 0; i < n; ++i) {
+            la.dict("", [&](JsonReaderArchive &ea) {
+                StringView type_name;
+                ea.prop("@typename", type_name);
+
+                TypeIdx tidx = do_find_tidx_by_name(type_name);
+
+                if (tidx.is_nil()) {
+                    return;
+                }
+
+                const PoolSerializeFns &fns = m_pool_serialize_fns[tidx.idx()];
+                if (!fns.read) {
+                    return;
+                }
+
+                fns.read(static_cast<void *>(this), tidx, ea);
+            });
+        }
+    });
+}
+
+} // namespace fr::impl
 
 // ================================================================ API Typedefs
 

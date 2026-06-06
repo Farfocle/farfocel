@@ -323,6 +323,43 @@ public:
      */
     bool destroy_checked(Thing thing) noexcept;
 
+    void shape(JsonWriterArchive &archive) noexcept {
+        if constexpr (IsShape<JsonWriterArchive, T>) {
+            Slice<T> parts = parts_with_stub_mut();
+            Slice<const Thing> things = part_to_thing_with_stub();
+
+            archive.list("@items", [&](JsonWriterArchive &la) {
+                for (USize i = 1; i < parts.size(); ++i) {
+                    la.dict("", [&](JsonWriterArchive &ea) {
+                        ThingRaw raw = things[i].as_raw();
+                        ea.prop("@thing", raw);
+                        ea.prop("@part", parts[i]);
+                    });
+                }
+            });
+        }
+    }
+
+    void shape(JsonReaderArchive &archive, SignaturePool &sig_pool, TypeIdx tidx) noexcept {
+        if constexpr (IsShape<JsonReaderArchive, T>) {
+            archive.list("@items", [&](JsonReaderArchive &la) {
+                USize n = la.current_list_size();
+                for (USize i = 0; i < n; ++i) {
+                    la.dict("", [&](JsonReaderArchive &ea) {
+                        ThingRaw raw = 0;
+                        T part{};
+                        ea.prop("@thing", raw);
+                        ea.prop("@part", part);
+
+                        Thing thing = Thing::from_raw(raw);
+                        emplace_unchecked(thing, std::move(part));
+                        sig_pool.insert(thing, tidx);
+                    });
+                }
+            });
+        }
+    }
+
 private:
     // ----------------------------------------------------------------- Members
 

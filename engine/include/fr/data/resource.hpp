@@ -254,5 +254,80 @@ public:
 
         return n;
     }
+
+    // --------------------------------------------------------------- Shape
+
+    void shape(JsonWriterArchive &archive) noexcept {
+        USize n = count();
+
+        archive.prop("@count", n);
+        archive.list("@items", [&](JsonWriterArchive &la) {
+            for (TypeIdx::IDX i = 0; i < MAX_PARTS; ++i) {
+                if (!m_resources[i]) {
+                    continue;
+                }
+
+                TypeIdx tidx = TypeIdx::from_idx(i);
+                const TypeMeta &meta = tidx.meta();
+                if (!meta.json_writer_shape) {
+                    continue;
+                }
+
+                const char *type_name = meta.name;
+                la.dict("", [&](JsonWriterArchive &ea) {
+                    ea.prop("@typename", type_name);
+                    meta.json_writer_shape(ea, m_resources[i]);
+                });
+            }
+        });
+    }
+
+    void shape(JsonReaderArchive &archive) noexcept {
+        archive.list("@items", [&](JsonReaderArchive &la) {
+            USize n = la.current_list_size();
+
+            for (USize i = 0; i < n; ++i) {
+                la.dict("", [&](JsonReaderArchive &ea) {
+                    StringView type_name;
+                    ea.prop("@typename", type_name);
+
+                    TypeIdx tidx = do_find_by_type_name(type_name);
+                    if (tidx.is_nil()) {
+                        return;
+                    }
+
+                    const TypeMeta &meta = tidx.meta();
+                    if (!meta.json_reader_shape || !meta.construct) {
+                        return;
+                    }
+
+                    USize idx = tidx.idx();
+                    if (m_resources[idx]) {
+                        meta.destroy(m_resources[idx]);
+                    } else {
+                        m_resources[idx] = m_alloc->allocate(meta.size, meta.alignment);
+                    }
+
+                    meta.construct(m_resources[idx]);
+                    meta.json_reader_shape(ea, m_resources[idx]);
+                });
+            }
+        });
+    }
+
+private:
+    static TypeIdx do_find_by_type_name(StringView name) noexcept {
+        const TypeRegistry *reg = get_ambient_ctx().type_registry;
+        Slice<const TypeMeta> storage = reg->storage();
+
+        for (USize i = 0; i < storage.size(); ++i) {
+            const char *n = storage[i].name;
+            if (name == StringView{n, std::strlen(n)}) {
+                return storage[i].tidx;
+            }
+        }
+
+        return TypeIdx::nil();
+    }
 };
 } // namespace fr::impl

@@ -7,6 +7,7 @@ set(BENCH_SOURCES
     "hierarchy.cpp"
     "showcase.cpp"
     "resources.cpp"
+    "serialization.cpp"
 )
 
 foreach(source ${BENCH_SOURCES})

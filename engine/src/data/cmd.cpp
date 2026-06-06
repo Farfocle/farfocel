@@ -6,37 +6,49 @@
  */
 
 #include "fr/data/cmd.hpp"
+#include "fr/core/alloc.hpp"
+#include "fr/core/arena_alloc.hpp"
 
 namespace fr {
 
 // ============================================================== Typed Inverses
 
 DetachChildCmd AttachChildCmd::inverse() const noexcept {
-    return {parent, child};
+    return {
+        .parent = parent,
+        .child = child,
+    };
 }
-
 AttachChildCmd DetachChildCmd::inverse() const noexcept {
-    return {parent, child};
+    return {
+        .parent = parent,
+        .child = child,
+    };
 }
-
 KillCmd HandoutCmd::inverse() const noexcept {
-    return {thing};
+    return {.thing = thing};
 }
-
 HandoutCmd KillCmd::inverse() const noexcept {
-    return {thing};
+    return {.thing = thing};
 }
 
-// `RawInsertPartCmd` and `RawDestroyPartCmd` mirror each other as inverses.
 DestroyCmd InsertCmd::inverse() const noexcept {
-    return {.tidx = tidx, .thing = thing, .offset = offset};
+    return {
+        .tidx = tidx,
+        .thing = thing,
+        .offset = offset,
+    };
 }
 
 InsertCmd DestroyCmd::inverse() const noexcept {
-    return {.tidx = tidx, .thing = thing, .offset = offset};
+    return {
+        .tidx = tidx,
+        .thing = thing,
+        .offset = offset,
+    };
 }
 
-// Mutate inverse swaps prev and next.
+/// Mutate inverse: swaps prev/next offsets.
 MutateCmd MutateCmd::inverse() const noexcept {
     return {
         .tidx = tidx,
@@ -46,7 +58,90 @@ MutateCmd MutateCmd::inverse() const noexcept {
     };
 }
 
+// ================================================================ impl Helpers
+
+namespace impl {
+
+/**
+ * @brief Sums the arena bytes required for all part snapshots in `cmds`.
+ * @param filter If non-nil, only commands belonging to that thing are counted.
+ * @return At least 1 (`ArenaAlloc` requires a non-zero buffer).
+ */
+static USize compute_fitted_arena_size(Slice<const Cmd> cmds,
+                                       Thing filter = Thing::nil()) noexcept {
+    USize size = 0;
+
+    for (const Cmd &cmd : cmds) {
+        if (!filter.is_nil() && cmd.thing() != filter) {
+            continue;
+        }
+
+        if (cmd.kind == CmdKind::Insert || cmd.kind == CmdKind::Destroy) {
+            TypeIdx tidx =
+                cmd.kind == CmdKind::Insert ? cmd.insert_part.tidx : cmd.destroy_part.tidx;
+            const TypeMeta &m = tidx.meta();
+            size += m.size + m.alignment;
+        } else if (cmd.kind == CmdKind::Mutate) {
+            const TypeMeta &m = cmd.mutate_part.tidx.meta();
+            size += 2 * (m.size + m.alignment);
+        }
+    }
+
+    return size == 0 ? 1 : size;
+}
+
+} // namespace impl
+
 // ==================================================================== CmdBatch
+
+void CmdBatch::do_init_storage(USize size, const char *tag) noexcept {
+    Byte *buf = static_cast<Byte *>(m_alloc->allocate(size, alignof(std::max_align_t)));
+
+    m_arena_buffer = Slice<Byte>(buf, size);
+    m_arena = ArenaAlloc(buf, size, tag);
+    m_cmds = DynamicArray<Cmd>::with_alloc(m_alloc);
+}
+
+void CmdBatch::do_copy_cmds(Slice<const Cmd> src_cmds, const Byte *src_base,
+                            Thing filter) noexcept {
+    for (const Cmd &src : src_cmds) {
+        if (!filter.is_nil() && src.thing() != filter) {
+            continue;
+        }
+
+        Cmd dst = src;
+
+        if (src.kind == CmdKind::Insert) {
+            const TypeMeta &m = src.insert_part.tidx.meta();
+            FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+            void *ptr = m_arena.allocate(m.size, m.alignment);
+            dst.insert_part.offset = do_get_offset(ptr);
+            m.copy_construct(ptr, src_base + src.insert_part.offset);
+        } else if (src.kind == CmdKind::Destroy) {
+            const TypeMeta &m = src.destroy_part.tidx.meta();
+            FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+            void *ptr = m_arena.allocate(m.size, m.alignment);
+            dst.destroy_part.offset = do_get_offset(ptr);
+            m.copy_construct(ptr, src_base + src.destroy_part.offset);
+
+        } else if (src.kind == CmdKind::Mutate) {
+            const TypeMeta &m = src.mutate_part.tidx.meta();
+            FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+            void *prev = m_arena.allocate(m.size, m.alignment);
+            dst.mutate_part.prev_offset = do_get_offset(prev);
+            m.copy_construct(prev, src_base + src.mutate_part.prev_offset);
+
+            void *next = m_arena.allocate(m.size, m.alignment);
+            dst.mutate_part.next_offset = do_get_offset(next);
+            m.copy_construct(next, src_base + src.mutate_part.next_offset);
+        }
+
+        m_cmds.push_back(dst);
+    }
+}
 
 CmdBatch::CmdBatch() noexcept
     : CmdBatch(get_ambient_ctx().alloc) {
@@ -54,86 +149,13 @@ CmdBatch::CmdBatch() noexcept
 
 CmdBatch::CmdBatch(Alloc *alloc, USize arena_size) noexcept
     : m_alloc(alloc) {
-    Byte *buf = static_cast<Byte *>(alloc->allocate(arena_size, alignof(std::max_align_t)));
-    m_arena_buffer = Slice<Byte>(buf, arena_size);
-    m_arena = ArenaAlloc(m_arena_buffer.data(), m_arena_buffer.size(), "CmdBatch");
-    m_cmds = DynamicArray<Cmd>::with_alloc(alloc);
+    do_init_storage(arena_size, "CmdBatch");
 }
 
-CmdBatch::~CmdBatch() noexcept {
-    reset();
-    // m_arena_buffer.data() is null in the moved-from state — skip deallocation.
-    if (m_arena_buffer.data()) {
-        m_alloc->deallocate(m_arena_buffer.data(), m_arena_buffer.size(),
-                            alignof(std::max_align_t));
-    }
-}
-
-CmdBatch::CmdBatch(const CmdBatch &other) noexcept {
-    m_alloc = get_ambient_ctx().alloc;
-
-    // Compute fitted arena size.
-    USize arena_size = 0;
-    for (const Cmd &cmd : other.cmds()) {
-        if (cmd.kind == CmdKind::InsertPart || cmd.kind == CmdKind::DestroyPart) {
-            TypeIdx tidx =
-                cmd.kind == CmdKind::InsertPart ? cmd.insert_part.tidx : cmd.destroy_part.tidx;
-            const TypeMeta &m = tidx.meta();
-            arena_size += m.size + m.alignment;
-        } else if (cmd.kind == CmdKind::MutatePart) {
-            const TypeMeta &m = cmd.mutate_part.tidx.meta();
-            arena_size += 2 * (m.size + m.alignment);
-        }
-    }
-    if (arena_size == 0) {
-        arena_size = 1;
-    }
-
-    Byte *buf = static_cast<Byte *>(m_alloc->allocate(arena_size, alignof(std::max_align_t)));
-    m_arena_buffer = Slice<Byte>(buf, arena_size);
-    m_arena = ArenaAlloc(buf, arena_size, "CmdBatch");
-    m_cmds = DynamicArray<Cmd>::with_alloc(m_alloc);
-
-    // Copy-construct each part snapshot into the new arena, patching stored offsets.
-    const Byte *src_base = other.arena();
-    for (const Cmd &src : other.cmds()) {
-        Cmd dst = src;
-
-        if (src.kind == CmdKind::InsertPart) {
-            const TypeMeta &m = src.insert_part.tidx.meta();
-
-            FR_ASSERT(m.copy_construct,
-                      "part type is not copy-constructible; cannot copy CmdBatch");
-
-            void *ptr = m_arena.allocate(m.size, m.alignment);
-            dst.insert_part.offset = static_cast<USize>(static_cast<Byte *>(ptr) - buf);
-            m.copy_construct(ptr, src_base + src.insert_part.offset);
-        } else if (src.kind == CmdKind::DestroyPart) {
-            const TypeMeta &m = src.destroy_part.tidx.meta();
-
-            FR_ASSERT(m.copy_construct,
-                      "part type is not copy-constructible; cannot copy CmdBatch");
-
-            void *ptr = m_arena.allocate(m.size, m.alignment);
-            dst.destroy_part.offset = static_cast<USize>(static_cast<Byte *>(ptr) - buf);
-            m.copy_construct(ptr, src_base + src.destroy_part.offset);
-        } else if (src.kind == CmdKind::MutatePart) {
-            const TypeMeta &m = src.mutate_part.tidx.meta();
-
-            FR_ASSERT(m.copy_construct,
-                      "part type is not copy-constructible; cannot copy CmdBatch");
-
-            void *prev = m_arena.allocate(m.size, m.alignment);
-            dst.mutate_part.prev_offset = static_cast<USize>(static_cast<Byte *>(prev) - buf);
-            m.copy_construct(prev, src_base + src.mutate_part.prev_offset);
-
-            void *next = m_arena.allocate(m.size, m.alignment);
-            dst.mutate_part.next_offset = static_cast<USize>(static_cast<Byte *>(next) - buf);
-            m.copy_construct(next, src_base + src.mutate_part.next_offset);
-        }
-
-        m_cmds.push_back(dst);
-    }
+CmdBatch::CmdBatch(const CmdBatch &other) noexcept
+    : m_alloc(get_ambient_ctx().alloc) {
+    do_init_storage(impl::compute_fitted_arena_size(other.cmds()), "CmdBatch");
+    do_copy_cmds(other.cmds(), other.arena());
 }
 
 CmdBatch::CmdBatch(CmdBatch &&other) noexcept
@@ -145,24 +167,30 @@ CmdBatch::CmdBatch(CmdBatch &&other) noexcept
 
     if (bump > 0) {
         void *ptr = m_arena.allocate(bump, 1);
-        FR_ASSERT(ptr, "allocation failed");
+        FR_ASSERT(ptr, "bump advance failed");
     }
 
-    // Zero source's buffer slice so its destructor skips the deallocate call.
     other.m_arena_buffer = Slice<Byte>{};
-    // other.m_cmds is already empty after std::move.
+}
+
+CmdBatch::~CmdBatch() noexcept {
+    reset();
+
+    if (m_arena_buffer.data()) {
+        m_alloc->deallocate(m_arena_buffer.data(), m_arena_buffer.size(),
+                            alignof(std::max_align_t));
+    }
 }
 
 void CmdBatch::reset() noexcept {
-    // Destroy all arena-placed part objects before resetting the arena pointer.
     Byte *base = m_arena_buffer.data();
 
     for (const Cmd &cmd : m_cmds) {
-        if (cmd.kind == CmdKind::InsertPart) {
+        if (cmd.kind == CmdKind::Insert) {
             cmd.insert_part.tidx.meta().destroy(base + cmd.insert_part.offset);
-        } else if (cmd.kind == CmdKind::DestroyPart) {
+        } else if (cmd.kind == CmdKind::Destroy) {
             cmd.destroy_part.tidx.meta().destroy(base + cmd.destroy_part.offset);
-        } else if (cmd.kind == CmdKind::MutatePart) {
+        } else if (cmd.kind == CmdKind::Mutate) {
             const TypeMeta &m = cmd.mutate_part.tidx.meta();
             m.destroy(base + cmd.mutate_part.prev_offset);
             m.destroy(base + cmd.mutate_part.next_offset);
@@ -173,162 +201,87 @@ void CmdBatch::reset() noexcept {
     m_arena.reset();
 }
 
+void CmdBatch::reset_reserve(USize size) noexcept {
+    reset();
+
+    if (size > m_arena_buffer.size()) {
+        void *old_buffer = static_cast<void *>(m_arena_buffer.data());
+        if (old_buffer) {
+            m_alloc->deallocate(old_buffer, m_arena_buffer.size(), alignof(std::max_align_t));
+        }
+
+        void *new_buffer = static_cast<Byte *>(m_alloc->allocate(size, alignof(std::max_align_t)));
+        m_arena_buffer = Slice<Byte>(static_cast<Byte *>(new_buffer), size);
+        m_arena = ArenaAlloc(new_buffer, size, "CmdSheaf");
+    }
+}
+
 // ==================================================================== CmdSheaf
 
-CmdSheaf::CmdSheaf(Alloc *alloc, Thing thing, USize arena_size) noexcept
-    : m_alloc(alloc),
-      m_thing(thing) {
-    Byte *buf = static_cast<Byte *>(alloc->allocate(arena_size, alignof(std::max_align_t)));
-    m_arena_buffer = Slice<Byte>(buf, arena_size);
-    m_arena = ArenaAlloc(m_arena_buffer.data(), m_arena_buffer.size(), "CmdSheaf");
-    m_cmds = DynamicArray<Cmd>::with_alloc(alloc);
-}
-
-CmdSheaf::CmdSheaf(Alloc *alloc, const CmdBatch &batch, Thing thing) noexcept
-    : m_alloc(alloc),
-      m_thing(thing) {
-    USize arena_size = 0;
-
-    for (const Cmd &cmd : batch.cmds()) {
-        if (cmd.thing() != thing) {
-            continue;
-        }
-
-        if (cmd.kind == CmdKind::InsertPart || cmd.kind == CmdKind::DestroyPart) {
-            TypeIdx tidx =
-                cmd.kind == CmdKind::InsertPart ? cmd.insert_part.tidx : cmd.destroy_part.tidx;
-            const TypeMeta &m = tidx.meta();
-            arena_size += m.size + m.alignment;
-        } else if (cmd.kind == CmdKind::MutatePart) {
-            const TypeMeta &m = cmd.mutate_part.tidx.meta();
-            arena_size += 2 * (m.size + m.alignment);
-        }
-    }
-
-    if (arena_size == 0) {
-        arena_size = 1;
-    }
-
-    // Allocate the fitted arena.
-    Byte *buf = static_cast<Byte *>(alloc->allocate(arena_size, alignof(std::max_align_t)));
-    m_arena_buffer = Slice<Byte>(buf, arena_size);
-    m_arena = ArenaAlloc(m_arena_buffer.data(), m_arena_buffer.size(), "CmdSheaf");
-    m_cmds = DynamicArray<Cmd>::with_alloc(alloc);
-
-    const Byte *src_base = batch.arena();
-    for (const Cmd &src : batch.cmds()) {
-        if (src.thing() != thing) {
-            continue;
-        }
-
-        Cmd dst = src;
-
-        if (src.kind == CmdKind::InsertPart) {
-            const TypeMeta &m = src.insert_part.tidx.meta();
-            FR_ASSERT(m.copy_construct,
-                      "part type is not copy-constructible; cannot extract into CmdSheaf");
-
-            void *ptr = m_arena.allocate(m.size, m.alignment);
-            dst.insert_part.offset =
-                static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
-            m.copy_construct(ptr, src_base + src.insert_part.offset);
-
-        } else if (src.kind == CmdKind::DestroyPart) {
-            const TypeMeta &m = src.destroy_part.tidx.meta();
-            FR_ASSERT(m.copy_construct,
-                      "part type is not copy-constructible; cannot extract into CmdSheaf");
-
-            void *ptr = m_arena.allocate(m.size, m.alignment);
-            dst.destroy_part.offset =
-                static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
-            m.copy_construct(ptr, src_base + src.destroy_part.offset);
-
-        } else if (src.kind == CmdKind::MutatePart) {
-            const TypeMeta &m = src.mutate_part.tidx.meta();
-            FR_ASSERT(m.copy_construct,
-                      "part type is not copy-constructible; cannot extract into CmdSheaf");
-
-            void *prev_ptr = m_arena.allocate(m.size, m.alignment);
-            dst.mutate_part.prev_offset =
-                static_cast<USize>(static_cast<Byte *>(prev_ptr) - m_arena_buffer.data());
-            m.copy_construct(prev_ptr, src_base + src.mutate_part.prev_offset);
-
-            void *next_ptr = m_arena.allocate(m.size, m.alignment);
-            dst.mutate_part.next_offset =
-                static_cast<USize>(static_cast<Byte *>(next_ptr) - m_arena_buffer.data());
-            m.copy_construct(next_ptr, src_base + src.mutate_part.next_offset);
-        }
-
-        m_cmds.push_back(dst);
-    }
-}
-
-CmdSheaf::CmdSheaf(const CmdSheaf &other) noexcept {
-    m_alloc = get_ambient_ctx().alloc;
-    m_thing = other.m_thing;
-
-    USize arena_size = 0;
-
-    for (const Cmd &cmd : other.cmds()) {
-        if (cmd.kind == CmdKind::InsertPart || cmd.kind == CmdKind::DestroyPart) {
-            TypeIdx tidx =
-                cmd.kind == CmdKind::InsertPart ? cmd.insert_part.tidx : cmd.destroy_part.tidx;
-            const TypeMeta &m = tidx.meta();
-            arena_size += m.size + m.alignment;
-        } else if (cmd.kind == CmdKind::MutatePart) {
-            const TypeMeta &m = cmd.mutate_part.tidx.meta();
-            arena_size += 2 * (m.size + m.alignment);
-        }
-    }
-
-    if (arena_size == 0) {
-        arena_size = 1;
-    }
-
-    Byte *buf = static_cast<Byte *>(m_alloc->allocate(arena_size, alignof(std::max_align_t)));
-    m_arena_buffer = Slice<Byte>(buf, arena_size);
-    m_arena = ArenaAlloc(buf, arena_size, "CmdSheaf");
+void CmdSheaf::do_init_storage(USize size, const char *tag) noexcept {
+    Byte *buf = static_cast<Byte *>(m_alloc->allocate(size, alignof(std::max_align_t)));
+    m_arena_buffer = Slice<Byte>(buf, size);
+    m_arena = ArenaAlloc(buf, size, tag);
     m_cmds = DynamicArray<Cmd>::with_alloc(m_alloc);
+}
 
-    const Byte *src_base = other.arena();
-    for (const Cmd &src : other.cmds()) {
+void CmdSheaf::do_copy_cmds(Slice<const Cmd> src_cmds, const Byte *src_base,
+                            Thing filter) noexcept {
+    for (const Cmd &src : src_cmds) {
+        if (!filter.is_nil() && src.thing() != filter) {
+            continue;
+        }
+
         Cmd dst = src;
-
-        if (src.kind == CmdKind::InsertPart) {
+        if (src.kind == CmdKind::Insert) {
             const TypeMeta &m = src.insert_part.tidx.meta();
-
-            FR_ASSERT(m.copy_construct,
-                      "part type is not copy-constructible; cannot copy CmdSheaf");
+            FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
 
             void *ptr = m_arena.allocate(m.size, m.alignment);
-            dst.insert_part.offset = static_cast<USize>(static_cast<Byte *>(ptr) - buf);
+            dst.insert_part.offset = do_get_offset(ptr);
             m.copy_construct(ptr, src_base + src.insert_part.offset);
-        } else if (src.kind == CmdKind::DestroyPart) {
+        } else if (src.kind == CmdKind::Destroy) {
             const TypeMeta &m = src.destroy_part.tidx.meta();
-
-            FR_ASSERT(m.copy_construct,
-                      "part type is not copy-constructible; cannot copy CmdSheaf");
+            FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
 
             void *ptr = m_arena.allocate(m.size, m.alignment);
-            dst.destroy_part.offset = static_cast<USize>(static_cast<Byte *>(ptr) - buf);
+            dst.destroy_part.offset = do_get_offset(ptr);
             m.copy_construct(ptr, src_base + src.destroy_part.offset);
-        } else if (src.kind == CmdKind::MutatePart) {
+        } else if (src.kind == CmdKind::Mutate) {
             const TypeMeta &m = src.mutate_part.tidx.meta();
-
-            FR_ASSERT(m.copy_construct,
-                      "part type is not copy-constructible; cannot copy CmdSheaf");
+            FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
 
             void *prev = m_arena.allocate(m.size, m.alignment);
-            dst.mutate_part.prev_offset = static_cast<USize>(static_cast<Byte *>(prev) - buf);
+            dst.mutate_part.prev_offset = do_get_offset(prev);
             m.copy_construct(prev, src_base + src.mutate_part.prev_offset);
 
             void *next = m_arena.allocate(m.size, m.alignment);
-            dst.mutate_part.next_offset = static_cast<USize>(static_cast<Byte *>(next) - buf);
+            dst.mutate_part.next_offset = do_get_offset(next);
             m.copy_construct(next, src_base + src.mutate_part.next_offset);
         }
 
         m_cmds.push_back(dst);
     }
+}
+
+CmdSheaf::CmdSheaf(Alloc *alloc, Thing thing, USize arena_size) noexcept
+    : m_alloc(alloc),
+      m_thing(thing) {
+    do_init_storage(arena_size, "CmdSheaf");
+}
+
+CmdSheaf::CmdSheaf(Alloc *alloc, const CmdBatch &batch, Thing thing) noexcept
+    : m_alloc(alloc),
+      m_thing(thing) {
+    do_init_storage(impl::compute_fitted_arena_size(batch.cmds(), thing), "CmdSheaf");
+    do_copy_cmds(batch.cmds(), batch.arena(), thing);
+}
+
+CmdSheaf::CmdSheaf(const CmdSheaf &other) noexcept
+    : m_alloc(get_ambient_ctx().alloc),
+      m_thing(other.m_thing) {
+    do_init_storage(impl::compute_fitted_arena_size(other.cmds()), "CmdSheaf");
+    do_copy_cmds(other.cmds(), other.arena());
 }
 
 CmdSheaf::CmdSheaf(CmdSheaf &&other) noexcept
@@ -341,7 +294,7 @@ CmdSheaf::CmdSheaf(CmdSheaf &&other) noexcept
 
     if (bump > 0) {
         void *ptr = m_arena.allocate(bump, 1);
-        FR_ASSERT(ptr, "allocation failed");
+        FR_ASSERT(ptr, "bump advance failed");
     }
 
     other.m_arena_buffer = Slice<Byte>{};
@@ -349,18 +302,22 @@ CmdSheaf::CmdSheaf(CmdSheaf &&other) noexcept
 
 CmdSheaf::~CmdSheaf() noexcept {
     reset();
-    m_alloc->deallocate(m_arena_buffer.data(), m_arena_buffer.size(), alignof(std::max_align_t));
+
+    if (m_arena_buffer.data()) {
+        m_alloc->deallocate(m_arena_buffer.data(), m_arena_buffer.size(),
+                            alignof(std::max_align_t));
+    }
 }
 
 void CmdSheaf::reset() noexcept {
     Byte *base = m_arena_buffer.data();
 
     for (const Cmd &cmd : m_cmds) {
-        if (cmd.kind == CmdKind::InsertPart) {
+        if (cmd.kind == CmdKind::Insert) {
             cmd.insert_part.tidx.meta().destroy(base + cmd.insert_part.offset);
-        } else if (cmd.kind == CmdKind::DestroyPart) {
+        } else if (cmd.kind == CmdKind::Destroy) {
             cmd.destroy_part.tidx.meta().destroy(base + cmd.destroy_part.offset);
-        } else if (cmd.kind == CmdKind::MutatePart) {
+        } else if (cmd.kind == CmdKind::Mutate) {
             const TypeMeta &m = cmd.mutate_part.tidx.meta();
             m.destroy(base + cmd.mutate_part.prev_offset);
             m.destroy(base + cmd.mutate_part.next_offset);
@@ -369,5 +326,147 @@ void CmdSheaf::reset() noexcept {
 
     m_cmds.clear();
     m_arena.reset();
+}
+
+void CmdSheaf::reset_reserve(USize size) noexcept {
+    reset();
+
+    if (size > m_arena_buffer.size()) {
+        void *old_buffer = static_cast<void *>(m_arena_buffer.data());
+        if (old_buffer) {
+            m_alloc->deallocate(old_buffer, m_arena_buffer.size(), alignof(std::max_align_t));
+        }
+
+        void *new_buffer = static_cast<Byte *>(m_alloc->allocate(size, alignof(std::max_align_t)));
+        m_arena_buffer = Slice<Byte>(static_cast<Byte *>(new_buffer), size);
+        m_arena = ArenaAlloc(new_buffer, size, "CmdSheaf");
+    }
+}
+
+// ================================================================= CmdSheaf Factory
+
+/// @todo Optimize with `HashMap`.
+CmdSheaf CmdSheaf::merge_compressed(Alloc *alloc, const CmdSheaf &a, const CmdSheaf &b) noexcept {
+    // Worst-case arena: full copy of both sheaves (coalescing only saves space).
+    USize arena_size =
+        impl::compute_fitted_arena_size(a.cmds()) + impl::compute_fitted_arena_size(b.cmds());
+
+    if (arena_size < 1) {
+        arena_size = 1;
+    }
+
+    CmdSheaf merged(alloc, a.m_thing, arena_size);
+
+    // Copy all of a cmds.
+    merged.do_copy_cmds(a.m_cmds.slice(), a.m_arena_buffer.data());
+
+    // Process b commands, coalescing `MutatePart` pairs for the same part.
+    const Byte *b_base = b.m_arena_buffer.data();
+    Byte *merged_base = merged.m_arena_buffer.data();
+
+    for (const Cmd &src : b.m_cmds) {
+        if (src.kind == CmdKind::Mutate) {
+            // Check if merged already has a `MutatePart` for the same part type.
+            Slice<Cmd> merged_cmds = merged.m_cmds.slice_mut();
+            bool coalesced = false;
+
+            for (USize i = 0; i < merged_cmds.size() && !coalesced; ++i) {
+                Cmd &existing = merged_cmds[i];
+                if (existing.kind != CmdKind::Mutate) {
+                    continue;
+                }
+
+                if (&existing.mutate_part.tidx.meta() != &src.mutate_part.tidx.meta()) {
+                    continue;
+                }
+
+                const TypeMeta &m = src.mutate_part.tidx.meta();
+                FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+                m.destroy(merged_base + existing.mutate_part.next_offset);
+
+                void *new_next = merged.m_arena.allocate(m.size, m.alignment);
+                m.copy_construct(new_next, b_base + src.mutate_part.next_offset);
+                existing.mutate_part.next_offset = merged.do_get_offset(new_next);
+
+                coalesced = true;
+            }
+
+            if (!coalesced) {
+                // First mutate for this part - copy both snapshots normally.
+                const TypeMeta &m = src.mutate_part.tidx.meta();
+                FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+                void *prev_ptr = merged.m_arena.allocate(m.size, m.alignment);
+                m.copy_construct(prev_ptr, b_base + src.mutate_part.prev_offset);
+
+                void *next_ptr = merged.m_arena.allocate(m.size, m.alignment);
+                m.copy_construct(next_ptr, b_base + src.mutate_part.next_offset);
+
+                merged.record_mutate_raw({
+                    .tidx = src.mutate_part.tidx,
+                    .thing = src.mutate_part.thing,
+                    .prev_offset = merged.do_get_offset(prev_ptr),
+                    .next_offset = merged.do_get_offset(next_ptr),
+                });
+            }
+        } else if (src.kind == CmdKind::Insert) {
+            const TypeMeta &m = src.insert_part.tidx.meta();
+            FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+            void *ptr = merged.m_arena.allocate(m.size, m.alignment);
+            m.copy_construct(ptr, b_base + src.insert_part.offset);
+            merged.record_insert_raw({
+                .tidx = src.insert_part.tidx,
+                .thing = src.insert_part.thing,
+                .offset = merged.do_get_offset(ptr),
+            });
+        } else if (src.kind == CmdKind::Destroy) {
+            const TypeMeta &m = src.destroy_part.tidx.meta();
+            FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+            void *ptr = merged.m_arena.allocate(m.size, m.alignment);
+            m.copy_construct(ptr, b_base + src.destroy_part.offset);
+            merged.record_destroy_raw({
+                .tidx = src.destroy_part.tidx,
+                .thing = src.destroy_part.thing,
+                .offset = merged.do_get_offset(ptr),
+            });
+        } else {
+            // Non-part commands (attach/detach/kill).
+            merged.m_cmds.push_back(src);
+        }
+    }
+
+    return merged;
+}
+
+// ============================================================ CmdSheafTimeline
+
+bool CmdSheafTimeline::compress() noexcept {
+    go_present();
+
+    if (m_count < 2) {
+        return false;
+    }
+
+    USize prev_idx = do_prev_cursor();
+    auto *head_sheaf = reinterpret_cast<CmdSheaf *>(m_storage + m_head * sizeof(CmdSheaf));
+    auto *prev_sheaf = reinterpret_cast<CmdSheaf *>(m_storage + prev_idx * sizeof(CmdSheaf));
+
+    CmdSheaf merged = CmdSheaf::merge_compressed(m_alloc, *prev_sheaf, *head_sheaf);
+
+    head_sheaf->~CmdSheaf();
+    prev_sheaf->~CmdSheaf();
+
+    USize merged_time = m_calendar[m_head];
+    new (prev_sheaf) CmdSheaf(std::move(merged));
+    m_calendar[prev_idx] = merged_time;
+
+    m_head = prev_idx;
+    m_cursor = m_head;
+    --m_count;
+
+    return true;
 }
 } // namespace fr
