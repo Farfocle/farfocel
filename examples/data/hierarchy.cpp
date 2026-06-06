@@ -55,7 +55,7 @@ struct Game {
         }
     }
 
-    void run() {
+    void run_future() {
         world.sort_by_hierarchy_depth<Pos>();
 
         std::cout << "---- deep_query\n";
@@ -77,7 +77,7 @@ S32 main() {
     {
         Game game;
         game.init();
-        game.run();
+        game.run_future();
     }
 
     fr::shutdown_core_ctx();

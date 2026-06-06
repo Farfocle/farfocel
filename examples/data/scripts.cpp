@@ -67,7 +67,7 @@ struct Game {
         world.commit_future();
     }
 
-    void run() {
+    void run_future() {
         world.run();
         world.commit_future();
     }
@@ -79,9 +79,9 @@ S32 main() {
     {
         Game game;
         game.init();
-        game.run();
-        game.run();
-        game.run();
+        game.run_future();
+        game.run_future();
+        game.run_future();
     }
 
     fr::shutdown_core_ctx();

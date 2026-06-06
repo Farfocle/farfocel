@@ -238,68 +238,10 @@ struct Cmd {
     }
 
     /// @brief Returns the primary thing associated with this command.
-    Thing thing() const noexcept {
-        switch (kind) {
-        case CmdKind::Insert:
-            return insert_part.thing;
-        case CmdKind::Destroy:
-            return destroy_part.thing;
-        case CmdKind::Mutate:
-            return mutate_part.thing;
-        case CmdKind::AttachChild:
-            return attach_child.parent;
-        case CmdKind::DetachChild:
-            return detach_child.parent;
-        case CmdKind::Handout:
-            return handout.thing;
-        case CmdKind::Kill:
-            return kill.thing;
-        default:
-            return Thing::nil();
-        }
-    }
+    Thing thing() const noexcept;
 
-    Cmd inverse() const noexcept {
-        switch (kind) {
-        case CmdKind::Insert:
-            return {
-                .kind = CmdKind::Destroy,
-                .destroy_part = insert_part.inverse(),
-            };
-        case CmdKind::Destroy:
-            return {
-                .kind = CmdKind::Insert,
-                .insert_part = destroy_part.inverse(),
-            };
-        case CmdKind::Mutate:
-            return {
-                .kind = CmdKind::Mutate,
-                .mutate_part = mutate_part.inverse(),
-            };
-        case CmdKind::AttachChild:
-            return {
-                .kind = CmdKind::DetachChild,
-                .detach_child = attach_child.inverse(),
-            };
-        case CmdKind::DetachChild:
-            return {
-                .kind = CmdKind::AttachChild,
-                .attach_child = detach_child.inverse(),
-            };
-        case CmdKind::Handout:
-            return {
-                .kind = CmdKind::Kill,
-                .kill = handout.inverse(),
-            };
-        case CmdKind::Kill:
-            return {
-                .kind = CmdKind::Handout,
-                .handout = kill.inverse(),
-            };
-        default:
-            return nil();
-        }
-    };
+    /// @brief Returns the inverse command (for undo).
+    Cmd inverse() const noexcept;
 };
 
 // Forward declarations needed by CmdSheaf constructor.
@@ -323,6 +265,8 @@ public:
     /// @brief Construct using the ambient allocator with the default arena size.
     CmdBatch() noexcept;
 
+    explicit CmdBatch(USize arena_size) noexcept;
+
     /// @brief Construct with an explicit allocator and arena size.
     explicit CmdBatch(Alloc *alloc, USize arena_size = DEFAULT_CMD_BATCH_ARENA_SIZE) noexcept;
 
@@ -331,74 +275,32 @@ public:
     CmdBatch(const CmdBatch &other) noexcept;
     CmdBatch(CmdBatch &&other) noexcept;
 
-    CmdBatch &operator=(const CmdBatch &) = delete;
-    CmdBatch &operator=(CmdBatch &&) = delete;
+    CmdBatch &operator=(const CmdBatch &other) noexcept;
+    CmdBatch &operator=(CmdBatch &&other) noexcept;
 
     // -------------------------------------------------------------- Record Raw
 
     /// @brief Pushes a pre-built InsertCmd. The offset must already point into this batch's arena.
-    void record_insert_raw(InsertCmd cmd) noexcept {
-        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
-        Cmd c{};
-        c.kind = CmdKind::Insert;
-        c.insert_part = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_insert_raw(InsertCmd cmd) noexcept;
 
     /// @brief Pushes a pre-built DestroyCmd. The offset must already point into this batch's arena.
-    void record_destroy_raw(DestroyCmd cmd) noexcept {
-        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
-        Cmd c{};
-        c.kind = CmdKind::Destroy;
-        c.destroy_part = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_destroy_raw(DestroyCmd cmd) noexcept;
 
     /// @brief Pushes a pre-built MutateCmd. Both offsets must already point into this batch's
     /// arena.
-    void record_mutate_raw(MutateCmd cmd) noexcept {
-        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
-        Cmd c{};
-        c.kind = CmdKind::Mutate;
-        c.mutate_part = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_mutate_raw(MutateCmd cmd) noexcept;
 
     /// @brief Pushes a pre-built AttachChildCmd.
-    void record_attach_child_raw(AttachChildCmd cmd) noexcept {
-        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
-        Cmd c{};
-        c.kind = CmdKind::AttachChild;
-        c.attach_child = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_attach_child_raw(AttachChildCmd cmd) noexcept;
 
     /// @brief Pushes a pre-built DetachChildCmd.
-    void record_detach_child_raw(DetachChildCmd cmd) noexcept {
-        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
-        Cmd c{};
-        c.kind = CmdKind::DetachChild;
-        c.detach_child = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_detach_child_raw(DetachChildCmd cmd) noexcept;
 
     /// @brief Pushes a pre-built HandoutCmd.
-    void record_handout_raw(HandoutCmd cmd) noexcept {
-        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
-        Cmd c{};
-        c.kind = CmdKind::Handout;
-        c.handout = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_handout_raw(HandoutCmd cmd) noexcept;
 
     /// @brief Pushes a pre-built KillCmd.
-    void record_kill_raw(KillCmd cmd) noexcept {
-        FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
-        Cmd c{};
-        c.kind = CmdKind::Kill;
-        c.kill = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_kill_raw(KillCmd cmd) noexcept;
 
     // ------------------------------------------------------------------ Record
 
@@ -442,6 +344,7 @@ public:
     void record_destroy(Thing thing, const T &current) noexcept {
         void *ptr = m_arena.allocate(sizeof(T), alignof(T));
         new (ptr) T(current);
+
         record_destroy_raw({
             .tidx = TypeIdx::from_type<T>(),
             .thing = thing,
@@ -468,46 +371,31 @@ public:
     }
 
     /// @brief Records a deferred attach-child relation command.
-    void record_attach_child(Thing parent, Thing child) noexcept {
-        record_attach_child_raw({.parent = parent, .child = child});
-    }
+    void record_attach_child(Thing parent, Thing child) noexcept;
 
     /// @brief Records a deferred detach-child relation command.
-    void record_detach_child(Thing parent, Thing child) noexcept {
-        record_detach_child_raw({.parent = parent, .child = child});
-    }
+    void record_detach_child(Thing parent, Thing child) noexcept;
 
     /**
      * @brief Records that `thing` was handed out (for undo tracking).
      * @note The thing is already alive at this point; commit_handout() is a no-op.
      */
-    void record_handout(Thing thing) noexcept {
-        record_handout_raw({.thing = thing});
-    }
+    void record_handout(Thing thing) noexcept;
 
     /**
      * @brief Records a deferred kill — `thing` is killed at commit time.
      * @note Kills are applied after all part mutations and destructions in `commit()`.
      */
-    void record_kill(Thing thing) noexcept {
-        record_kill_raw({.thing = thing});
-    }
+    void record_kill(Thing thing) noexcept;
 
     // ------------------------------------------------------------------ Access
 
     /// @brief Returns a read-only view of all recorded commands.
-    Slice<const Cmd> cmds() const noexcept {
-        return m_cmds.slice();
-    }
+    Slice<const Cmd> cmds() const noexcept;
 
     /// @brief Returns the base of the arena buffer for pointer reconstruction.
-    Byte *arena() noexcept {
-        return m_arena_buffer.data();
-    }
-
-    const Byte *arena() const noexcept {
-        return m_arena_buffer.data();
-    }
+    Byte *arena() noexcept;
+    const Byte *arena() const noexcept;
 
     // ------------------------------------------------------------------- Reset
 
@@ -523,11 +411,18 @@ public:
      */
     void reset_reserve(USize size) noexcept;
 
+    // ------------------------------------------------------------------ Merge
+
+    /**
+     * @brief Merge `a` (older) and `b` (newer) into one batch.
+     * @note Adjacent `MutateCmd` for the same `(thing, type)` pair are coalesced:
+     *       oldest `prev` is kept, newest `next` wins.
+     */
+    static CmdBatch merge(Alloc *alloc, const CmdBatch &a, const CmdBatch &b) noexcept;
+
 private:
     /// @brief Returns the byte offset of `ptr` from the arena base.
-    USize do_get_offset(void *ptr) const noexcept {
-        return static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
-    }
+    USize do_get_offset(void *ptr) const noexcept;
 
     /**
      * @brief Allocates the arena buffer and initialises `m_arena_buffer`, `m_arena`, `m_cmds`.
@@ -575,61 +470,31 @@ public:
     CmdSheaf(const CmdSheaf &other) noexcept;
     CmdSheaf(CmdSheaf &&other) noexcept;
 
-    CmdSheaf &operator=(const CmdSheaf &) = delete;
-    CmdSheaf &operator=(CmdSheaf &&) = delete;
+    CmdSheaf &operator=(const CmdSheaf &other) noexcept;
+    CmdSheaf &operator=(CmdSheaf &&other) noexcept;
 
     // -------------------------------------------------------------- Record Raw
 
     /// @brief Pushes a pre-built InsertCmd. The offset must already point into this sheaf's arena.
-    void record_insert_raw(InsertCmd cmd) noexcept {
-        Cmd c{};
-        c.kind = CmdKind::Insert;
-        c.insert_part = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_insert_raw(InsertCmd cmd) noexcept;
 
     /// @brief Pushes a pre-built DestroyCmd. The offset must already point into this sheaf's arena.
-    void record_destroy_raw(DestroyCmd cmd) noexcept {
-        Cmd c{};
-        c.kind = CmdKind::Destroy;
-        c.destroy_part = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_destroy_raw(DestroyCmd cmd) noexcept;
 
     /**
      * @brief Pushes a pre-built `MutateCmd`. Both offsets must already point into this sheaf's
      * arena.
      */
-    void record_mutate_raw(MutateCmd cmd) noexcept {
-        Cmd c{};
-        c.kind = CmdKind::Mutate;
-        c.mutate_part = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_mutate_raw(MutateCmd cmd) noexcept;
 
     /// @brief Pushes a pre-built `AttachChildCmd`.
-    void record_attach_child_raw(AttachChildCmd cmd) noexcept {
-        Cmd c{};
-        c.kind = CmdKind::AttachChild;
-        c.attach_child = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_attach_child_raw(AttachChildCmd cmd) noexcept;
 
     /// @brief Pushes a pre-built `DetachChildCmd`.
-    void record_detach_child_raw(DetachChildCmd cmd) noexcept {
-        Cmd c{};
-        c.kind = CmdKind::DetachChild;
-        c.detach_child = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_detach_child_raw(DetachChildCmd cmd) noexcept;
 
     /// @brief Pushes a pre-built `KillCmd`.
-    void record_kill_raw(KillCmd cmd) noexcept {
-        Cmd c{};
-        c.kind = CmdKind::Kill;
-        c.kill = cmd;
-        m_cmds.push_back(c);
-    }
+    void record_kill_raw(KillCmd cmd) noexcept;
 
     // ------------------------------------------------------------------ Record
 
@@ -688,46 +553,25 @@ public:
     }
 
     /// @brief Records a deferred attach-child relation (explicit parent and child).
-    void record_attach_child(Thing parent, Thing child) noexcept {
-        record_attach_child_raw({
-            .parent = parent,
-            .child = child,
-        });
-    }
+    void record_attach_child(Thing parent, Thing child) noexcept;
 
     /// @brief Records a deferred detach-child relation (explicit parent and child).
-    void record_detach_child(Thing parent, Thing child) noexcept {
-        record_detach_child_raw({
-            .parent = parent,
-            .child = child,
-        });
-    }
+    void record_detach_child(Thing parent, Thing child) noexcept;
 
     /// @brief Records a deferred kill for `m_thing`.
-    void record_kill() noexcept {
-        record_kill_raw({.thing = m_thing});
-    }
+    void record_kill() noexcept;
 
     // ------------------------------------------------------------------ Access
 
     /// @brief Returns the thing this sheaf belongs to.
-    Thing thing() const noexcept {
-        return m_thing;
-    }
+    Thing thing() const noexcept;
 
     /// @brief Returns a read-only view of all recorded commands.
-    Slice<const Cmd> cmds() const noexcept {
-        return m_cmds.slice();
-    }
+    Slice<const Cmd> cmds() const noexcept;
 
     /// @brief Returns the base of the arena buffer for pointer reconstruction.
-    Byte *arena() noexcept {
-        return m_arena_buffer.data();
-    }
-
-    const Byte *arena() const noexcept {
-        return m_arena_buffer.data();
-    }
+    Byte *arena() noexcept;
+    const Byte *arena() const noexcept;
 
     // ------------------------------------------------------------------- Reset
 
@@ -745,21 +589,23 @@ public:
 
     // --------------------------------------------------------------- Factory
 
-    /// @brief Merge `a` (older) and `b` (newer) into one sheaf with MutatePart coalescing.
-    static CmdSheaf merge_compressed(Alloc *alloc, const CmdSheaf &a, const CmdSheaf &b) noexcept;
+    /**
+     * @brief Merge `a` (older) and `b` (newer) into one sheaf.
+     * @note Adjacent `MutateCmd` for the same part type are coalesced:
+     *       oldest `prev` is kept, newest `next` wins.
+     */
+    static CmdSheaf merge(Alloc *alloc, const CmdSheaf &a, const CmdSheaf &b) noexcept;
 
 private:
     // ----------------------------------------------------------------- Helpers
 
     /// @brief Returns the byte offset of `ptr` from the arena base.
-    USize do_get_offset(void *ptr) const noexcept {
-        return static_cast<USize>(static_cast<Byte *>(ptr) - m_arena_buffer.data());
-    }
+    USize do_get_offset(void *ptr) const noexcept;
 
     /// @brief Allocates the arena buffer and initialises `m_arena_buffer`, `m_arena`, `m_cmds`.
     void do_init_storage(USize size, const char *tag) noexcept;
 
-    /// @brief Copy-constructs part snapshots from `src_cmds` into this sheaf's arena,
+    /// @brief Copy-constructs part snapshots from `src_cmds` into this sheaf's arena.
     void do_copy_cmds(Slice<const Cmd> src_cmds, const Byte *src_base,
                       Thing filter = Thing::nil()) noexcept;
 
@@ -777,113 +623,74 @@ class CmdBatchTimeline {
     // ----------------------------------------------------------------- Members
 
     static constexpr USize BATCH_RING_SIZE = 1 << 8;
+
     Alloc *m_alloc{get_ambient_ctx().alloc};
     Array<CmdBatch, BATCH_RING_SIZE> m_batches{};
     Array<USize, BATCH_RING_SIZE> m_calendar{};
+    USize m_head{0};
     USize m_cursor{0};
     USize m_time{0};
+    USize m_count{0};
 
 public:
     // ----------------------------------------------- Constructors & Destructor
 
     CmdBatchTimeline() noexcept = default;
-    explicit CmdBatchTimeline(Alloc *alloc) noexcept
-        : m_alloc(alloc) {
-        (void)m_alloc;
-        m_calendar = Array<USize, BATCH_RING_SIZE>::from_repeated(0);
-    }
+    explicit CmdBatchTimeline(Alloc *alloc) noexcept;
 
-    CmdBatchTimeline(const CmdBatchTimeline &) = delete;
-    CmdBatchTimeline(CmdBatchTimeline &&) = delete;
-    CmdBatchTimeline &operator=(const CmdBatchTimeline &) = delete;
-    CmdBatchTimeline &operator=(CmdBatchTimeline &&) = delete;
-
+    CmdBatchTimeline(const CmdBatchTimeline &) noexcept = default;
+    CmdBatchTimeline(CmdBatchTimeline &&) noexcept = default;
+    CmdBatchTimeline &operator=(const CmdBatchTimeline &) noexcept = default;
+    CmdBatchTimeline &operator=(CmdBatchTimeline &&) noexcept = default;
     ~CmdBatchTimeline() noexcept = default;
 
     // --------------------------------------------------------------------- API
 
-    /// @brief Returns the current cursor position.
-    USize cursor() const noexcept {
-        return m_cursor;
-    }
+    /// @brief Returns the current logical time.
+    USize time() const noexcept;
 
-    /// @brief Returns the current time.
-    USize time() const noexcept {
-        return m_time;
-    }
+    /// @brief Returns the number of pushed batches.
+    USize count() const noexcept;
 
-    /// @brief Returns the current batch.
-    CmdBatch &batch() noexcept {
-        return m_batches[m_cursor];
-    }
+    /// @brief Returns the batch at the current cursor.
+    CmdBatch &batch() noexcept;
+    const CmdBatch &batch() const noexcept;
 
     /// @brief Push a batch onto the timeline (copy).
-    void push(const CmdBatch &batch, USize dt) noexcept {
-        m_cursor = do_next_cursor();
-        m_batches[m_cursor].~CmdBatch();
-        new (&m_batches[m_cursor]) CmdBatch(batch);
-
-        m_time += dt;
-        m_calendar[m_cursor] = m_time;
-    }
+    void push(const CmdBatch &b, USize dt) noexcept;
 
     /// @brief Push a batch onto the timeline (move).
-    void push(CmdBatch &&batch, USize dt) noexcept {
-        m_cursor = do_next_cursor();
-        m_batches[m_cursor].~CmdBatch();
-        new (&m_batches[m_cursor]) CmdBatch(std::move(batch));
-
-        m_time += dt;
-        m_calendar[m_cursor] = m_time;
-    }
+    void push(CmdBatch &&b, USize dt) noexcept;
 
     /// @brief Step cursor toward the present. Returns false if already there.
-    bool go_future() noexcept {
-        if (m_calendar[m_cursor] >= m_calendar[do_next_cursor()]) {
-            return false;
-        }
-
-        m_cursor = do_next_cursor();
-        return true;
-    }
+    bool go_future() noexcept;
 
     /// @brief Step cursor into the past. Returns false if already at the oldest entry.
-    bool go_past() noexcept {
-        if (m_calendar[m_cursor] <= m_calendar[do_prev_cursor()]) {
-            return false;
-        }
+    bool go_past() noexcept;
 
-        m_cursor = do_prev_cursor();
-        return true;
-    }
+    /// @brief Go to the present, i.e. the most recently pushed batch.
+    void go_present() noexcept;
 
-    /// @brief Go to the present, i.e. the most recent batch.
-    void go_present() noexcept {
-        while (go_future()) {
-        }
-    }
+    /// @brief Number of batches ahead of the cursor (toward the present).
+    USize count_future() const noexcept;
+
+    /// @brief Number of batches behind the cursor (toward the past).
+    USize count_past() const noexcept;
+
+    /**
+     * @brief Merge the two most recent batches into one (goes to present first).
+     * @note Adjacent `MutateCmd` for the same `(thing, type)` are coalesced.
+     * @return False if fewer than two batches exist.
+     */
+    bool compress() noexcept;
 
 private:
     // --------------------------------------------------------------- Internals
-    USize do_next_cursor() const noexcept {
-        return do_next_cursor(1);
-    }
 
-    USize do_next_cursor(USize offset) const noexcept {
-        return (m_cursor + offset) % BATCH_RING_SIZE;
-    }
+    static USize do_next(USize idx) noexcept { return (idx + 1) % BATCH_RING_SIZE; }
+    static USize do_prev(USize idx) noexcept { return (idx + BATCH_RING_SIZE - 1) % BATCH_RING_SIZE; }
 
-    USize do_prev_cursor() const noexcept {
-        return do_prev_cursor(1);
-    }
-
-    USize do_prev_cursor(USize offset) const noexcept {
-        return (m_cursor + BATCH_RING_SIZE - offset) % BATCH_RING_SIZE;
-    }
-
-    USize do_prev_time() const noexcept {
-        return m_calendar[do_prev_cursor(1)];
-    }
+    void do_push_advance() noexcept;
 };
 
 // ============================================================ CmdSheafTimeline
@@ -910,91 +717,48 @@ public:
     // ----------------------------------------------- Constructors & Destructor
 
     CmdSheafTimeline() noexcept = default;
-
-    explicit CmdSheafTimeline(Alloc *alloc, Thing thing) noexcept
-        : m_alloc(alloc),
-          m_thing(thing) {
-        m_calendar = Array<USize, SHEAF_RING_SIZE>::from_repeated(0);
-    }
-
-    CmdSheafTimeline(const CmdSheafTimeline &) = delete;
-    CmdSheafTimeline(CmdSheafTimeline &&) = delete;
-    CmdSheafTimeline &operator=(const CmdSheafTimeline &) = delete;
-    CmdSheafTimeline &operator=(CmdSheafTimeline &&) = delete;
-
-    ~CmdSheafTimeline() noexcept {
-        for (USize i = 0; i < m_count; ++i) {
-            USize idx = (m_head + SHEAF_RING_SIZE - i) % SHEAF_RING_SIZE;
-            reinterpret_cast<CmdSheaf *>(m_storage + idx * sizeof(CmdSheaf))->~CmdSheaf();
-        }
-    }
+    explicit CmdSheafTimeline(Alloc *alloc, Thing thing) noexcept;
+    CmdSheafTimeline(const CmdSheafTimeline &other) noexcept;
+    CmdSheafTimeline(CmdSheafTimeline &&other) noexcept;
+    CmdSheafTimeline &operator=(const CmdSheafTimeline &other) noexcept;
+    CmdSheafTimeline &operator=(CmdSheafTimeline &&other) noexcept;
+    ~CmdSheafTimeline() noexcept;
 
     // --------------------------------------------------------------------- API
 
     /// @brief Returns the current logical time.
-    USize time() const noexcept {
-        return m_time;
-    }
+    USize time() const noexcept;
+
     /// @brief Returns the number of live sheaves.
-    USize count() const noexcept {
-        return m_count;
-    }
+    USize count() const noexcept;
+
     /// @brief Returns the thing all sheaves belong to.
-    Thing thing() const noexcept {
-        return m_thing;
-    }
+    Thing thing() const noexcept;
 
     /// @brief Returns the sheaf at the current cursor. @pre count() > 0.
-    CmdSheaf &sheaf() noexcept {
-        return *reinterpret_cast<CmdSheaf *>(m_storage + m_cursor * sizeof(CmdSheaf));
-    }
-
-    const CmdSheaf &sheaf() const noexcept {
-        return *reinterpret_cast<const CmdSheaf *>(m_storage + m_cursor * sizeof(CmdSheaf));
-    }
+    CmdSheaf &sheaf() noexcept;
+    const CmdSheaf &sheaf() const noexcept;
 
     /// @brief Push a sheaf onto the timeline (copy).
-    void push(const CmdSheaf &s, USize dt) noexcept {
-        do_push_advance();
-        new (m_storage + m_head * sizeof(CmdSheaf)) CmdSheaf(s);
-        m_cursor = m_head;
-        m_time += dt;
-        m_calendar[m_head] = m_time;
-    }
+    void push(const CmdSheaf &s, USize dt) noexcept;
 
     /// @brief Push a sheaf onto the timeline (move).
-    void push(CmdSheaf &&s, USize dt) noexcept {
-        do_push_advance();
-        new (m_storage + m_head * sizeof(CmdSheaf)) CmdSheaf(std::move(s));
-        m_cursor = m_head;
-        m_time += dt;
-        m_calendar[m_head] = m_time;
-    }
+    void push(CmdSheaf &&s, USize dt) noexcept;
 
     /// @brief Step cursor toward the present. Returns false if already there.
-    bool go_future() noexcept {
-        if (m_count == 0 || m_cursor == m_head)
-            return false;
-        m_cursor = do_next_cursor();
-        return true;
-    }
+    bool go_future() noexcept;
 
     /// @brief Step cursor into the past. Returns false if already at the oldest entry.
-    bool go_past() noexcept {
-        if (m_count == 0)
-            return false;
-        USize oldest = (m_head + SHEAF_RING_SIZE - (m_count - 1)) % SHEAF_RING_SIZE;
-        if (m_cursor == oldest)
-            return false;
-        m_cursor = do_prev_cursor();
-        return true;
-    }
+    bool go_past() noexcept;
 
     /// @brief Move the cursor to the most recently pushed sheaf.
-    void go_present() noexcept {
-        if (m_count > 0)
-            m_cursor = m_head;
-    }
+    void go_present() noexcept;
+
+    /// @brief Number of sheaves ahead of the cursor (toward the present).
+    USize count_future() const noexcept;
+
+    /// @brief Number of sheaves behind the cursor (toward the past).
+    USize count_past() const noexcept;
 
     /**
      * @brief Merge the two most recent sheaves into one (goes to present first).
@@ -1006,28 +770,18 @@ public:
 private:
     // --------------------------------------------------------------- Internals
 
-    USize do_next_cursor() const noexcept {
-        return do_next_cursor(1);
-    }
-    USize do_next_cursor(USize n) const noexcept {
-        return (m_cursor + n) % SHEAF_RING_SIZE;
-    }
-    USize do_prev_cursor() const noexcept {
-        return do_prev_cursor(1);
-    }
-    USize do_prev_cursor(USize n) const noexcept {
-        return (m_cursor + SHEAF_RING_SIZE - n) % SHEAF_RING_SIZE;
+    static USize do_next(USize idx) noexcept { return (idx + 1) % SHEAF_RING_SIZE; }
+    static USize do_prev(USize idx) noexcept { return (idx + SHEAF_RING_SIZE - 1) % SHEAF_RING_SIZE; }
+
+    CmdSheaf *do_sheaf_at(USize idx) noexcept {
+        return reinterpret_cast<CmdSheaf *>(m_storage + idx * sizeof(CmdSheaf));
     }
 
-    void do_push_advance() noexcept {
-        USize next = (m_head + 1) % SHEAF_RING_SIZE;
-        if (m_count == SHEAF_RING_SIZE) {
-            reinterpret_cast<CmdSheaf *>(m_storage + next * sizeof(CmdSheaf))->~CmdSheaf();
-        } else {
-            ++m_count;
-        }
-
-        m_head = next;
+    const CmdSheaf *do_sheaf_at(USize idx) const noexcept {
+        return reinterpret_cast<const CmdSheaf *>(m_storage + idx * sizeof(CmdSheaf));
     }
+
+    void do_destroy_all() noexcept;
+    void do_push_advance() noexcept;
 };
 } // namespace fr

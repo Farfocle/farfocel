@@ -108,12 +108,12 @@ struct Game {
 
         for (USize i = 0; i < iterations; ++i) {
             std::cout << "\n======================= Iteration " << i << "\n\n";
-            run();
+            run_future();
             std::this_thread::sleep_for(2000ms);
         }
     }
 
-    void run() {
+    void run_future() {
         world.run();
         world.commit_future();
     }

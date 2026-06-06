@@ -8,6 +8,7 @@ set(BENCH_SOURCES
     "showcase.cpp"
     "resources.cpp"
     "serialization.cpp"
+    "time_travel.cpp"
 )
 
 foreach(source ${BENCH_SOURCES})

@@ -281,6 +281,11 @@ public:
     template <typename T>
     bool check_resource() noexcept;
 
+    /// @brief Returns the underlying world. Useful when a system needs full World access.
+    World &world() noexcept {
+        return *m_world;
+    }
+
 private:
     // -------------------------------------------------------- Member Variables
     World *m_world{nullptr};
@@ -755,6 +760,11 @@ public:
      */
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
+
+    /// @brief Returns a reference to the world's active command batch.
+    CmdBatch &cmd_batch() noexcept {
+        return m_cmd_batch;
+    }
 
     // ------------------------------------------------------------------- Shape
 
