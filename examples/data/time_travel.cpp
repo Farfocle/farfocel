@@ -91,6 +91,12 @@ struct Game {
         world.commit_past_from(state.timeline.batch());
         state.timeline.go_past();
     }
+
+    void undo_all() {
+        State &state = world.get_resource<State>();
+        state.timeline.compress_all();
+        world.commit_past_from(state.timeline.batch());
+    }
 };
 
 S32 main() {
@@ -107,15 +113,28 @@ S32 main() {
             std::this_thread::sleep_for(1000ms);
         }
 
-        game.world.get_resource<State>().move_cubes = false;
-
         // Undo loop.
+        game.world.get_resource<State>().move_cubes = false;
         for (USize i = 0; i < 10; ++i) {
             using namespace std::chrono_literals;
             game.undo();
             game.run();
             std::this_thread::sleep_for(1000ms);
         }
+
+        game.world.get_resource<State>().move_cubes = true;
+
+        // Normal run loop.
+        for (USize i = 0; i < 10; ++i) {
+            using namespace std::chrono_literals;
+            game.run();
+            std::this_thread::sleep_for(1000ms);
+        }
+
+        // Compressed undo
+        game.world.get_resource<State>().move_cubes = false;
+        game.undo_all();
+        game.run();
     }
 
     fr::shutdown_core_ctx();

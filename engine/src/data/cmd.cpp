@@ -277,6 +277,7 @@ CmdBatch &CmdBatch::operator=(const CmdBatch &other) noexcept {
         this->~CmdBatch();
         new (this) CmdBatch(other);
     }
+
     return *this;
 }
 
@@ -285,6 +286,7 @@ CmdBatch &CmdBatch::operator=(CmdBatch &&other) noexcept {
         this->~CmdBatch();
         new (this) CmdBatch(std::move(other));
     }
+
     return *this;
 }
 
@@ -375,6 +377,7 @@ const Byte *CmdBatch::arena() const noexcept {
 CmdBatch CmdBatch::merge(Alloc *alloc, const CmdBatch &a, const CmdBatch &b) noexcept {
     USize arena_size =
         impl::compute_fitted_arena_size(a.cmds()) + impl::compute_fitted_arena_size(b.cmds());
+
     if (arena_size < 1) {
         arena_size = 1;
     }
@@ -459,6 +462,95 @@ CmdBatch CmdBatch::merge(Alloc *alloc, const CmdBatch &a, const CmdBatch &b) noe
     }
 
     return merged;
+}
+
+CmdBatch CmdBatch::merge_all(Alloc *alloc, const CmdBatch *const *batches, USize count) noexcept {
+    if (count == 0) {
+        return CmdBatch(alloc, 1);
+    }
+
+    USize arena_size = 0;
+    for (USize b = 0; b < count; ++b) {
+        arena_size += impl::compute_fitted_arena_size(batches[b]->cmds());
+    }
+    if (arena_size < 1) {
+        arena_size = 1;
+    }
+
+    CmdBatch result(alloc, arena_size);
+    auto mutate_map = HashMap<U64, USize>::with_alloc(alloc);
+
+    for (USize b = 0; b < count; ++b) {
+        const CmdBatch &batch = *batches[b];
+        const Byte *base = batch.m_arena_buffer.data();
+
+        for (const Cmd &src : batch.m_cmds) {
+            if (src.kind == CmdKind::Mutate) {
+                U64 key = (static_cast<U64>(src.mutate_part.thing.as_raw()) << 32) |
+                          static_cast<U64>(src.mutate_part.tidx.idx());
+
+                if (auto opt = mutate_map.find(key)) {
+                    Cmd &existing = result.m_cmds[*opt.unwrap()];
+                    const TypeMeta &m = src.mutate_part.tidx.meta();
+
+                    FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+                    m.destroy(result.m_arena_buffer.data() + existing.mutate_part.next_offset);
+
+                    void *new_next = result.m_arena.allocate(m.size, m.alignment);
+                    m.copy_construct(new_next, base + src.mutate_part.next_offset);
+                    existing.mutate_part.next_offset = result.do_get_offset(new_next);
+                } else {
+                    const TypeMeta &m = src.mutate_part.tidx.meta();
+                    FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+                    void *prev_ptr = result.m_arena.allocate(m.size, m.alignment);
+                    m.copy_construct(prev_ptr, base + src.mutate_part.prev_offset);
+
+                    void *next_ptr = result.m_arena.allocate(m.size, m.alignment);
+                    m.copy_construct(next_ptr, base + src.mutate_part.next_offset);
+
+                    USize new_idx = result.m_cmds.size();
+                    result.record_mutate_raw({
+                        .tidx = src.mutate_part.tidx,
+                        .thing = src.mutate_part.thing,
+                        .prev_offset = result.do_get_offset(prev_ptr),
+                        .next_offset = result.do_get_offset(next_ptr),
+                    });
+
+                    mutate_map[key] = new_idx;
+                }
+            } else if (src.kind == CmdKind::Insert) {
+                const TypeMeta &m = src.insert_part.tidx.meta();
+                FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+                void *ptr = result.m_arena.allocate(m.size, m.alignment);
+                m.copy_construct(ptr, base + src.insert_part.offset);
+
+                result.record_insert_raw({
+                    .tidx = src.insert_part.tidx,
+                    .thing = src.insert_part.thing,
+                    .offset = result.do_get_offset(ptr),
+                });
+            } else if (src.kind == CmdKind::Destroy) {
+                const TypeMeta &m = src.destroy_part.tidx.meta();
+                FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+
+                void *ptr = result.m_arena.allocate(m.size, m.alignment);
+                m.copy_construct(ptr, base + src.destroy_part.offset);
+
+                result.record_destroy_raw({
+                    .tidx = src.destroy_part.tidx,
+                    .thing = src.destroy_part.thing,
+                    .offset = result.do_get_offset(ptr),
+                });
+            } else {
+                result.m_cmds.push_back(src);
+            }
+        }
+    }
+
+    return result;
 }
 
 // ==================================================================== CmdSheaf
@@ -775,12 +867,98 @@ CmdSheaf CmdSheaf::merge(Alloc *alloc, const CmdSheaf &a, const CmdSheaf &b) noe
     return merged;
 }
 
+CmdSheaf CmdSheaf::merge_all(Alloc *alloc, const CmdSheaf *const *sheaves, USize count) noexcept {
+    if (count == 0) {
+        return CmdSheaf(alloc, Thing::nil(), 1);
+    }
+
+    Thing thing = sheaves[0]->m_thing;
+
+    USize arena_size = 0;
+    for (USize s = 0; s < count; ++s) {
+        arena_size += impl::compute_fitted_arena_size(sheaves[s]->cmds());
+    }
+    if (arena_size < 1) {
+        arena_size = 1;
+    }
+
+    CmdSheaf result(alloc, thing, arena_size);
+
+    // Sheaf is per-thing: key only by TypeIdx.
+    auto mutate_map = HashMap<U64, USize>::with_alloc(alloc);
+
+    for (USize s = 0; s < count; ++s) {
+        const CmdSheaf &sheaf = *sheaves[s];
+        const Byte *base = sheaf.m_arena_buffer.data();
+
+        for (const Cmd &src : sheaf.m_cmds) {
+            if (src.kind == CmdKind::Mutate) {
+                U64 key = static_cast<U64>(src.mutate_part.tidx.idx());
+
+                if (auto opt = mutate_map.find(key)) {
+                    Cmd &existing = result.m_cmds[*opt.unwrap()];
+                    const TypeMeta &m = src.mutate_part.tidx.meta();
+                    FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+                    m.destroy(result.m_arena_buffer.data() + existing.mutate_part.next_offset);
+                    void *new_next = result.m_arena.allocate(m.size, m.alignment);
+                    m.copy_construct(new_next, base + src.mutate_part.next_offset);
+                    existing.mutate_part.next_offset = result.do_get_offset(new_next);
+                } else {
+                    const TypeMeta &m = src.mutate_part.tidx.meta();
+                    FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+                    void *prev_ptr = result.m_arena.allocate(m.size, m.alignment);
+                    m.copy_construct(prev_ptr, base + src.mutate_part.prev_offset);
+                    void *next_ptr = result.m_arena.allocate(m.size, m.alignment);
+                    m.copy_construct(next_ptr, base + src.mutate_part.next_offset);
+                    USize new_idx = result.m_cmds.size();
+                    result.record_mutate_raw({
+                        .tidx = src.mutate_part.tidx,
+                        .thing = src.mutate_part.thing,
+                        .prev_offset = result.do_get_offset(prev_ptr),
+                        .next_offset = result.do_get_offset(next_ptr),
+                    });
+                    mutate_map[key] = new_idx;
+                }
+            } else if (src.kind == CmdKind::Insert) {
+                const TypeMeta &m = src.insert_part.tidx.meta();
+                FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+                void *ptr = result.m_arena.allocate(m.size, m.alignment);
+                m.copy_construct(ptr, base + src.insert_part.offset);
+                result.record_insert_raw({
+                    .tidx = src.insert_part.tidx,
+                    .thing = src.insert_part.thing,
+                    .offset = result.do_get_offset(ptr),
+                });
+            } else if (src.kind == CmdKind::Destroy) {
+                const TypeMeta &m = src.destroy_part.tidx.meta();
+                FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
+                void *ptr = result.m_arena.allocate(m.size, m.alignment);
+                m.copy_construct(ptr, base + src.destroy_part.offset);
+                result.record_destroy_raw({
+                    .tidx = src.destroy_part.tidx,
+                    .thing = src.destroy_part.thing,
+                    .offset = result.do_get_offset(ptr),
+                });
+            } else {
+                result.m_cmds.push_back(src);
+            }
+        }
+    }
+
+    return result;
+}
+
 // ============================================================ CmdBatchTimeline
 
-CmdBatchTimeline::CmdBatchTimeline(Alloc *alloc) noexcept
-    : m_alloc(alloc) {
-    (void)m_alloc;
-    m_calendar = Array<USize, BATCH_RING_SIZE>::from_repeated(0);
+CmdBatchTimeline::CmdBatchTimeline() noexcept
+    : CmdBatchTimeline(get_ambient_ctx().alloc) {
+}
+
+CmdBatchTimeline::CmdBatchTimeline(Alloc *alloc, USize ring_size) noexcept
+    : m_alloc(alloc),
+      m_batches(DynamicArray<CmdBatch>::with_size(alloc, ring_size)),
+      m_calendar(DynamicArray<USize>::from_repeated(alloc, ring_size, USize{0})),
+      m_ring_size(ring_size) {
 }
 
 USize CmdBatchTimeline::time() const noexcept {
@@ -827,7 +1005,7 @@ bool CmdBatchTimeline::go_past() noexcept {
     if (m_count == 0) {
         return false;
     }
-    USize oldest = (m_head + BATCH_RING_SIZE - (m_count - 1)) % BATCH_RING_SIZE;
+    USize oldest = (m_head + m_ring_size - (m_count - 1)) % m_ring_size;
     if (m_cursor == oldest) {
         return false;
     }
@@ -845,20 +1023,20 @@ USize CmdBatchTimeline::count_future() const noexcept {
     if (m_count == 0) {
         return 0;
     }
-    return (m_head + BATCH_RING_SIZE - m_cursor) % BATCH_RING_SIZE;
+    return (m_head + m_ring_size - m_cursor) % m_ring_size;
 }
 
 USize CmdBatchTimeline::count_past() const noexcept {
     if (m_count == 0) {
         return 0;
     }
-    USize oldest = (m_head + BATCH_RING_SIZE - (m_count - 1)) % BATCH_RING_SIZE;
-    return (m_cursor + BATCH_RING_SIZE - oldest) % BATCH_RING_SIZE;
+    USize oldest = (m_head + m_ring_size - (m_count - 1)) % m_ring_size;
+    return (m_cursor + m_ring_size - oldest) % m_ring_size;
 }
 
 void CmdBatchTimeline::do_push_advance() noexcept {
     m_head = do_next(m_head);
-    if (m_count < BATCH_RING_SIZE) {
+    if (m_count < m_ring_size) {
         ++m_count;
     }
 }
@@ -881,18 +1059,92 @@ bool CmdBatchTimeline::compress() noexcept {
     return true;
 }
 
+bool CmdBatchTimeline::compress_all() noexcept {
+    if (m_count < 2) {
+        return false;
+    }
+
+    USize oldest = (m_head + m_ring_size - (m_count - 1)) % m_ring_size;
+    auto ptrs = DynamicArray<const CmdBatch *>::with_capacity(m_alloc, m_count);
+    for (USize i = 0; i < m_count; ++i) {
+        ptrs.push_back(&m_batches[(oldest + i) % m_ring_size]);
+    }
+
+    m_batches[oldest] = CmdBatch::merge_all(m_alloc, ptrs.data(), m_count);
+    m_calendar[oldest] = m_time;
+    m_head = oldest;
+    m_cursor = oldest;
+    m_count = 1;
+
+    return true;
+}
+
+void CmdBatchTimeline::clear_all() noexcept {
+    if (m_count == 0) {
+        return;
+    }
+
+    USize oldest = (m_head + m_ring_size - (m_count - 1)) % m_ring_size;
+    for (USize i = 0; i < m_count; ++i) {
+        m_batches[(oldest + i) % m_ring_size].reset();
+    }
+
+    m_head = 0;
+    m_cursor = 0;
+    m_time = 0;
+    m_count = 0;
+}
+
+void CmdBatchTimeline::clear_future() noexcept {
+    USize n = count_future();
+    if (n == 0) {
+        return;
+    }
+
+    USize idx = do_next(m_cursor);
+    for (USize i = 0; i < n; ++i, idx = do_next(idx)) {
+        m_batches[idx].reset();
+    }
+
+    m_head = m_cursor;
+    m_time = m_calendar[m_cursor];
+    m_count -= n;
+}
+
+void CmdBatchTimeline::clear_past() noexcept {
+    USize n = count_past();
+    if (n == 0) {
+        return;
+    }
+
+    USize idx = (m_head + m_ring_size - (m_count - 1)) % m_ring_size;
+    for (USize i = 0; i < n; ++i, idx = do_next(idx)) {
+        m_batches[idx].reset();
+    }
+
+    m_count -= n;
+}
+
 // ============================================================ CmdSheafTimeline
 
-CmdSheafTimeline::CmdSheafTimeline(Alloc *alloc, Thing thing) noexcept
+CmdSheafTimeline::CmdSheafTimeline(Alloc *alloc, Thing thing, USize ring_size) noexcept
     : m_alloc(alloc),
-      m_thing(thing) {
-    m_calendar = Array<USize, SHEAF_RING_SIZE>::from_repeated(0);
+      m_thing(thing),
+      m_storage(
+          static_cast<Byte *>(alloc->allocate(ring_size * sizeof(CmdSheaf), alignof(CmdSheaf)))),
+      m_calendar(DynamicArray<USize>::from_repeated(alloc, ring_size, USize{0})),
+      m_ring_size(ring_size) {
 }
 
 CmdSheafTimeline::CmdSheafTimeline(const CmdSheafTimeline &other) noexcept
     : m_alloc(other.m_alloc),
       m_thing(other.m_thing),
+      m_storage(other.m_ring_size > 0
+                    ? static_cast<Byte *>(other.m_alloc->allocate(
+                          other.m_ring_size * sizeof(CmdSheaf), alignof(CmdSheaf)))
+                    : nullptr),
       m_calendar(other.m_calendar),
+      m_ring_size(other.m_ring_size),
       m_head(other.m_head),
       m_cursor(other.m_cursor),
       m_time(other.m_time),
@@ -905,15 +1157,15 @@ CmdSheafTimeline::CmdSheafTimeline(const CmdSheafTimeline &other) noexcept
 CmdSheafTimeline::CmdSheafTimeline(CmdSheafTimeline &&other) noexcept
     : m_alloc(other.m_alloc),
       m_thing(other.m_thing),
-      m_calendar(other.m_calendar),
+      m_storage(other.m_storage),
+      m_calendar(std::move(other.m_calendar)),
+      m_ring_size(other.m_ring_size),
       m_head(other.m_head),
       m_cursor(other.m_cursor),
       m_time(other.m_time),
       m_count(other.m_count) {
-    for (USize i = 0, idx = m_head; i < m_count; ++i, idx = do_prev(idx)) {
-        new (do_sheaf_at(idx)) CmdSheaf(std::move(*other.do_sheaf_at(idx)));
-    }
-    other.do_destroy_all();
+    other.m_storage = nullptr;
+    other.m_ring_size = 0;
     other.m_count = 0;
 }
 
@@ -921,17 +1173,31 @@ CmdSheafTimeline &CmdSheafTimeline::operator=(const CmdSheafTimeline &other) noe
     if (this == &other) {
         return *this;
     }
+
     do_destroy_all();
+    if (m_ring_size != other.m_ring_size) {
+        if (m_storage) {
+            m_alloc->deallocate(m_storage, m_ring_size * sizeof(CmdSheaf), alignof(CmdSheaf));
+        }
+        m_storage = other.m_ring_size > 0
+                        ? static_cast<Byte *>(other.m_alloc->allocate(
+                              other.m_ring_size * sizeof(CmdSheaf), alignof(CmdSheaf)))
+                        : nullptr;
+    }
+
     m_alloc = other.m_alloc;
     m_thing = other.m_thing;
     m_calendar = other.m_calendar;
+    m_ring_size = other.m_ring_size;
     m_head = other.m_head;
     m_cursor = other.m_cursor;
     m_time = other.m_time;
     m_count = other.m_count;
+
     for (USize i = 0, idx = m_head; i < m_count; ++i, idx = do_prev(idx)) {
         new (do_sheaf_at(idx)) CmdSheaf(*other.do_sheaf_at(idx));
     }
+
     return *this;
 }
 
@@ -939,24 +1205,33 @@ CmdSheafTimeline &CmdSheafTimeline::operator=(CmdSheafTimeline &&other) noexcept
     if (this == &other) {
         return *this;
     }
+
     do_destroy_all();
+    if (m_storage) {
+        m_alloc->deallocate(m_storage, m_ring_size * sizeof(CmdSheaf), alignof(CmdSheaf));
+    }
+
     m_alloc = other.m_alloc;
     m_thing = other.m_thing;
-    m_calendar = other.m_calendar;
+    m_storage = other.m_storage;
+    m_calendar = std::move(other.m_calendar);
+    m_ring_size = other.m_ring_size;
     m_head = other.m_head;
     m_cursor = other.m_cursor;
     m_time = other.m_time;
     m_count = other.m_count;
-    for (USize i = 0, idx = m_head; i < m_count; ++i, idx = do_prev(idx)) {
-        new (do_sheaf_at(idx)) CmdSheaf(std::move(*other.do_sheaf_at(idx)));
-    }
-    other.do_destroy_all();
+    other.m_storage = nullptr;
+    other.m_ring_size = 0;
     other.m_count = 0;
+
     return *this;
 }
 
 CmdSheafTimeline::~CmdSheafTimeline() noexcept {
     do_destroy_all();
+    if (m_storage) {
+        m_alloc->deallocate(m_storage, m_ring_size * sizeof(CmdSheaf), alignof(CmdSheaf));
+    }
 }
 
 USize CmdSheafTimeline::time() const noexcept {
@@ -981,6 +1256,7 @@ const CmdSheaf &CmdSheafTimeline::sheaf() const noexcept {
 
 void CmdSheafTimeline::push(const CmdSheaf &s, USize dt) noexcept {
     do_push_advance();
+
     new (do_sheaf_at(m_head)) CmdSheaf(s);
     m_cursor = m_head;
     m_time += dt;
@@ -989,6 +1265,7 @@ void CmdSheafTimeline::push(const CmdSheaf &s, USize dt) noexcept {
 
 void CmdSheafTimeline::push(CmdSheaf &&s, USize dt) noexcept {
     do_push_advance();
+
     new (do_sheaf_at(m_head)) CmdSheaf(std::move(s));
     m_cursor = m_head;
     m_time += dt;
@@ -999,6 +1276,7 @@ bool CmdSheafTimeline::go_future() noexcept {
     if (m_count == 0 || m_cursor == m_head) {
         return false;
     }
+
     m_cursor = do_next(m_cursor);
     return true;
 }
@@ -1007,10 +1285,12 @@ bool CmdSheafTimeline::go_past() noexcept {
     if (m_count == 0) {
         return false;
     }
-    USize oldest = (m_head + SHEAF_RING_SIZE - (m_count - 1)) % SHEAF_RING_SIZE;
+
+    USize oldest = (m_head + m_ring_size - (m_count - 1)) % m_ring_size;
     if (m_cursor == oldest) {
         return false;
     }
+
     m_cursor = do_prev(m_cursor);
     return true;
 }
@@ -1025,15 +1305,16 @@ USize CmdSheafTimeline::count_future() const noexcept {
     if (m_count == 0) {
         return 0;
     }
-    return (m_head + SHEAF_RING_SIZE - m_cursor) % SHEAF_RING_SIZE;
+    return (m_head + m_ring_size - m_cursor) % m_ring_size;
 }
 
 USize CmdSheafTimeline::count_past() const noexcept {
     if (m_count == 0) {
         return 0;
     }
-    USize oldest = (m_head + SHEAF_RING_SIZE - (m_count - 1)) % SHEAF_RING_SIZE;
-    return (m_cursor + SHEAF_RING_SIZE - oldest) % SHEAF_RING_SIZE;
+
+    USize oldest = (m_head + m_ring_size - (m_count - 1)) % m_ring_size;
+    return (m_cursor + m_ring_size - oldest) % m_ring_size;
 }
 
 void CmdSheafTimeline::do_destroy_all() noexcept {
@@ -1044,11 +1325,12 @@ void CmdSheafTimeline::do_destroy_all() noexcept {
 
 void CmdSheafTimeline::do_push_advance() noexcept {
     USize next = do_next(m_head);
-    if (m_count == SHEAF_RING_SIZE) {
+    if (m_count == m_ring_size) {
         do_sheaf_at(next)->~CmdSheaf();
     } else {
         ++m_count;
     }
+
     m_head = next;
 }
 
@@ -1077,5 +1359,66 @@ bool CmdSheafTimeline::compress() noexcept {
     --m_count;
 
     return true;
+}
+
+bool CmdSheafTimeline::compress_all() noexcept {
+    if (m_count < 2) {
+        return false;
+    }
+
+    USize oldest = (m_head + m_ring_size - (m_count - 1)) % m_ring_size;
+    auto ptrs = DynamicArray<const CmdSheaf *>::with_capacity(m_alloc, m_count);
+    for (USize i = 0; i < m_count; ++i) {
+        ptrs.push_back(do_sheaf_at((oldest + i) % m_ring_size));
+    }
+
+    CmdSheaf merged = CmdSheaf::merge_all(m_alloc, ptrs.data(), m_count);
+    do_destroy_all();
+
+    new (do_sheaf_at(oldest)) CmdSheaf(std::move(merged));
+    m_calendar[oldest] = m_time;
+    m_head = oldest;
+    m_cursor = oldest;
+    m_count = 1;
+
+    return true;
+}
+
+void CmdSheafTimeline::clear_all() noexcept {
+    do_destroy_all();
+    m_head = 0;
+    m_cursor = 0;
+    m_time = 0;
+    m_count = 0;
+}
+
+void CmdSheafTimeline::clear_future() noexcept {
+    USize n = count_future();
+    if (n == 0) {
+        return;
+    }
+
+    USize idx = do_next(m_cursor);
+    for (USize i = 0; i < n; ++i, idx = do_next(idx)) {
+        do_sheaf_at(idx)->~CmdSheaf();
+    }
+
+    m_head = m_cursor;
+    m_time = m_calendar[m_cursor];
+    m_count -= n;
+}
+
+void CmdSheafTimeline::clear_past() noexcept {
+    USize n = count_past();
+    if (n == 0) {
+        return;
+    }
+
+    USize idx = (m_head + m_ring_size - (m_count - 1)) % m_ring_size;
+    for (USize i = 0; i < n; ++i, idx = do_next(idx)) {
+        do_sheaf_at(idx)->~CmdSheaf();
+    }
+
+    m_count -= n;
 }
 } // namespace fr

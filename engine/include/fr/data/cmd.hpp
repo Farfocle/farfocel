@@ -14,7 +14,6 @@
 
 #include "fr/core/alloc.hpp"
 #include "fr/core/arena_alloc.hpp"
-#include "fr/core/array.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/meta.hpp"
@@ -420,6 +419,12 @@ public:
      */
     static CmdBatch merge(Alloc *alloc, const CmdBatch &a, const CmdBatch &b) noexcept;
 
+    /**
+     * @brief Merge all `batches` (oldest first) into one, in a single O(n) pass.
+     * @note For each `(thing, type)` pair the first `prev` and last `next` are kept.
+     */
+    static CmdBatch merge_all(Alloc *alloc, const CmdBatch *const *batches, USize count) noexcept;
+
 private:
     /// @brief Returns the byte offset of `ptr` from the arena base.
     USize do_get_offset(void *ptr) const noexcept;
@@ -592,9 +597,15 @@ public:
     /**
      * @brief Merge `a` (older) and `b` (newer) into one sheaf.
      * @note Adjacent `MutateCmd` for the same part type are coalesced:
-     *       oldest `prev` is kept, newest `next` wins.
+     * oldest `prev` is kept, newest `next` wins.
      */
     static CmdSheaf merge(Alloc *alloc, const CmdSheaf &a, const CmdSheaf &b) noexcept;
+
+    /**
+     * @brief Merge all `sheaves` (oldest first) into one, in a single O(n) pass.
+     * @note For each part type the first `prev` and last `next` are kept.
+     */
+    static CmdSheaf merge_all(Alloc *alloc, const CmdSheaf *const *sheaves, USize count) noexcept;
 
 private:
     // ----------------------------------------------------------------- Helpers
@@ -622,11 +633,12 @@ private:
 class CmdBatchTimeline {
     // ----------------------------------------------------------------- Members
 
-    static constexpr USize BATCH_RING_SIZE = 1 << 8;
+    static constexpr USize DEFAULT_BATCH_RING_SIZE = 1 << 8;
 
     Alloc *m_alloc{get_ambient_ctx().alloc};
-    Array<CmdBatch, BATCH_RING_SIZE> m_batches{};
-    Array<USize, BATCH_RING_SIZE> m_calendar{};
+    DynamicArray<CmdBatch> m_batches{};
+    DynamicArray<USize> m_calendar{};
+    USize m_ring_size{0};
     USize m_head{0};
     USize m_cursor{0};
     USize m_time{0};
@@ -635,8 +647,8 @@ class CmdBatchTimeline {
 public:
     // ----------------------------------------------- Constructors & Destructor
 
-    CmdBatchTimeline() noexcept = default;
-    explicit CmdBatchTimeline(Alloc *alloc) noexcept;
+    CmdBatchTimeline() noexcept;
+    explicit CmdBatchTimeline(Alloc *alloc, USize ring_size = DEFAULT_BATCH_RING_SIZE) noexcept;
 
     CmdBatchTimeline(const CmdBatchTimeline &) noexcept = default;
     CmdBatchTimeline(CmdBatchTimeline &&) noexcept = default;
@@ -684,11 +696,31 @@ public:
      */
     bool compress() noexcept;
 
+    /**
+     * @brief Collapse the entire timeline into a single batch in one O(n) pass.
+     * @note For each `(thing, type)` pair the oldest `prev` and newest `next` are kept.
+     * @return False if fewer than two batches exist.
+     */
+    bool compress_all() noexcept;
+
+    /// @brief Resets all active batches and clears the entire timeline to empty.
+    void clear_all() noexcept;
+
+    /// @brief Resets all batches ahead of the cursor, making the cursor the new present.
+    void clear_future() noexcept;
+
+    /// @brief Resets all batches behind the cursor, making the cursor the new oldest entry.
+    void clear_past() noexcept;
+
 private:
     // --------------------------------------------------------------- Internals
 
-    static USize do_next(USize idx) noexcept { return (idx + 1) % BATCH_RING_SIZE; }
-    static USize do_prev(USize idx) noexcept { return (idx + BATCH_RING_SIZE - 1) % BATCH_RING_SIZE; }
+    USize do_next(USize idx) const noexcept {
+        return (idx + 1) % m_ring_size;
+    }
+    USize do_prev(USize idx) const noexcept {
+        return (idx + m_ring_size - 1) % m_ring_size;
+    }
 
     void do_push_advance() noexcept;
 };
@@ -702,12 +734,13 @@ private:
 class CmdSheafTimeline {
     // ----------------------------------------------------------------- Members
 
-    static constexpr USize SHEAF_RING_SIZE = 1 << 5; // 32
+    static constexpr USize DEFAULT_SHEAF_RING_SIZE = 1 << 5;
 
     Alloc *m_alloc{get_ambient_ctx().alloc};
     Thing m_thing{Thing::nil()};
-    alignas(CmdSheaf) Byte m_storage[SHEAF_RING_SIZE * sizeof(CmdSheaf)]{};
-    Array<USize, SHEAF_RING_SIZE> m_calendar{};
+    Byte *m_storage{nullptr};
+    DynamicArray<USize> m_calendar{};
+    USize m_ring_size{0};
     USize m_head{0};
     USize m_cursor{0};
     USize m_time{0};
@@ -717,7 +750,8 @@ public:
     // ----------------------------------------------- Constructors & Destructor
 
     CmdSheafTimeline() noexcept = default;
-    explicit CmdSheafTimeline(Alloc *alloc, Thing thing) noexcept;
+    explicit CmdSheafTimeline(Alloc *alloc, Thing thing,
+                              USize ring_size = DEFAULT_SHEAF_RING_SIZE) noexcept;
     CmdSheafTimeline(const CmdSheafTimeline &other) noexcept;
     CmdSheafTimeline(CmdSheafTimeline &&other) noexcept;
     CmdSheafTimeline &operator=(const CmdSheafTimeline &other) noexcept;
@@ -767,11 +801,31 @@ public:
      */
     bool compress() noexcept;
 
+    /**
+     * @brief Collapse the entire timeline into a single sheaf in one O(n) pass.
+     * @note For each part type the oldest `prev` and newest `next` are kept.
+     * @return False if fewer than two sheaves exist.
+     */
+    bool compress_all() noexcept;
+
+    /// @brief Destroys all active sheaves and clears the entire timeline to empty.
+    void clear_all() noexcept;
+
+    /// @brief Destroys all sheaves ahead of the cursor, making the cursor the new present.
+    void clear_future() noexcept;
+
+    /// @brief Destroys all sheaves behind the cursor, making the cursor the new oldest entry.
+    void clear_past() noexcept;
+
 private:
     // --------------------------------------------------------------- Internals
 
-    static USize do_next(USize idx) noexcept { return (idx + 1) % SHEAF_RING_SIZE; }
-    static USize do_prev(USize idx) noexcept { return (idx + SHEAF_RING_SIZE - 1) % SHEAF_RING_SIZE; }
+    USize do_next(USize idx) const noexcept {
+        return (idx + 1) % m_ring_size;
+    }
+    USize do_prev(USize idx) const noexcept {
+        return (idx + m_ring_size - 1) % m_ring_size;
+    }
 
     CmdSheaf *do_sheaf_at(USize idx) noexcept {
         return reinterpret_cast<CmdSheaf *>(m_storage + idx * sizeof(CmdSheaf));
