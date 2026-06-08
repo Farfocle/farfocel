@@ -13,6 +13,7 @@
 #include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
 
+
 namespace fr {
 
 /**
@@ -157,12 +158,7 @@ inline constexpr Hash hash(bool v) noexcept {
  * @param b Second component.
  * @return Mixed 64-bit value.
  */
-inline constexpr U64 wyhash64(U64 a, U64 b) noexcept {
-    __uint128_t r = static_cast<__uint128_t>(a ^ 0x9e3779b97f4a7c15ULL) *
-                    static_cast<__uint128_t>(b ^ 0xe7037ed1a0b428dbULL);
-
-    return static_cast<U64>(r >> 64) ^ static_cast<U64>(r);
-}
+U64 fr_wyhash64(U64 a, U64 b) noexcept;
 
 /**
  * @brief Combines two hash values into one.
@@ -187,18 +183,7 @@ inline constexpr U64 HASH_SEED = 0xa0761d6478bd642f;
  * @return Computed hash.
  * @pre @p ptr must be non-null if @p len > 0.
  */
-inline constexpr Hash hash_bytes(const void *ptr, USize len) noexcept {
-    FR_ASSERT(len == 0 || ptr != nullptr, "pointer must be non-null if size is non-zero");
-
-    U64 h = HASH_SEED;
-    const U8 *data = static_cast<const U8 *>(ptr);
-
-    for (USize i = 0; i < len; ++i) {
-        h = (h ^ data[i]) * 0x100000001b3ULL;
-    }
-
-    return Hash::from_raw(h);
-}
+Hash hash_bytes(const void *ptr, USize len) noexcept;
 
 namespace impl {
 /**
