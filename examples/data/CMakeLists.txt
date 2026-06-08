@@ -1,6 +1,14 @@
 set(BENCH_SOURCES
+    "console_game_loop.cpp"
     "registry.cpp"
+    "registry_commands.cpp"
+    "scripts.cpp"
     "world.cpp"
+    "hierarchy.cpp"
+    "showcase.cpp"
+    "resources.cpp"
+    "serialization.cpp"
+    "time_travel.cpp"
 )
 
 foreach(source ${BENCH_SOURCES})

@@ -248,7 +248,19 @@ public:
         }
     }
 
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            bool has_value = (m_ptr != nullptr);
+            archive.prop("@has_value", has_value);
+            if (has_value) {
+                archive.prop("@value", *m_ptr);
+            }
+        }
+    }
+
 private:
+
     T *m_ptr = nullptr;
     Alloc *m_alloc = nullptr;
 
@@ -403,8 +415,22 @@ public:
         });
     }
 
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            USize sz = m_size;
+            archive.prop("@size", sz);
+            archive.list("@items", [&](Archive &list_archive) {
+                for (USize i = 0; i < m_size; ++i) {
+                    list_archive.prop("", m_ptr[i]);
+                }
+            });
+        }
+    }
+
     /**
      * @brief Releases ownership of the managed array.
+
      *
      * @return Raw pointer.
      */

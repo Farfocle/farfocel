@@ -16,6 +16,7 @@ namespace fr {
 // -------------------------------------------------------- Forward Declarations
 class Alloc;
 class AllocTracer;
+class TypeRegistry;
 class Logger;
 
 // ------------------------------------------------------------------ Ctx Struct
@@ -25,14 +26,17 @@ struct Ctx {
     AllocTracer *alloc_tracer{nullptr};
     OOMHandler oom_handler{nullptr};
     U8 oom_retries{2};
+    TypeRegistry *type_registry{nullptr};
     Logger *logger;
 };
 
 // ------------------------------------------------------------- Global Pointers
 namespace glob {
 FR_API extern AllocTracer *core_alloc_tracer_ptr;
+FR_API extern TypeRegistry *core_type_registry_ptr;
 FR_API extern Alloc *core_heap_alloc_ptr;
 FR_API extern Ctx *core_ctx_ptr;
+
 FR_API extern thread_local Ctx *ambient_ctx_ptr;
 FR_API extern Logger *logger_ptr;
 } // namespace glob

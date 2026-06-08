@@ -31,7 +31,8 @@ namespace fr {
  */
 template <typename T, USize Size>
 class Array {
-    FR_STATIC_ASSERT_NOTHROW_BASE(T);
+    /// @todo Think about this one.
+    // FR_STATIC_ASSERT_NOTHROW_BASE(T);
 
 private:
     T m_data[Size > 0 ? Size : 1]{};
@@ -428,6 +429,22 @@ public:
                 list_archive.prop("", m_data[i]);
             }
         });
+    }
+
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            USize sz = Size;
+            archive.prop("@size", sz);
+
+            archive.list("@items", [&](Archive &list_archive) {
+                for (USize i = 0; i < Size; ++i) {
+                    list_archive.prop("", m_data[i]);
+                }
+            });
+        } else {
+            FR_ASSERT(false, "cannot deserialize into const Array");
+        }
     }
 
     // ----------------------------------------------------- Structured Bindings

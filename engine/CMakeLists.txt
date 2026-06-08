@@ -40,7 +40,6 @@ set(ENGINE_HEADERS
     "include/fr/core/time.hpp"
     "include/fr/core/tuple.hpp"
     "include/fr/core/typedefs.hpp"
-    "include/fr/core/typeidx.hpp"
     "include/fr/core/typetraits.hpp"
     "include/fr/core/unique_ptr.hpp"
     "include/fr/core/slot_map.hpp"
@@ -60,14 +59,12 @@ set(ENGINE_HEADERS
     "include/fr/renderer/renderer.hpp"
 
 ### data
+    "include/fr/data/cmd.hpp"
     "include/fr/data/part.hpp"
-    "include/fr/data/part_pool.hpp"
-    "include/fr/data/query.hpp"
     "include/fr/data/registry.hpp"
-    "include/fr/data/signature_pool.hpp"
+    "include/fr/data/relations.hpp"
+    "include/fr/data/resource.hpp"
     "include/fr/data/thing.hpp"
-    "include/fr/data/thing_pool.hpp"
-    "include/fr/data/typeidx.hpp"
     "include/fr/data/world.hpp"
 
 ### logger
@@ -81,6 +78,9 @@ set(ENGINE_HEADERS
 set(ENGINE_SOURCES
 #### core
     "src/core/ctx.cpp"
+
+#### data
+    "src/data/cmd.cpp"
 #### platform
     "src/platform/sdl3/sdl_window.cpp"
 
