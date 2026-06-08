@@ -61,7 +61,7 @@ concept IsNothrowDestructible = std::is_nothrow_destructible_v<T>;
 template <typename T>
 concept IsNothrowBase =
     std::is_nothrow_destructible_v<T> &&
-    (std::is_reference_v<T> ||
+    (std::is_reference_v<T> || std::is_abstract_v<T> ||
      (std::is_nothrow_move_constructible_v<std::remove_cv_t<T>> &&
       (std::is_const_v<T> || std::is_nothrow_move_assignable_v<std::remove_cv_t<T>>)));
 } // namespace fr
