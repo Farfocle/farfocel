@@ -1,6 +1,7 @@
 /**
  * @file world.hpp
  * @author Kiju
+ *
  * @brief World is the heart of all data operations in Farfocel.
  */
 
@@ -119,7 +120,14 @@ public:
      * @return false if thing is nil, dead, or does NOT have part `T`.
      */
     template <typename T>
-    bool destroy_now(Thing thing) noexcept;
+    bool try_destroy_now(Thing thing) noexcept;
+
+    /**
+     * @brief Destroys part `T` on a thing immediately.
+     * @pre Caller must ensure: thing is alive and has `T`.
+     */
+    template <typename T>
+    void destroy_now(Thing thing) noexcept;
 
     /// @brief Returns a pointer to part `T` owned by the thing, or nullptr if not found.
     template <typename T>
@@ -135,52 +143,30 @@ public:
     // --------------------------------------------------------------- Relations
 
     /**
-     * @brief Attaches a child to the parent. Updates hierarchy.
-     * @param parent The parent thing.
-     * @pre `parent` must have `Relations` part.
-     * @param child The child thing.
-     * @pre `child` must have `Relations` part.
-     *
-     * @note If `parent` is nil; does nothing.
-     * @note If `child` is nil; does nothing.
+     * @brief Attaches a child to the parent immediately. Updates hierarchy.
+     * @return false if either thing is nil.
+     * @pre Both things must have `Relations` part.
      */
-    void attach_child_now(Thing parent, Thing child) noexcept;
+    bool attach_child_now(Thing parent, Thing child) noexcept;
 
     /**
-     * @brief Emits a `AttachChild` command.
-     * @param parent The parent thing.
-     * @pre `parent` must have `Relations` part.
-     * @param child The child thing.
-     * @pre `child` must have `Relations` part.
-     *
-     * @note If `parent` is nil; does nothing.
-     * @note If `child` is nil; does nothing.
+     * @brief Emits a deferred `AttachChild` command.
+     * @pre Both things must have `Relations` part.
+     * @note If either thing is nil; does nothing.
      */
     void attach_child(Thing parent, Thing child) noexcept;
 
     /**
-     * @brief Detaches a child from a parent. Updates hierarchy.
-     * @param parent The parent thing.
-     * @pre `parent` must have `Relations` part.
-     * @param child The child thing.
-     * @pre `child` must have `Relations` part.
-     *
-     * @note If `child` is not a real child of the `parent`; does nothing.
-     * @note If `parent` is nil; does nothing.
-     * @note If `child` is nil; does nothing.
+     * @brief Detaches a child from a parent immediately. Updates hierarchy.
+     * @return false if either thing is nil, or child is not actually a child of parent.
+     * @pre Both things must have `Relations` part.
      */
-    void detach_child_now(Thing parent, Thing child) noexcept;
+    bool detach_child_now(Thing parent, Thing child) noexcept;
 
     /**
-     * @brief Emits a `DetachChild` command.
-     * @param parent The parent thing.
-     * @pre `parent` must have `Relations` part.
-     * @param child The child thing.
-     * @pre `child` must have `Relations` part.
-     *
-     * @note If `child` is not a real child of the `parent`; does nothing.
-     * @note If `parent` is nil; does nothing.
-     * @note If `child` is nil; does nothing.
+     * @brief Emits a deferred `DetachChild` command.
+     * @pre Both things must have `Relations` part.
+     * @note If either thing is nil; does nothing.
      */
     void detach_child(Thing parent, Thing child) noexcept;
 
@@ -253,6 +239,30 @@ public:
      */
     template <typename S>
     void destroy_script(Thing thing) noexcept;
+
+    /// @brief Inserts a script immediately; returns pointer (nullptr if dead).
+    template <typename S>
+    S *try_emplace_script_now(Thing thing, S script) noexcept;
+
+    /// @brief Inserts a script immediately without checks; returns reference.
+    /// @pre thing is alive and does NOT yet have script `S`.
+    template <typename S>
+    S &emplace_script_now(Thing thing, S script) noexcept;
+
+    /// @brief Inserts a script immediately (checked, void return).
+    template <typename S>
+    void insert_script_now(Thing thing, S script) noexcept;
+
+    /// @brief Destroys a script immediately; returns false if not found.
+    template <typename S>
+    bool try_destroy_script_now(Thing thing) noexcept;
+
+    /**
+     * @brief Destroys a script immediately.
+     * @pre thing is alive and has script `S`.
+     */
+    template <typename S>
+    void destroy_script_now(Thing thing) noexcept;
 
     // ---------------------------------------------------------------- Resources
 
@@ -519,7 +529,14 @@ public:
      * @return false if thing is nil, dead, or does NOT have part `T`.
      */
     template <typename T>
-    bool destroy_now(Thing thing) noexcept;
+    bool try_destroy_now(Thing thing) noexcept;
+
+    /**
+     * @brief Destroys part `T` on a thing immediately.
+     * @pre Caller must ensure: thing is alive and has `T`.
+     */
+    template <typename T>
+    void destroy_now(Thing thing) noexcept;
 
     /// @brief Returns a pointer to part `T` owned by the thing, or nullptr if not found.
     template <typename T>
@@ -610,52 +627,30 @@ public:
     // --------------------------------------------------------------- Relations
 
     /**
-     * @brief Attaches a child to the parent. Updates hierarchy.
-     * @param parent The parent thing.
-     * @pre `parent` must have `Relations` part.
-     * @param child The child thing.
-     * @pre `child` must have `Relations` part.
-     *
-     * @note If `parent` is nil; does nothing.
-     * @note If `child` is nil; does nothing.
+     * @brief Attaches a child to the parent immediately. Updates hierarchy.
+     * @return false if either thing is nil.
+     * @pre Both things must have `Relations` part.
      */
-    void attach_child_now(Thing parent, Thing child) noexcept;
+    bool attach_child_now(Thing parent, Thing child) noexcept;
 
     /**
-     * @brief Emits a `AttachChild` command.
-     * @param parent The parent thing.
-     * @pre `parent` must have `Relations` part.
-     * @param child The child thing.
-     * @pre `child` must have `Relations` part.
-     *
-     * @note If `parent` is nil; does nothing.
-     * @note If `child` is nil; does nothing.
+     * @brief Emits a deferred `AttachChild` command.
+     * @pre Both things must have `Relations` part.
+     * @note If either thing is nil; does nothing.
      */
     void attach_child(Thing parent, Thing child) noexcept;
 
     /**
-     * @brief Detaches a child from a parent. Updates hierarchy.
-     * @param parent The parent thing.
-     * @pre `parent` must have `Relations` part.
-     * @param child The child thing.
-     * @pre `child` must have `Relations` part.
-     *
-     * @note If `child` is not a real child of the `parent`; does nothing.
-     * @note If `parent` is nil; does nothing.
-     * @note If `child` is nil; does nothing.
+     * @brief Detaches a child from a parent immediately. Updates hierarchy.
+     * @return false if either thing is nil, or child is not actually a child of parent.
+     * @pre Both things must have `Relations` part.
      */
-    void detach_child_now(Thing parent, Thing child) noexcept;
+    bool detach_child_now(Thing parent, Thing child) noexcept;
 
     /**
-     * @brief Emits a `DetachChild` command.
-     * @param parent The parent thing.
-     * @pre `parent` must have `Relations` part.
-     * @param child The child thing.
-     * @pre `child` must have `Relations` part.
-     *
-     * @note If `child` is not a real child of the `parent`; does nothing.
-     * @note If `parent` is nil; does nothing.
-     * @note If `child` is nil; does nothing.
+     * @brief Emits a deferred `DetachChild` command.
+     * @pre Both things must have `Relations` part.
+     * @note If either thing is nil; does nothing.
      */
     void detach_child(Thing parent, Thing child) noexcept;
 
@@ -895,6 +890,30 @@ public:
     template <IsScript S>
     void destroy_script(Thing thing) noexcept;
 
+    /// @brief Inserts a script immediately; returns pointer (nullptr if dead).
+    template <IsScript S>
+    S *try_emplace_script_now(Thing thing, S script) noexcept;
+
+    /// @brief Inserts a script immediately without checks; returns reference.
+    /// @pre thing is alive and does NOT yet have script `S`.
+    template <IsScript S>
+    S &emplace_script_now(Thing thing, S script) noexcept;
+
+    /// @brief Inserts a script immediately (checked, void return).
+    template <IsScript S>
+    void insert_script_now(Thing thing, S script) noexcept;
+
+    /// @brief Destroys a script immediately; returns false if not found.
+    template <IsScript S>
+    bool try_destroy_script_now(Thing thing) noexcept;
+
+    /**
+     * @brief Destroys a script immediately.
+     * @pre thing is alive and has script `S`.
+     */
+    template <IsScript S>
+    void destroy_script_now(Thing thing) noexcept;
+
     // --------------------------------------------------------------- Resources
 
     /**
@@ -1038,12 +1057,12 @@ inline World::World(const Options &opt) noexcept
 }
 
 inline Thing World::spawn() noexcept {
-    return m_registry.handout();
+    return m_registry.spawn();
 }
 
 inline Thing World::spawn_deferred() noexcept {
-    Thing thing = m_registry.handout();
-    m_cmd_batch.record_handout(thing);
+    Thing thing = m_registry.spawn();
+    m_cmd_batch.record_spawn(thing);
     return thing;
 }
 
@@ -1091,8 +1110,14 @@ inline void World::insert_now(Thing thing, T &&part) noexcept {
 }
 
 template <typename T>
-inline bool World::destroy_now(Thing thing) noexcept {
+inline bool World::try_destroy_now(Thing thing) noexcept {
     return m_registry.destroy_checked<T>(thing);
+}
+
+template <typename T>
+inline void World::destroy_now(Thing thing) noexcept {
+    [[maybe_unused]] bool ok = m_registry.destroy_checked<T>(thing);
+    FR_ASSERT(ok, "destroy_now: thing is nil, dead, or does not have the part");
 }
 
 template <typename T>
@@ -1154,7 +1179,7 @@ inline void World::commit_insert_from(CmdBatch &batch, bool invert) noexcept {
             }
 
             Cmd inverse = cmd.inverse();
-            const InsertCmd &c = inverse.insert_part;
+            const InsertCmdData &c = inverse.insert_part;
             m_registry.destroy_raw(c.tidx, c.thing);
         }
 
@@ -1167,7 +1192,7 @@ inline void World::commit_insert_from(CmdBatch &batch, bool invert) noexcept {
             continue;
         }
 
-        const InsertCmd &c = cmd.insert_part;
+        const InsertCmdData &c = cmd.insert_part;
         m_registry.insert_raw(c.tidx, c.thing, base + c.offset);
     }
 }
@@ -1183,9 +1208,10 @@ inline void World::commit_destroy_from(CmdBatch &batch, bool invert) noexcept {
             }
 
             Cmd inverse = cmd.inverse();
-            const InsertCmd &c = inverse.insert_part;
+            const InsertCmdData &c = inverse.insert_part;
             m_registry.insert_raw(c.tidx, c.thing, base + c.offset);
         }
+
         return;
     }
 
@@ -1194,7 +1220,7 @@ inline void World::commit_destroy_from(CmdBatch &batch, bool invert) noexcept {
             continue;
         }
 
-        const DestroyCmd &c = cmd.destroy_part;
+        const DestroyCmdData &c = cmd.destroy_part;
         m_registry.destroy_raw(c.tidx, c.thing);
     }
 }
@@ -1209,7 +1235,7 @@ inline void World::commit_mutate_from(CmdBatch &batch, bool invert) noexcept {
                 continue;
             }
 
-            const MutateCmd &c = cmd.mutate_part.inverse();
+            const MutateCmdData &c = cmd.mutate_part.inverse();
             if (m_registry.part_meta().has(c.tidx)) {
                 m_registry.part_meta().get(c.tidx).commit_mutate(static_cast<void *>(&m_registry),
                                                                  c.thing, base + c.next_offset);
@@ -1223,7 +1249,7 @@ inline void World::commit_mutate_from(CmdBatch &batch, bool invert) noexcept {
             continue;
         }
 
-        const MutateCmd &c = cmd.mutate_part;
+        const MutateCmdData &c = cmd.mutate_part;
         if (m_registry.part_meta().has(c.tidx)) {
             m_registry.part_meta().get(c.tidx).commit_mutate(static_cast<void *>(&m_registry),
                                                              c.thing, base + c.next_offset);
@@ -1243,6 +1269,7 @@ inline void World::commit_attach_child_from(CmdBatch &batch, bool invert) noexce
             Cmd inverse = cmd.inverse();
             detach_child_now(inverse.attach_child.parent, inverse.attach_child.child);
         }
+
         return;
     }
 
@@ -1267,6 +1294,7 @@ inline void World::commit_detach_child_from(CmdBatch &batch, bool invert) noexce
             Cmd inverse = cmd.inverse();
             detach_child_now(inverse.detach_child.parent, inverse.detach_child.child);
         }
+
         return;
     }
 
@@ -1293,9 +1321,8 @@ inline void World::commit_kill_from(CmdBatch &batch, bool invert) noexcept {
                 continue;
             }
 
-            /// @todo Implement synthetic thing creation (???).
             Cmd inverse = cmd.inverse();
-            m_registry.handout();
+            m_registry.spawn();
             (void)inverse;
         }
         return;
@@ -1421,16 +1448,16 @@ inline void World::mutate_raw(TypeIdx tidx, Thing thing, const void *prev,
     m_cmd_batch.record_mutate_raw(thing, tidx, prev, next);
 }
 
-inline void World::attach_child_now(Thing parent, Thing child) noexcept {
+inline bool World::attach_child_now(Thing parent, Thing child) noexcept {
     if (parent.is_nil() || child.is_nil()) {
-        return;
+        return false;
     }
 
     Relations &parent_rel = m_registry.get_unchecked<Relations>(parent);
     Relations &child_rel = m_registry.get_unchecked<Relations>(child);
 
     if (child_rel.parent == parent) {
-        return;
+        return true;
     }
 
     if (!child_rel.parent.is_nil()) {
@@ -1447,6 +1474,7 @@ inline void World::attach_child_now(Thing parent, Thing child) noexcept {
 
     parent_rel.first_child = child;
     do_update_hierarchy(parent_rel.depth, child);
+    return true;
 }
 
 inline void World::attach_child(Thing parent, Thing child) noexcept {
@@ -1456,17 +1484,18 @@ inline void World::attach_child(Thing parent, Thing child) noexcept {
     m_cmd_batch.record_attach_child(parent, child);
 }
 
-inline void World::detach_child_now(Thing parent, Thing child) noexcept {
+inline bool World::detach_child_now(Thing parent, Thing child) noexcept {
     if (parent.is_nil() || child.is_nil()) {
-        return;
+        return false;
     }
 
     Relations &child_rel = m_registry.get_unchecked<Relations>(child);
     if (child_rel.parent != parent) {
-        return;
+        return false;
     }
 
     do_detach_from_hierarchy_unchecked(child);
+    return true;
 }
 
 inline void World::detach_child(Thing parent, Thing child) noexcept {
@@ -1669,9 +1698,11 @@ inline void World::destroy_script(Thing thing) noexcept {
     if (thing.is_nil()) [[unlikely]] {
         return;
     }
+
     if (m_registry.is_dead(thing)) [[unlikely]] {
         return;
     }
+
     if (!m_registry.has<S>(thing)) [[unlikely]] {
         return;
     }
@@ -1681,6 +1712,149 @@ inline void World::destroy_script(Thing thing) noexcept {
     }
 
     m_registry.destroy_checked<S>(thing);
+}
+
+template <IsScript S>
+inline S *World::try_emplace_script_now(Thing thing, S script) noexcept {
+    TypeIdx tidx = TypeIdx::from_type<S>();
+
+    script.set_self(thing);
+    script.set_scope(this);
+
+    if constexpr (ScriptHasOnInit<S>) {
+        script.on_init();
+    }
+
+    if (!m_script_registry.check_bit(tidx.idx())) {
+        if constexpr (ScriptHasOnPreUpdate<S>) {
+            schedule(Stage::PreUpdateScript, [](Scope scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_pre_update();
+                }
+            });
+        }
+
+        if constexpr (ScriptHasOnUpdate<S>) {
+            schedule(Stage::UpdateScript, [](Scope scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_update();
+                }
+            });
+        }
+
+        if constexpr (ScriptHasOnPostUpdate<S>) {
+            schedule(Stage::PostUpdateScript, [](Scope scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_post_update();
+                }
+            });
+        }
+
+        m_script_registry.one_bit(tidx.idx());
+    }
+    return m_registry.emplace_checked<S>(thing, script);
+}
+
+template <IsScript S>
+inline S &World::emplace_script_now(Thing thing, S script) noexcept {
+    TypeIdx tidx = TypeIdx::from_type<S>();
+
+    script.set_self(thing);
+    script.set_scope(this);
+
+    if constexpr (ScriptHasOnInit<S>) {
+        script.on_init();
+    }
+
+    if (!m_script_registry.check_bit(tidx.idx())) {
+        if constexpr (ScriptHasOnPreUpdate<S>) {
+            schedule(Stage::PreUpdateScript, [](Scope scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_pre_update();
+                }
+            });
+        }
+
+        if constexpr (ScriptHasOnUpdate<S>) {
+            schedule(Stage::UpdateScript, [](Scope scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_update();
+                }
+            });
+        }
+
+        if constexpr (ScriptHasOnPostUpdate<S>) {
+            schedule(Stage::PostUpdateScript, [](Scope scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_post_update();
+                }
+            });
+        }
+
+        m_script_registry.one_bit(tidx.idx());
+    }
+
+    return m_registry.emplace_unchecked<S>(thing, script);
+}
+
+template <IsScript S>
+inline void World::insert_script_now(Thing thing, S script) noexcept {
+    TypeIdx tidx = TypeIdx::from_type<S>();
+    script.set_self(thing);
+    script.set_scope(this);
+    if constexpr (ScriptHasOnInit<S>) {
+        script.on_init();
+    }
+    if (!m_script_registry.check_bit(tidx.idx())) {
+        if constexpr (ScriptHasOnPreUpdate<S>) {
+            schedule(Stage::PreUpdateScript, [](Scope scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_pre_update();
+                }
+            });
+        }
+        if constexpr (ScriptHasOnUpdate<S>) {
+            schedule(Stage::UpdateScript, [](Scope scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_update();
+                }
+            });
+        }
+        if constexpr (ScriptHasOnPostUpdate<S>) {
+            schedule(Stage::PostUpdateScript, [](Scope scope) {
+                for (auto [t, s] : scope.query<S>()) {
+                    s.on_post_update();
+                }
+            });
+        }
+        m_script_registry.one_bit(tidx.idx());
+    }
+    m_registry.emplace_checked<S>(thing, script);
+}
+
+template <IsScript S>
+inline bool World::try_destroy_script_now(Thing thing) noexcept {
+    if (thing.is_nil() || m_registry.is_dead(thing) || !m_registry.has<S>(thing)) [[unlikely]] {
+        return false;
+    }
+
+    if constexpr (ScriptHasOnDestroy<S>) {
+        m_registry.get_unchecked<S>(thing).on_destroy();
+    }
+
+    m_registry.destroy_unchecked<S>(thing);
+    return true;
+}
+
+template <IsScript S>
+inline void World::destroy_script_now(Thing thing) noexcept {
+    FR_ASSERT(m_registry.has<S>(thing), "thing does not have script S");
+
+    if constexpr (ScriptHasOnDestroy<S>) {
+        m_registry.get_unchecked<S>(thing).on_destroy();
+    }
+
+    m_registry.destroy_unchecked<S>(thing);
 }
 
 // ================================================ Scope Method Implementations
@@ -1743,8 +1917,13 @@ inline void Scope::insert_now(Thing thing, T &&part) noexcept {
 }
 
 template <typename T>
-inline bool Scope::destroy_now(Thing thing) noexcept {
-    return m_world->destroy_now<T>(thing);
+inline bool Scope::try_destroy_now(Thing thing) noexcept {
+    return m_world->try_destroy_now<T>(thing);
+}
+
+template <typename T>
+inline void Scope::destroy_now(Thing thing) noexcept {
+    m_world->destroy_now<T>(thing);
 }
 
 template <typename T>
@@ -1757,16 +1936,16 @@ inline T &Scope::get(Thing thing) noexcept {
     return m_world->get<T>(thing);
 }
 
-inline void Scope::attach_child_now(Thing parent, Thing child) noexcept {
-    m_world->attach_child_now(parent, child);
+inline bool Scope::attach_child_now(Thing parent, Thing child) noexcept {
+    return m_world->attach_child_now(parent, child);
 }
 
 inline void Scope::attach_child(Thing parent, Thing child) noexcept {
     m_world->attach_child(parent, child);
 }
 
-inline void Scope::detach_child_now(Thing parent, Thing child) noexcept {
-    m_world->detach_child_now(parent, child);
+inline bool Scope::detach_child_now(Thing parent, Thing child) noexcept {
+    return m_world->detach_child_now(parent, child);
 }
 
 inline void Scope::detach_child(Thing parent, Thing child) noexcept {
@@ -1826,6 +2005,31 @@ inline void Scope::insert_script(Thing thing, const S script) noexcept {
 template <typename S>
 inline void Scope::destroy_script(Thing thing) noexcept {
     m_world->destroy_script<S>(thing);
+}
+
+template <typename S>
+inline S *Scope::try_emplace_script_now(Thing thing, S script) noexcept {
+    return m_world->try_emplace_script_now(thing, script);
+}
+
+template <typename S>
+inline S &Scope::emplace_script_now(Thing thing, S script) noexcept {
+    return m_world->emplace_script_now(thing, script);
+}
+
+template <typename S>
+inline void Scope::insert_script_now(Thing thing, S script) noexcept {
+    m_world->insert_script_now(thing, script);
+}
+
+template <typename S>
+inline bool Scope::try_destroy_script_now(Thing thing) noexcept {
+    return m_world->try_destroy_script_now<S>(thing);
+}
+
+template <typename S>
+inline void Scope::destroy_script_now(Thing thing) noexcept {
+    m_world->destroy_script_now<S>(thing);
 }
 
 template <typename T>

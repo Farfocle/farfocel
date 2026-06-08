@@ -26,8 +26,8 @@ Thing Cmd::thing() const noexcept {
         return attach_child.parent;
     case CmdKind::DetachChild:
         return detach_child.parent;
-    case CmdKind::Handout:
-        return handout.thing;
+    case CmdKind::Spawn:
+        return spawn.thing;
     case CmdKind::Kill:
         return kill.thing;
     default:
@@ -47,10 +47,10 @@ Cmd Cmd::inverse() const noexcept {
         return {.kind = CmdKind::DetachChild, .detach_child = attach_child.inverse()};
     case CmdKind::DetachChild:
         return {.kind = CmdKind::AttachChild, .attach_child = detach_child.inverse()};
-    case CmdKind::Handout:
-        return {.kind = CmdKind::Kill, .kill = handout.inverse()};
+    case CmdKind::Spawn:
+        return {.kind = CmdKind::Kill, .kill = spawn.inverse()};
     case CmdKind::Kill:
-        return {.kind = CmdKind::Handout, .handout = kill.inverse()};
+        return {.kind = CmdKind::Spawn, .spawn = kill.inverse()};
     default:
         return nil();
     }
@@ -58,29 +58,29 @@ Cmd Cmd::inverse() const noexcept {
 
 // ============================================================== Typed Inverses
 
-DetachChildCmd AttachChildCmd::inverse() const noexcept {
+DetachChildCmdData AttachChildCmdData::inverse() const noexcept {
     return {
         .parent = parent,
         .child = child,
     };
 }
 
-AttachChildCmd DetachChildCmd::inverse() const noexcept {
+AttachChildCmdData DetachChildCmdData::inverse() const noexcept {
     return {
         .parent = parent,
         .child = child,
     };
 }
 
-KillCmd HandoutCmd::inverse() const noexcept {
+KillCmdData SpawnCmdData::inverse() const noexcept {
     return {.thing = thing};
 }
 
-HandoutCmd KillCmd::inverse() const noexcept {
+SpawnCmdData KillCmdData::inverse() const noexcept {
     return {.thing = thing};
 }
 
-DestroyCmd InsertCmd::inverse() const noexcept {
+DestroyCmdData InsertCmdData::inverse() const noexcept {
     return {
         .tidx = tidx,
         .thing = thing,
@@ -88,7 +88,7 @@ DestroyCmd InsertCmd::inverse() const noexcept {
     };
 }
 
-InsertCmd DestroyCmd::inverse() const noexcept {
+InsertCmdData DestroyCmdData::inverse() const noexcept {
     return {
         .tidx = tidx,
         .thing = thing,
@@ -97,7 +97,7 @@ InsertCmd DestroyCmd::inverse() const noexcept {
 }
 
 /// Mutate inverse: swaps prev/next offsets.
-MutateCmd MutateCmd::inverse() const noexcept {
+MutateCmdData MutateCmdData::inverse() const noexcept {
     return {
         .tidx = tidx,
         .thing = thing,
@@ -290,7 +290,7 @@ CmdBatch &CmdBatch::operator=(CmdBatch &&other) noexcept {
     return *this;
 }
 
-void CmdBatch::do_record_insert(InsertCmd cmd) noexcept {
+void CmdBatch::do_record_insert(InsertCmdData cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
 
@@ -299,7 +299,7 @@ void CmdBatch::do_record_insert(InsertCmd cmd) noexcept {
     m_cmds.push_back(c);
 }
 
-void CmdBatch::do_record_destroy(DestroyCmd cmd) noexcept {
+void CmdBatch::do_record_destroy(DestroyCmdData cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
 
@@ -308,7 +308,7 @@ void CmdBatch::do_record_destroy(DestroyCmd cmd) noexcept {
     m_cmds.push_back(c);
 }
 
-void CmdBatch::do_record_mutate(MutateCmd cmd) noexcept {
+void CmdBatch::do_record_mutate(MutateCmdData cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
     c.kind = CmdKind::Mutate;
@@ -316,7 +316,7 @@ void CmdBatch::do_record_mutate(MutateCmd cmd) noexcept {
     m_cmds.push_back(c);
 }
 
-void CmdBatch::do_record_attach_child(AttachChildCmd cmd) noexcept {
+void CmdBatch::do_record_attach_child(AttachChildCmdData cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
     c.kind = CmdKind::AttachChild;
@@ -324,7 +324,7 @@ void CmdBatch::do_record_attach_child(AttachChildCmd cmd) noexcept {
     m_cmds.push_back(c);
 }
 
-void CmdBatch::do_record_detach_child(DetachChildCmd cmd) noexcept {
+void CmdBatch::do_record_detach_child(DetachChildCmdData cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
     c.kind = CmdKind::DetachChild;
@@ -332,15 +332,15 @@ void CmdBatch::do_record_detach_child(DetachChildCmd cmd) noexcept {
     m_cmds.push_back(c);
 }
 
-void CmdBatch::do_record_handout(HandoutCmd cmd) noexcept {
+void CmdBatch::do_record_spawn(SpawnCmdData cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
-    c.kind = CmdKind::Handout;
-    c.handout = cmd;
+    c.kind = CmdKind::Spawn;
+    c.spawn = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdBatch::do_record_kill(KillCmd cmd) noexcept {
+void CmdBatch::do_record_kill(KillCmdData cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
     c.kind = CmdKind::Kill;
@@ -373,8 +373,10 @@ void CmdBatch::record_mutate_raw(Thing thing, TypeIdx tidx, const void *prev,
                                  const void *next) noexcept {
     const TypeMeta &m = tidx.meta();
     void *prev_ptr = m_arena.allocate(m.size, m.alignment);
+
     m.copy_construct(prev_ptr, prev);
     void *next_ptr = m_arena.allocate(m.size, m.alignment);
+
     m.copy_construct(next_ptr, next);
     do_record_mutate({.tidx = tidx,
                       .thing = thing,
@@ -390,8 +392,8 @@ void CmdBatch::record_detach_child(Thing parent, Thing child) noexcept {
     do_record_detach_child({.parent = parent, .child = child});
 }
 
-void CmdBatch::record_handout(Thing thing) noexcept {
-    do_record_handout({.thing = thing});
+void CmdBatch::record_spawn(Thing thing) noexcept {
+    do_record_spawn({.thing = thing});
 }
 
 void CmdBatch::record_kill(Thing thing) noexcept {
@@ -738,42 +740,42 @@ CmdSheaf &CmdSheaf::operator=(CmdSheaf &&other) noexcept {
     return *this;
 }
 
-void CmdSheaf::do_record_insert(InsertCmd cmd) noexcept {
+void CmdSheaf::do_record_insert(InsertCmdData cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::Insert;
     c.insert_part = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdSheaf::do_record_destroy(DestroyCmd cmd) noexcept {
+void CmdSheaf::do_record_destroy(DestroyCmdData cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::Destroy;
     c.destroy_part = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdSheaf::do_record_mutate(MutateCmd cmd) noexcept {
+void CmdSheaf::do_record_mutate(MutateCmdData cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::Mutate;
     c.mutate_part = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdSheaf::do_record_attach_child(AttachChildCmd cmd) noexcept {
+void CmdSheaf::do_record_attach_child(AttachChildCmdData cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::AttachChild;
     c.attach_child = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdSheaf::do_record_detach_child(DetachChildCmd cmd) noexcept {
+void CmdSheaf::do_record_detach_child(DetachChildCmdData cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::DetachChild;
     c.detach_child = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdSheaf::do_record_kill(KillCmd cmd) noexcept {
+void CmdSheaf::do_record_kill(KillCmdData cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::Kill;
     c.kill = cmd;

@@ -183,7 +183,7 @@ public:
     // -------------------------------------------------------- Thing Operations
 
     /// @brief Returns a fresh, non-nil thing.
-    Thing handout() noexcept;
+    Thing spawn() noexcept;
 
     /**
      * @brief Kills a thing, destroys all parts it owns, clears its signature, and recycles its
@@ -472,8 +472,8 @@ inline bool Registry::check_part_pool() const noexcept {
     return !do_pool_absent(TypeIdx::from_type<T>());
 }
 
-inline Thing Registry::handout() noexcept {
-    return m_thing_pool.handout();
+inline Thing Registry::spawn() noexcept {
+    return m_thing_pool.spawn();
 }
 
 inline void Registry::kill(Thing thing) noexcept {

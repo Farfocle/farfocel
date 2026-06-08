@@ -206,11 +206,11 @@ public:
     }
 
     /// @brief Return a new, fresh and non-nil thing.
-    Thing handout() noexcept {
+    Thing spawn() noexcept {
         if (m_free_count == 0) {
-            return do_handout_from_back();
+            return do_spawn_from_back();
         } else {
-            return do_handout_from_free();
+            return do_spawn_from_free();
         }
     }
 
@@ -297,7 +297,7 @@ public:
 private:
     // --------------------------------------------------------------- Internals
 
-    Thing do_handout_from_back() noexcept {
+    Thing do_spawn_from_back() noexcept {
         auto &things = *m_things;
 
         things[m_alive_count] = Thing(m_alive_count, 0);
@@ -306,7 +306,7 @@ private:
         return things[m_alive_count - 1];
     }
 
-    Thing do_handout_from_free() noexcept {
+    Thing do_spawn_from_free() noexcept {
         auto &things = *m_things;
 
         ThingIdx fresh_idx = m_free_next;

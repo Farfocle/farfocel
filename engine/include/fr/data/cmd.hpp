@@ -42,7 +42,7 @@ enum class CmdKind : U8 {
     Mutate,
     AttachChild,
     DetachChild,
-    Handout,
+    Spawn,
     Kill,
 };
 
@@ -58,22 +58,22 @@ inline bool is_nil(CmdKind v) noexcept {
 
 // ==================================================================== Commands
 
-struct InsertCmd;
-struct DestroyCmd;
-struct MutateCmd;
-struct AttachChildCmd;
-struct DetachChildCmd;
-struct HandoutCmd;
-struct KillCmd;
+struct InsertCmdData;
+struct DestroyCmdData;
+struct MutateCmdData;
+struct AttachChildCmdData;
+struct DetachChildCmdData;
+struct SpawnCmdData;
+struct KillCmdData;
 
 /// @brief Payload for a deferred part insert.
-struct InsertCmd {
+struct InsertCmdData {
     TypeIdx tidx;
     Thing thing;
     USize offset;
 
     /// Returns the equivalent destroy command (for undo / inverse commit).
-    DestroyCmd inverse() const noexcept;
+    DestroyCmdData inverse() const noexcept;
 
     /// @brief Cast the part pointer from the arena. Returns nullptr on type mismatch.
     template <typename T>
@@ -87,13 +87,13 @@ struct InsertCmd {
 };
 
 /// @brief Payload for a deferred part destroy (snapshots the current part value).
-struct DestroyCmd {
+struct DestroyCmdData {
     TypeIdx tidx;
     Thing thing;
     USize offset;
 
     /// Returns the equivalent insert command (for undo / inverse commit).
-    InsertCmd inverse() const noexcept;
+    InsertCmdData inverse() const noexcept;
 
     /// @brief Cast the part pointer from the arena. Returns nullptr on type mismatch.
     template <typename T>
@@ -107,14 +107,14 @@ struct DestroyCmd {
 };
 
 /// @brief Payload for a deferred part mutate (captures prev and next values).
-struct MutateCmd {
+struct MutateCmdData {
     TypeIdx tidx;
     Thing thing;
     USize prev_offset;
     USize next_offset;
 
     /// Returns a mutate command with prev/next swapped (for undo / inverse commit).
-    MutateCmd inverse() const noexcept;
+    MutateCmdData inverse() const noexcept;
 
     template <typename T>
     T *try_cast_prev(Byte *arena_base) noexcept {
@@ -136,13 +136,13 @@ struct MutateCmd {
 };
 
 /// @brief Payload for a deferred attach-child relation command.
-struct AttachChildCmd {
+struct AttachChildCmdData {
     Thing parent;
     Thing child;
 
-    DetachChildCmd inverse() const noexcept;
+    DetachChildCmdData inverse() const noexcept;
 
-    static AttachChildCmd nil() noexcept {
+    static AttachChildCmdData nil() noexcept {
         return {Thing::nil(), Thing::nil()};
     }
 
@@ -152,13 +152,13 @@ struct AttachChildCmd {
 };
 
 /// @brief Payload for a deferred detach-child relation command.
-struct DetachChildCmd {
+struct DetachChildCmdData {
     Thing parent;
     Thing child;
 
-    AttachChildCmd inverse() const noexcept;
+    AttachChildCmdData inverse() const noexcept;
 
-    static DetachChildCmd nil() noexcept {
+    static DetachChildCmdData nil() noexcept {
         return {Thing::nil(), Thing::nil()};
     }
 
@@ -175,12 +175,12 @@ struct DetachChildCmd {
  * The commit step (`commit_handout`) is a no-op since the thing is already alive.
  * @note The inverse is a `KillCmd` that destroys the thing.
  */
-struct HandoutCmd {
+struct SpawnCmdData {
     Thing thing;
 
-    KillCmd inverse() const noexcept;
+    KillCmdData inverse() const noexcept;
 
-    static HandoutCmd nil() noexcept {
+    static SpawnCmdData nil() noexcept {
         return {Thing::nil()};
     }
 
@@ -197,12 +197,12 @@ struct HandoutCmd {
  * iterating over part pools.
  * @note The inverse is a `HandoutCmd` (re-creation of the thing handle).
  */
-struct KillCmd {
+struct KillCmdData {
     Thing thing;
 
-    HandoutCmd inverse() const noexcept;
+    SpawnCmdData inverse() const noexcept;
 
-    static KillCmd nil() noexcept {
+    static KillCmdData nil() noexcept {
         return {Thing::nil()};
     }
 
@@ -217,13 +217,13 @@ struct KillCmd {
 struct Cmd {
     CmdKind kind{CmdKind::Nil};
     union {
-        InsertCmd insert_part;
-        DestroyCmd destroy_part;
-        MutateCmd mutate_part;
-        AttachChildCmd attach_child;
-        DetachChildCmd detach_child;
-        HandoutCmd handout;
-        KillCmd kill;
+        InsertCmdData insert_part;
+        DestroyCmdData destroy_part;
+        MutateCmdData mutate_part;
+        AttachChildCmdData attach_child;
+        DetachChildCmdData detach_child;
+        SpawnCmdData spawn;
+        KillCmdData kill;
     };
 
     static Cmd nil() noexcept {
@@ -369,7 +369,7 @@ public:
      * @brief Records that `thing` was handed out (for undo tracking).
      * @note The thing is already alive at this point; commit_handout() is a no-op.
      */
-    void record_handout(Thing thing) noexcept;
+    void record_spawn(Thing thing) noexcept;
 
     /**
      * @brief Records a deferred kill — `thing` is killed at commit time.
@@ -416,13 +416,13 @@ public:
     static CmdBatch merge_all(Alloc *alloc, Slice<const CmdBatch *> batches) noexcept;
 
 private:
-    void do_record_insert(InsertCmd cmd) noexcept;
-    void do_record_destroy(DestroyCmd cmd) noexcept;
-    void do_record_mutate(MutateCmd cmd) noexcept;
-    void do_record_attach_child(AttachChildCmd cmd) noexcept;
-    void do_record_detach_child(DetachChildCmd cmd) noexcept;
-    void do_record_handout(HandoutCmd cmd) noexcept;
-    void do_record_kill(KillCmd cmd) noexcept;
+    void do_record_insert(InsertCmdData cmd) noexcept;
+    void do_record_destroy(DestroyCmdData cmd) noexcept;
+    void do_record_mutate(MutateCmdData cmd) noexcept;
+    void do_record_attach_child(AttachChildCmdData cmd) noexcept;
+    void do_record_detach_child(DetachChildCmdData cmd) noexcept;
+    void do_record_spawn(SpawnCmdData cmd) noexcept;
+    void do_record_kill(KillCmdData cmd) noexcept;
 
     USize do_get_offset(void *ptr) const noexcept;
     void do_init_storage(USize size, const char *tag) noexcept;
@@ -586,12 +586,12 @@ public:
     static CmdSheaf merge_all(Alloc *alloc, Slice<const CmdSheaf *> sheaves) noexcept;
 
 private:
-    void do_record_insert(InsertCmd cmd) noexcept;
-    void do_record_destroy(DestroyCmd cmd) noexcept;
-    void do_record_mutate(MutateCmd cmd) noexcept;
-    void do_record_attach_child(AttachChildCmd cmd) noexcept;
-    void do_record_detach_child(DetachChildCmd cmd) noexcept;
-    void do_record_kill(KillCmd cmd) noexcept;
+    void do_record_insert(InsertCmdData cmd) noexcept;
+    void do_record_destroy(DestroyCmdData cmd) noexcept;
+    void do_record_mutate(MutateCmdData cmd) noexcept;
+    void do_record_attach_child(AttachChildCmdData cmd) noexcept;
+    void do_record_detach_child(DetachChildCmdData cmd) noexcept;
+    void do_record_kill(KillCmdData cmd) noexcept;
 
     USize do_get_offset(void *ptr) const noexcept;
     void do_init_storage(USize size, const char *tag) noexcept;

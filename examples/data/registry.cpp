@@ -47,15 +47,15 @@ S32 main() {
     {
         fr::impl::Registry registry{fr::get_ambient_ctx().alloc};
 
-        fr::Thing a = registry.handout();
+        fr::Thing a = registry.spawn();
         registry.emplace_checked<Pos>(a, Pos{42.0, 67.0});
         registry.emplace_checked<Sprite>(a, Sprite{42, 42, "banana.png"});
 
-        fr::Thing b = registry.handout();
+        fr::Thing b = registry.spawn();
         registry.emplace_checked<Pos>(b, Pos{42.0, 69.0});
         registry.emplace_checked<Sprite>(b, Sprite{42, 42, "apple.png"});
 
-        fr::Thing c = registry.handout();
+        fr::Thing c = registry.spawn();
         registry.emplace_checked<Pos>(c, Pos{13.0, 12.0});
 
         std::cout << "---- query<Pos, Sprite>()\n";
