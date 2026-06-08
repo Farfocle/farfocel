@@ -48,7 +48,7 @@ struct PlayerScript : public fr::Script {
         Sprite &sprite = get<Sprite>();
 
         std::cout << "\n---- PlayerScript\n";
-        std::cout << fr::format("self: {}\npos: {}\nsprite: {}\nhp: {}", self(), pos, sprite, hp)
+        std::cout << fr::format("self: {}\npos: {}\nsprite: {}\nhp: {}", self, pos, sprite, hp)
                   << "\n";
 
         pos.x += 1.0;

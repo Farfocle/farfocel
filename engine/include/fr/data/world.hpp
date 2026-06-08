@@ -337,47 +337,86 @@ public:
     Script &operator=(Script &&) noexcept = default;
     virtual ~Script() noexcept = default;
 
-    // --------------------------------------------------------------------- API
+    // ----------------------------------------------------------------- Members
 
-    /// @brief Sets the thing this script is attached to.
-    void set_self(Thing thing) noexcept;
+    /// @brief The scope this script operates in. Set automatically at insert time.
+    Scope scope{};
 
-    /// @brief Sets the scope this script operates in.
-    void set_scope(Scope scope) noexcept;
+    /// @brief The thing this script is attached to. Set automatically at insert time.
+    Thing self{Thing::nil()};
 
-    /// @brief Returns the thing this script is attached to.
-    [[nodiscard]] Thing self() const noexcept;
+    // ------------------------------------------------------------------ Things
 
-    /// @brief Returns the scope this script operates in.
-    [[nodiscard]] Scope &scope() noexcept;
+    /// @brief Spawns a new thing immediately.
+    Thing spawn() noexcept;
 
-    /// @brief Checks if self has part `T`.
+    /// @brief Kills a thing immediately.
+    void kill(Thing thing) noexcept;
+
+    // --------------------------------------------------------------- Hierarchy
+
+    /// @brief Attaches `child` to self as a parent immediately. Updates hierarchy.
+    /// @return false if either thing is nil.
+    bool attach_child_now(Thing child) noexcept;
+
+    /// @brief Detaches `child` from self immediately. Updates hierarchy.
+    /// @return false if `child` is not actually a child of self.
+    bool detach_child_now(Thing child) noexcept;
+
+    // ------------------------------------------------------------------- Parts
+
+    /// @brief Returns true if self has part `T`.
     template <typename T>
     bool has() const noexcept;
 
     /**
-     * @brief Returns a reference to part `T` attached to self.
-     * @warning Asserts if self does not have part `T`.
+     * @brief Returns a reference to part `T` on self.
+     * @pre self must have part `T`.
      */
     template <typename T>
     T &get() noexcept;
 
-    /// @brief Records an insert command for part `T` on self.
+    /// @brief Inserts or overrides part `T` on self immediately (checked). Returns pointer.
+    template <typename T, typename... Args>
+    T *try_emplace_now(Args &&...args) noexcept;
+
+    /**
+     * @brief Emplaces part `T` on self immediately (unchecked). Returns reference.
+     * @pre self must NOT yet have part `T`.
+     */
+    template <typename T, typename... Args>
+    T &emplace_now(Args &&...args) noexcept;
+
+    /// @brief Inserts or overrides part `T` on self immediately (copy).
+    template <typename T>
+    void insert_now(const T &part) noexcept;
+
+    /// @brief Inserts or overrides part `T` on self immediately (move).
+    template <typename T>
+    void insert_now(T &&part) noexcept;
+
+    /// @brief Destroys part `T` on self immediately. Returns false if not present.
+    template <typename T>
+    bool try_destroy_now() noexcept;
+
+    /**
+     * @brief Destroys part `T` on self immediately.
+     * @pre self must have part `T`.
+     */
+    template <typename T>
+    void destroy_now() noexcept;
+
+    /// @brief Records a deferred insert for part `T` on self (copy).
     template <typename T>
     void insert(const T &part) noexcept;
 
-    /// @brief Records an insert command for part `T` on self.
+    /// @brief Records a deferred insert for part `T` on self (move).
     template <typename T>
     void insert(T &&part) noexcept;
 
-    /// @brief Records a destroy command for part `T` on self.
+    /// @brief Records a deferred destroy for part `T` on self.
     template <typename T>
     void destroy() noexcept;
-
-private:
-    // -------------------------------------------------------- Member Variables
-    Scope m_scope{};
-    Thing m_self{Thing::nil()};
 };
 
 template <typename T>
@@ -1655,8 +1694,8 @@ inline void World::run() noexcept {
 template <IsScript S>
 inline void World::insert_script(Thing thing, S script) noexcept {
     TypeIdx tidx = TypeIdx::from_type<S>();
-    script.set_self(thing);
-    script.set_scope(this);
+    script.self = thing;
+    script.scope = Scope(this);
 
     if constexpr (ScriptHasOnInit<S>) {
         script.on_init();
@@ -1718,8 +1757,8 @@ template <IsScript S>
 inline S *World::try_emplace_script_now(Thing thing, S script) noexcept {
     TypeIdx tidx = TypeIdx::from_type<S>();
 
-    script.set_self(thing);
-    script.set_scope(this);
+    script.self = thing;
+    script.scope = Scope(this);
 
     if constexpr (ScriptHasOnInit<S>) {
         script.on_init();
@@ -1759,8 +1798,8 @@ template <IsScript S>
 inline S &World::emplace_script_now(Thing thing, S script) noexcept {
     TypeIdx tidx = TypeIdx::from_type<S>();
 
-    script.set_self(thing);
-    script.set_scope(this);
+    script.self = thing;
+    script.scope = Scope(this);
 
     if constexpr (ScriptHasOnInit<S>) {
         script.on_init();
@@ -1800,8 +1839,8 @@ inline S &World::emplace_script_now(Thing thing, S script) noexcept {
 template <IsScript S>
 inline void World::insert_script_now(Thing thing, S script) noexcept {
     TypeIdx tidx = TypeIdx::from_type<S>();
-    script.set_self(thing);
-    script.set_scope(this);
+    script.self = thing;
+    script.scope = Scope(this);
     if constexpr (ScriptHasOnInit<S>) {
         script.on_init();
     }
@@ -2047,44 +2086,74 @@ inline bool Scope::check_resource() noexcept {
     return m_world->check_resource<T>();
 }
 
-inline void Script::set_self(Thing thing) noexcept {
-    m_self = thing;
+inline Thing Script::spawn() noexcept {
+    return scope.spawn();
 }
 
-inline void Script::set_scope(Scope scope) noexcept {
-    m_scope = scope;
+inline void Script::kill(Thing thing) noexcept {
+    scope.kill(thing);
 }
 
-inline Thing Script::self() const noexcept {
-    return m_self;
+inline bool Script::attach_child_now(Thing child) noexcept {
+    return scope.attach_child_now(self, child);
 }
 
-inline Scope &Script::scope() noexcept {
-    return m_scope;
+inline bool Script::detach_child_now(Thing child) noexcept {
+    return scope.detach_child_now(self, child);
 }
 
 template <typename T>
 inline bool Script::has() const noexcept {
-    return m_scope.has<T>(m_self);
+    return scope.has<T>(self);
 }
 
 template <typename T>
 inline T &Script::get() noexcept {
-    return m_scope.get<T>(m_self);
+    return scope.get<T>(self);
+}
+
+template <typename T, typename... Args>
+inline T *Script::try_emplace_now(Args &&...args) noexcept {
+    return scope.try_emplace_now<T>(self, std::forward<Args>(args)...);
+}
+
+template <typename T, typename... Args>
+inline T &Script::emplace_now(Args &&...args) noexcept {
+    return scope.emplace_now<T>(self, std::forward<Args>(args)...);
+}
+
+template <typename T>
+inline void Script::insert_now(const T &part) noexcept {
+    scope.insert_now(self, part);
+}
+
+template <typename T>
+inline void Script::insert_now(T &&part) noexcept {
+    scope.insert_now(self, std::move(part));
+}
+
+template <typename T>
+inline bool Script::try_destroy_now() noexcept {
+    return scope.try_destroy_now<T>(self);
+}
+
+template <typename T>
+inline void Script::destroy_now() noexcept {
+    scope.destroy_now<T>(self);
 }
 
 template <typename T>
 inline void Script::insert(const T &part) noexcept {
-    m_scope.insert(m_self, part);
+    scope.insert(self, part);
 }
 
 template <typename T>
 inline void Script::insert(T &&part) noexcept {
-    m_scope.insert(m_self, std::move(part));
+    scope.insert(self, std::move(part));
 }
 
 template <typename T>
 inline void Script::destroy() noexcept {
-    m_scope.destroy<T>(m_self);
+    scope.destroy<T>(self);
 }
 } // namespace fr
