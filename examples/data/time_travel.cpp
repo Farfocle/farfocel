@@ -76,26 +76,26 @@ struct Game {
 
         world.emplace_resource<State>();
 
-        cube = world.handout();
+        cube = world.spawn();
         world.insert_now(cube, Pos{0, 0});
         world.insert_now(cube, Cube{"main"});
     }
 
     void run() {
         world.run();
-        world.commit_future();
+        world.commit();
     }
 
     void undo() {
         State &state = world.get_resource<State>();
-        world.commit_past_from(state.timeline.batch());
+        world.commit_inverse_from(state.timeline.batch());
         state.timeline.go_past();
     }
 
     void undo_all() {
         State &state = world.get_resource<State>();
         state.timeline.compress_all();
-        world.commit_past_from(state.timeline.batch());
+        world.commit_inverse_from(state.timeline.batch());
     }
 };
 
@@ -131,7 +131,7 @@ S32 main() {
             std::this_thread::sleep_for(1000ms);
         }
 
-        // Compressed undo
+        // Undo all.
         game.world.get_resource<State>().move_cubes = false;
         game.undo_all();
         game.run();

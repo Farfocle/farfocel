@@ -36,16 +36,16 @@ struct Game {
     fr::Thing player;
 
     void init() {
-        player = world.handout();
+        player = world.spawn();
         world.emplace_now<fr::Relations>(player);
 
         for (USize i = 0; i < 3; ++i) {
-            fr::Thing child = world.handout();
+            fr::Thing child = world.spawn();
             world.emplace_now<fr::Relations>(child);
             world.emplace_now<Pos>(child);
 
             for (USize j = 0; j < 3; ++j) {
-                fr::Thing more_so_a_child = world.handout();
+                fr::Thing more_so_a_child = world.spawn();
                 world.emplace_now<fr::Relations>(more_so_a_child);
                 world.emplace_now<Pos>(more_so_a_child);
                 world.attach_child_now(child, more_so_a_child);

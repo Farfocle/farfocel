@@ -53,7 +53,7 @@ struct Minion {
 
 void player_update(fr::Scope scope) {
     for (auto [thing, player, health, transform] : scope.query<Player, Health, Transform>()) {
-        fr::Thing minion = scope.handout();
+        fr::Thing minion = scope.spawn();
         scope.insert(minion, Transform{});
         scope.insert(minion, Health{.max_health = 10, .health = 10});
         scope.insert(minion, Minion{.name = "Karol Szypula", .level = 1});
@@ -115,16 +115,16 @@ struct Game {
 
     void run_future() {
         world.run();
-        world.commit_future();
+        world.commit();
     }
 
 private:
     void do_init_things() {
-        player = world.handout();
+        player = world.spawn();
         world.insert(player, Player{});
         world.insert(player, Health{.max_health = 200, .health = 200});
         world.insert(player, Transform{});
-        world.commit_future();
+        world.commit();
     }
 
     void do_init_systems() {

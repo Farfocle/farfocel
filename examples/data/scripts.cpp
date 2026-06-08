@@ -62,14 +62,14 @@ struct Game {
     fr::Thing player;
 
     void init() {
-        player = world.handout();
+        player = world.spawn();
         world.insert_script(player, PlayerScript(10));
-        world.commit_future();
+        world.commit();
     }
 
     void run_future() {
         world.run();
-        world.commit_future();
+        world.commit();
     }
 };
 

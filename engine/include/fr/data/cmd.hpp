@@ -279,27 +279,17 @@ public:
 
     // -------------------------------------------------------------- Record Raw
 
-    /// @brief Pushes a pre-built InsertCmd. The offset must already point into this batch's arena.
-    void record_insert_raw(InsertCmd cmd) noexcept;
+    /// @brief Copies `part` into the arena and records a deferred insert command.
+    void record_insert_raw(Thing thing, TypeIdx tidx, const void *part) noexcept;
 
-    /// @brief Pushes a pre-built DestroyCmd. The offset must already point into this batch's arena.
-    void record_destroy_raw(DestroyCmd cmd) noexcept;
+    /// @brief Moves `part` into the arena and records a deferred insert command.
+    void record_insert_raw(Thing thing, TypeIdx tidx, void *part) noexcept;
 
-    /// @brief Pushes a pre-built MutateCmd. Both offsets must already point into this batch's
-    /// arena.
-    void record_mutate_raw(MutateCmd cmd) noexcept;
+    /// @brief Copies `current` into the arena and records a deferred destroy command (snapshot).
+    void record_destroy_raw(Thing thing, TypeIdx tidx, const void *current) noexcept;
 
-    /// @brief Pushes a pre-built AttachChildCmd.
-    void record_attach_child_raw(AttachChildCmd cmd) noexcept;
-
-    /// @brief Pushes a pre-built DetachChildCmd.
-    void record_detach_child_raw(DetachChildCmd cmd) noexcept;
-
-    /// @brief Pushes a pre-built HandoutCmd.
-    void record_handout_raw(HandoutCmd cmd) noexcept;
-
-    /// @brief Pushes a pre-built KillCmd.
-    void record_kill_raw(KillCmd cmd) noexcept;
+    /// @brief Copies `prev` and `next` into the arena and records a deferred mutate command.
+    void record_mutate_raw(Thing thing, TypeIdx tidx, const void *prev, const void *next) noexcept;
 
     // ------------------------------------------------------------------ Record
 
@@ -312,7 +302,7 @@ public:
         void *ptr = m_arena.allocate(sizeof(T), alignof(T));
         new (ptr) T(part);
 
-        record_insert_raw({
+        do_record_insert({
             .tidx = TypeIdx::from_type<T>(),
             .thing = thing,
             .offset = do_get_offset(ptr),
@@ -328,7 +318,7 @@ public:
         void *ptr = m_arena.allocate(sizeof(T), alignof(T));
         new (ptr) T(std::move(part));
 
-        record_insert_raw({
+        do_record_insert({
             .tidx = TypeIdx::from_type<T>(),
             .thing = thing,
             .offset = do_get_offset(ptr),
@@ -344,7 +334,7 @@ public:
         void *ptr = m_arena.allocate(sizeof(T), alignof(T));
         new (ptr) T(current);
 
-        record_destroy_raw({
+        do_record_destroy({
             .tidx = TypeIdx::from_type<T>(),
             .thing = thing,
             .offset = do_get_offset(ptr),
@@ -363,10 +353,10 @@ public:
         void *next_ptr = m_arena.allocate(sizeof(T), alignof(T));
         new (next_ptr) T(next);
 
-        record_mutate_raw({.tidx = TypeIdx::from_type<T>(),
-                           .thing = thing,
-                           .prev_offset = do_get_offset(prev_ptr),
-                           .next_offset = do_get_offset(next_ptr)});
+        do_record_mutate({.tidx = TypeIdx::from_type<T>(),
+                          .thing = thing,
+                          .prev_offset = do_get_offset(prev_ptr),
+                          .next_offset = do_get_offset(next_ptr)});
     }
 
     /// @brief Records a deferred attach-child relation command.
@@ -423,22 +413,19 @@ public:
      * @brief Merge all `batches` (oldest first) into one, in a single O(n) pass.
      * @note For each `(thing, type)` pair the first `prev` and last `next` are kept.
      */
-    static CmdBatch merge_all(Alloc *alloc, const CmdBatch *const *batches, USize count) noexcept;
+    static CmdBatch merge_all(Alloc *alloc, Slice<const CmdBatch *> batches) noexcept;
 
 private:
-    /// @brief Returns the byte offset of `ptr` from the arena base.
+    void do_record_insert(InsertCmd cmd) noexcept;
+    void do_record_destroy(DestroyCmd cmd) noexcept;
+    void do_record_mutate(MutateCmd cmd) noexcept;
+    void do_record_attach_child(AttachChildCmd cmd) noexcept;
+    void do_record_detach_child(DetachChildCmd cmd) noexcept;
+    void do_record_handout(HandoutCmd cmd) noexcept;
+    void do_record_kill(KillCmd cmd) noexcept;
+
     USize do_get_offset(void *ptr) const noexcept;
-
-    /**
-     * @brief Allocates the arena buffer and initialises `m_arena_buffer`, `m_arena`, `m_cmds`.
-     * @pre `m_alloc` must already be set.
-     */
     void do_init_storage(USize size, const char *tag) noexcept;
-
-    /**
-     * @brief Copy-constructs part snapshots from `src_cmds` into this batch's arena.
-     * @pre `do_init_storage` must have been called first.
-     */
     void do_copy_cmds(Slice<const Cmd> src_cmds, const Byte *src_base,
                       Thing filter = Thing::nil()) noexcept;
 
@@ -480,26 +467,17 @@ public:
 
     // -------------------------------------------------------------- Record Raw
 
-    /// @brief Pushes a pre-built InsertCmd. The offset must already point into this sheaf's arena.
-    void record_insert_raw(InsertCmd cmd) noexcept;
+    /// @brief Copies `part` into the arena and records a deferred insert command.
+    void record_insert_raw(TypeIdx tidx, const void *part) noexcept;
 
-    /// @brief Pushes a pre-built DestroyCmd. The offset must already point into this sheaf's arena.
-    void record_destroy_raw(DestroyCmd cmd) noexcept;
+    /// @brief Moves `part` into the arena and records a deferred insert command.
+    void record_insert_raw(TypeIdx tidx, void *part) noexcept;
 
-    /**
-     * @brief Pushes a pre-built `MutateCmd`. Both offsets must already point into this sheaf's
-     * arena.
-     */
-    void record_mutate_raw(MutateCmd cmd) noexcept;
+    /// @brief Copies `current` into the arena and records a deferred destroy command (snapshot).
+    void record_destroy_raw(TypeIdx tidx, const void *current) noexcept;
 
-    /// @brief Pushes a pre-built `AttachChildCmd`.
-    void record_attach_child_raw(AttachChildCmd cmd) noexcept;
-
-    /// @brief Pushes a pre-built `DetachChildCmd`.
-    void record_detach_child_raw(DetachChildCmd cmd) noexcept;
-
-    /// @brief Pushes a pre-built `KillCmd`.
-    void record_kill_raw(KillCmd cmd) noexcept;
+    /// @brief Copies `prev` and `next` into the arena and records a deferred mutate command.
+    void record_mutate_raw(TypeIdx tidx, const void *prev, const void *next) noexcept;
 
     // ------------------------------------------------------------------ Record
 
@@ -509,7 +487,7 @@ public:
         void *ptr = m_arena.allocate(sizeof(T), alignof(T));
         new (ptr) T(part);
 
-        record_insert_raw({
+        do_record_insert({
             .tidx = TypeIdx::from_type<T>(),
             .thing = m_thing,
             .offset = do_get_offset(ptr),
@@ -522,7 +500,7 @@ public:
         void *ptr = m_arena.allocate(sizeof(T), alignof(T));
         new (ptr) T(std::move(part));
 
-        record_insert_raw({
+        do_record_insert({
             .tidx = TypeIdx::from_type<T>(),
             .thing = m_thing,
             .offset = do_get_offset(ptr),
@@ -535,7 +513,7 @@ public:
         void *ptr = m_arena.allocate(sizeof(T), alignof(T));
         new (ptr) T(current);
 
-        record_destroy_raw({
+        do_record_destroy({
             .tidx = TypeIdx::from_type<T>(),
             .thing = m_thing,
             .offset = do_get_offset(ptr),
@@ -551,10 +529,10 @@ public:
         void *next_ptr = m_arena.allocate(sizeof(T), alignof(T));
         new (next_ptr) T(next);
 
-        record_mutate_raw({.tidx = TypeIdx::from_type<T>(),
-                           .thing = m_thing,
-                           .prev_offset = do_get_offset(prev_ptr),
-                           .next_offset = do_get_offset(next_ptr)});
+        do_record_mutate({.tidx = TypeIdx::from_type<T>(),
+                          .thing = m_thing,
+                          .prev_offset = do_get_offset(prev_ptr),
+                          .next_offset = do_get_offset(next_ptr)});
     }
 
     /// @brief Records a deferred attach-child relation (explicit parent and child).
@@ -605,22 +583,21 @@ public:
      * @brief Merge all `sheaves` (oldest first) into one, in a single O(n) pass.
      * @note For each part type the first `prev` and last `next` are kept.
      */
-    static CmdSheaf merge_all(Alloc *alloc, const CmdSheaf *const *sheaves, USize count) noexcept;
+    static CmdSheaf merge_all(Alloc *alloc, Slice<const CmdSheaf *> sheaves) noexcept;
 
 private:
-    // ----------------------------------------------------------------- Helpers
+    void do_record_insert(InsertCmd cmd) noexcept;
+    void do_record_destroy(DestroyCmd cmd) noexcept;
+    void do_record_mutate(MutateCmd cmd) noexcept;
+    void do_record_attach_child(AttachChildCmd cmd) noexcept;
+    void do_record_detach_child(DetachChildCmd cmd) noexcept;
+    void do_record_kill(KillCmd cmd) noexcept;
 
-    /// @brief Returns the byte offset of `ptr` from the arena base.
     USize do_get_offset(void *ptr) const noexcept;
-
-    /// @brief Allocates the arena buffer and initialises `m_arena_buffer`, `m_arena`, `m_cmds`.
     void do_init_storage(USize size, const char *tag) noexcept;
-
-    /// @brief Copy-constructs part snapshots from `src_cmds` into this sheaf's arena.
     void do_copy_cmds(Slice<const Cmd> src_cmds, const Byte *src_base,
                       Thing filter = Thing::nil()) noexcept;
 
-    // ----------------------------------------------------------------- Members
     Alloc *m_alloc{nullptr};
     Thing m_thing{};
     Slice<Byte> m_arena_buffer{};
@@ -823,6 +800,7 @@ private:
     USize do_next(USize idx) const noexcept {
         return (idx + 1) % m_ring_size;
     }
+
     USize do_prev(USize idx) const noexcept {
         return (idx + m_ring_size - 1) % m_ring_size;
     }

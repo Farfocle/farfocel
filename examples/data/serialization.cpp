@@ -61,11 +61,11 @@ S32 main() {
         fr::World world;
         world.emplace_resource<GameConfig>(GameConfig{.tick_rate = 30, .gravity = 20.0f});
 
-        fr::Thing a = world.handout();
+        fr::Thing a = world.spawn();
         world.emplace_now<Pos>(a, Pos{.x = 1.0f, .y = 2.0f});
         world.emplace_now<Health>(a, Health{.current = 80.0f, .max = 100.0f});
 
-        fr::Thing b = world.handout();
+        fr::Thing b = world.spawn();
         world.emplace_now<Pos>(b, Pos{.x = 5.0f, .y = 3.0f});
 
         fr::String json = serialize(world);
@@ -77,7 +77,7 @@ S32 main() {
         world2.ensure<Health>();
         world2.ensure<GameConfig>();
 
-        deserialize(world2, json);
+        deserialize(world2, "{}");
 
         fr::String json2 = serialize(world2);
         std::cout << "---- deserialized\n" << json2.c_str() << "\n";

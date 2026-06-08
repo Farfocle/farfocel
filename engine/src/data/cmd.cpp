@@ -290,23 +290,25 @@ CmdBatch &CmdBatch::operator=(CmdBatch &&other) noexcept {
     return *this;
 }
 
-void CmdBatch::record_insert_raw(InsertCmd cmd) noexcept {
+void CmdBatch::do_record_insert(InsertCmd cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
+
     c.kind = CmdKind::Insert;
     c.insert_part = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdBatch::record_destroy_raw(DestroyCmd cmd) noexcept {
+void CmdBatch::do_record_destroy(DestroyCmd cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
+
     c.kind = CmdKind::Destroy;
     c.destroy_part = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdBatch::record_mutate_raw(MutateCmd cmd) noexcept {
+void CmdBatch::do_record_mutate(MutateCmd cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
     c.kind = CmdKind::Mutate;
@@ -314,7 +316,7 @@ void CmdBatch::record_mutate_raw(MutateCmd cmd) noexcept {
     m_cmds.push_back(c);
 }
 
-void CmdBatch::record_attach_child_raw(AttachChildCmd cmd) noexcept {
+void CmdBatch::do_record_attach_child(AttachChildCmd cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
     c.kind = CmdKind::AttachChild;
@@ -322,7 +324,7 @@ void CmdBatch::record_attach_child_raw(AttachChildCmd cmd) noexcept {
     m_cmds.push_back(c);
 }
 
-void CmdBatch::record_detach_child_raw(DetachChildCmd cmd) noexcept {
+void CmdBatch::do_record_detach_child(DetachChildCmd cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
     c.kind = CmdKind::DetachChild;
@@ -330,7 +332,7 @@ void CmdBatch::record_detach_child_raw(DetachChildCmd cmd) noexcept {
     m_cmds.push_back(c);
 }
 
-void CmdBatch::record_handout_raw(HandoutCmd cmd) noexcept {
+void CmdBatch::do_record_handout(HandoutCmd cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
     c.kind = CmdKind::Handout;
@@ -338,7 +340,7 @@ void CmdBatch::record_handout_raw(HandoutCmd cmd) noexcept {
     m_cmds.push_back(c);
 }
 
-void CmdBatch::record_kill_raw(KillCmd cmd) noexcept {
+void CmdBatch::do_record_kill(KillCmd cmd) noexcept {
     FR_ASSERT(m_cmds.size() < MAX_CMDS, "CmdBatch is full");
     Cmd c{};
     c.kind = CmdKind::Kill;
@@ -346,20 +348,54 @@ void CmdBatch::record_kill_raw(KillCmd cmd) noexcept {
     m_cmds.push_back(c);
 }
 
+void CmdBatch::record_insert_raw(Thing thing, TypeIdx tidx, const void *part) noexcept {
+    const TypeMeta &m = tidx.meta();
+    void *ptr = m_arena.allocate(m.size, m.alignment);
+    m.copy_construct(ptr, part);
+    do_record_insert({.tidx = tidx, .thing = thing, .offset = do_get_offset(ptr)});
+}
+
+void CmdBatch::record_insert_raw(Thing thing, TypeIdx tidx, void *part) noexcept {
+    const TypeMeta &m = tidx.meta();
+    void *ptr = m_arena.allocate(m.size, m.alignment);
+    m.move_construct(ptr, part);
+    do_record_insert({.tidx = tidx, .thing = thing, .offset = do_get_offset(ptr)});
+}
+
+void CmdBatch::record_destroy_raw(Thing thing, TypeIdx tidx, const void *current) noexcept {
+    const TypeMeta &m = tidx.meta();
+    void *ptr = m_arena.allocate(m.size, m.alignment);
+    m.copy_construct(ptr, current);
+    do_record_destroy({.tidx = tidx, .thing = thing, .offset = do_get_offset(ptr)});
+}
+
+void CmdBatch::record_mutate_raw(Thing thing, TypeIdx tidx, const void *prev,
+                                 const void *next) noexcept {
+    const TypeMeta &m = tidx.meta();
+    void *prev_ptr = m_arena.allocate(m.size, m.alignment);
+    m.copy_construct(prev_ptr, prev);
+    void *next_ptr = m_arena.allocate(m.size, m.alignment);
+    m.copy_construct(next_ptr, next);
+    do_record_mutate({.tidx = tidx,
+                      .thing = thing,
+                      .prev_offset = do_get_offset(prev_ptr),
+                      .next_offset = do_get_offset(next_ptr)});
+}
+
 void CmdBatch::record_attach_child(Thing parent, Thing child) noexcept {
-    record_attach_child_raw({.parent = parent, .child = child});
+    do_record_attach_child({.parent = parent, .child = child});
 }
 
 void CmdBatch::record_detach_child(Thing parent, Thing child) noexcept {
-    record_detach_child_raw({.parent = parent, .child = child});
+    do_record_detach_child({.parent = parent, .child = child});
 }
 
 void CmdBatch::record_handout(Thing thing) noexcept {
-    record_handout_raw({.thing = thing});
+    do_record_handout({.thing = thing});
 }
 
 void CmdBatch::record_kill(Thing thing) noexcept {
-    record_kill_raw({.thing = thing});
+    do_record_kill({.thing = thing});
 }
 
 Slice<const Cmd> CmdBatch::cmds() const noexcept {
@@ -426,7 +462,7 @@ CmdBatch CmdBatch::merge(Alloc *alloc, const CmdBatch &a, const CmdBatch &b) noe
                 m.copy_construct(next_ptr, b_base + src.mutate_part.next_offset);
 
                 USize new_idx = merged.m_cmds.size();
-                merged.record_mutate_raw({
+                merged.do_record_mutate({
                     .tidx = src.mutate_part.tidx,
                     .thing = src.mutate_part.thing,
                     .prev_offset = merged.do_get_offset(prev_ptr),
@@ -440,7 +476,7 @@ CmdBatch CmdBatch::merge(Alloc *alloc, const CmdBatch &a, const CmdBatch &b) noe
 
             void *ptr = merged.m_arena.allocate(m.size, m.alignment);
             m.copy_construct(ptr, b_base + src.insert_part.offset);
-            merged.record_insert_raw({
+            merged.do_record_insert({
                 .tidx = src.insert_part.tidx,
                 .thing = src.insert_part.thing,
                 .offset = merged.do_get_offset(ptr),
@@ -451,7 +487,7 @@ CmdBatch CmdBatch::merge(Alloc *alloc, const CmdBatch &a, const CmdBatch &b) noe
 
             void *ptr = merged.m_arena.allocate(m.size, m.alignment);
             m.copy_construct(ptr, b_base + src.destroy_part.offset);
-            merged.record_destroy_raw({
+            merged.do_record_destroy({
                 .tidx = src.destroy_part.tidx,
                 .thing = src.destroy_part.thing,
                 .offset = merged.do_get_offset(ptr),
@@ -464,13 +500,13 @@ CmdBatch CmdBatch::merge(Alloc *alloc, const CmdBatch &a, const CmdBatch &b) noe
     return merged;
 }
 
-CmdBatch CmdBatch::merge_all(Alloc *alloc, const CmdBatch *const *batches, USize count) noexcept {
-    if (count == 0) {
+CmdBatch CmdBatch::merge_all(Alloc *alloc, Slice<const CmdBatch *> batches) noexcept {
+    if (batches.size() == 0) {
         return CmdBatch(alloc, 1);
     }
 
     USize arena_size = 0;
-    for (USize b = 0; b < count; ++b) {
+    for (USize b = 0; b < batches.size(); ++b) {
         arena_size += impl::compute_fitted_arena_size(batches[b]->cmds());
     }
     if (arena_size < 1) {
@@ -480,7 +516,7 @@ CmdBatch CmdBatch::merge_all(Alloc *alloc, const CmdBatch *const *batches, USize
     CmdBatch result(alloc, arena_size);
     auto mutate_map = HashMap<U64, USize>::with_alloc(alloc);
 
-    for (USize b = 0; b < count; ++b) {
+    for (USize b = 0; b < batches.size(); ++b) {
         const CmdBatch &batch = *batches[b];
         const Byte *base = batch.m_arena_buffer.data();
 
@@ -511,7 +547,7 @@ CmdBatch CmdBatch::merge_all(Alloc *alloc, const CmdBatch *const *batches, USize
                     m.copy_construct(next_ptr, base + src.mutate_part.next_offset);
 
                     USize new_idx = result.m_cmds.size();
-                    result.record_mutate_raw({
+                    result.do_record_mutate({
                         .tidx = src.mutate_part.tidx,
                         .thing = src.mutate_part.thing,
                         .prev_offset = result.do_get_offset(prev_ptr),
@@ -527,7 +563,7 @@ CmdBatch CmdBatch::merge_all(Alloc *alloc, const CmdBatch *const *batches, USize
                 void *ptr = result.m_arena.allocate(m.size, m.alignment);
                 m.copy_construct(ptr, base + src.insert_part.offset);
 
-                result.record_insert_raw({
+                result.do_record_insert({
                     .tidx = src.insert_part.tidx,
                     .thing = src.insert_part.thing,
                     .offset = result.do_get_offset(ptr),
@@ -539,7 +575,7 @@ CmdBatch CmdBatch::merge_all(Alloc *alloc, const CmdBatch *const *batches, USize
                 void *ptr = result.m_arena.allocate(m.size, m.alignment);
                 m.copy_construct(ptr, base + src.destroy_part.offset);
 
-                result.record_destroy_raw({
+                result.do_record_destroy({
                     .tidx = src.destroy_part.tidx,
                     .thing = src.destroy_part.thing,
                     .offset = result.do_get_offset(ptr),
@@ -689,6 +725,7 @@ CmdSheaf &CmdSheaf::operator=(const CmdSheaf &other) noexcept {
         this->~CmdSheaf();
         new (this) CmdSheaf(other);
     }
+
     return *this;
 }
 
@@ -697,45 +734,46 @@ CmdSheaf &CmdSheaf::operator=(CmdSheaf &&other) noexcept {
         this->~CmdSheaf();
         new (this) CmdSheaf(std::move(other));
     }
+
     return *this;
 }
 
-void CmdSheaf::record_insert_raw(InsertCmd cmd) noexcept {
+void CmdSheaf::do_record_insert(InsertCmd cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::Insert;
     c.insert_part = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdSheaf::record_destroy_raw(DestroyCmd cmd) noexcept {
+void CmdSheaf::do_record_destroy(DestroyCmd cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::Destroy;
     c.destroy_part = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdSheaf::record_mutate_raw(MutateCmd cmd) noexcept {
+void CmdSheaf::do_record_mutate(MutateCmd cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::Mutate;
     c.mutate_part = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdSheaf::record_attach_child_raw(AttachChildCmd cmd) noexcept {
+void CmdSheaf::do_record_attach_child(AttachChildCmd cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::AttachChild;
     c.attach_child = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdSheaf::record_detach_child_raw(DetachChildCmd cmd) noexcept {
+void CmdSheaf::do_record_detach_child(DetachChildCmd cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::DetachChild;
     c.detach_child = cmd;
     m_cmds.push_back(c);
 }
 
-void CmdSheaf::record_kill_raw(KillCmd cmd) noexcept {
+void CmdSheaf::do_record_kill(KillCmd cmd) noexcept {
     Cmd c{};
     c.kind = CmdKind::Kill;
     c.kill = cmd;
@@ -743,15 +781,61 @@ void CmdSheaf::record_kill_raw(KillCmd cmd) noexcept {
 }
 
 void CmdSheaf::record_attach_child(Thing parent, Thing child) noexcept {
-    record_attach_child_raw({.parent = parent, .child = child});
+    do_record_attach_child({.parent = parent, .child = child});
 }
 
 void CmdSheaf::record_detach_child(Thing parent, Thing child) noexcept {
-    record_detach_child_raw({.parent = parent, .child = child});
+    do_record_detach_child({.parent = parent, .child = child});
 }
 
 void CmdSheaf::record_kill() noexcept {
-    record_kill_raw({.thing = m_thing});
+    do_record_kill({.thing = m_thing});
+}
+
+void CmdSheaf::record_insert_raw(TypeIdx tidx, const void *part) noexcept {
+    const TypeMeta &m = tidx.meta();
+
+    void *ptr = m_arena.allocate(m.size, m.alignment);
+    m.copy_construct(ptr, part);
+
+    do_record_insert({.tidx = tidx, .thing = m_thing, .offset = do_get_offset(ptr)});
+}
+
+void CmdSheaf::record_insert_raw(TypeIdx tidx, void *part) noexcept {
+    const TypeMeta &m = tidx.meta();
+
+    void *ptr = m_arena.allocate(m.size, m.alignment);
+    m.move_construct(ptr, part);
+
+    do_record_insert({.tidx = tidx, .thing = m_thing, .offset = do_get_offset(ptr)});
+}
+
+void CmdSheaf::record_destroy_raw(TypeIdx tidx, const void *current) noexcept {
+    const TypeMeta &m = tidx.meta();
+
+    void *ptr = m_arena.allocate(m.size, m.alignment);
+    m.copy_construct(ptr, current);
+
+    do_record_destroy({
+        .tidx = tidx,
+        .thing = m_thing,
+        .offset = do_get_offset(ptr),
+    });
+}
+
+void CmdSheaf::record_mutate_raw(TypeIdx tidx, const void *prev, const void *next) noexcept {
+    const TypeMeta &m = tidx.meta();
+
+    void *prev_ptr = m_arena.allocate(m.size, m.alignment);
+    m.copy_construct(prev_ptr, prev);
+
+    void *next_ptr = m_arena.allocate(m.size, m.alignment);
+    m.copy_construct(next_ptr, next);
+
+    do_record_mutate({.tidx = tidx,
+                      .thing = m_thing,
+                      .prev_offset = do_get_offset(prev_ptr),
+                      .next_offset = do_get_offset(next_ptr)});
 }
 
 Thing CmdSheaf::thing() const noexcept {
@@ -819,7 +903,6 @@ CmdSheaf CmdSheaf::merge(Alloc *alloc, const CmdSheaf &a, const CmdSheaf &b) noe
             }
 
             if (!coalesced) {
-                // First mutate for this part - copy both snapshots normally.
                 const TypeMeta &m = src.mutate_part.tidx.meta();
                 FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
 
@@ -829,7 +912,7 @@ CmdSheaf CmdSheaf::merge(Alloc *alloc, const CmdSheaf &a, const CmdSheaf &b) noe
                 void *next_ptr = merged.m_arena.allocate(m.size, m.alignment);
                 m.copy_construct(next_ptr, b_base + src.mutate_part.next_offset);
 
-                merged.record_mutate_raw({
+                merged.do_record_mutate({
                     .tidx = src.mutate_part.tidx,
                     .thing = src.mutate_part.thing,
                     .prev_offset = merged.do_get_offset(prev_ptr),
@@ -842,7 +925,7 @@ CmdSheaf CmdSheaf::merge(Alloc *alloc, const CmdSheaf &a, const CmdSheaf &b) noe
 
             void *ptr = merged.m_arena.allocate(m.size, m.alignment);
             m.copy_construct(ptr, b_base + src.insert_part.offset);
-            merged.record_insert_raw({
+            merged.do_record_insert({
                 .tidx = src.insert_part.tidx,
                 .thing = src.insert_part.thing,
                 .offset = merged.do_get_offset(ptr),
@@ -853,7 +936,7 @@ CmdSheaf CmdSheaf::merge(Alloc *alloc, const CmdSheaf &a, const CmdSheaf &b) noe
 
             void *ptr = merged.m_arena.allocate(m.size, m.alignment);
             m.copy_construct(ptr, b_base + src.destroy_part.offset);
-            merged.record_destroy_raw({
+            merged.do_record_destroy({
                 .tidx = src.destroy_part.tidx,
                 .thing = src.destroy_part.thing,
                 .offset = merged.do_get_offset(ptr),
@@ -867,15 +950,15 @@ CmdSheaf CmdSheaf::merge(Alloc *alloc, const CmdSheaf &a, const CmdSheaf &b) noe
     return merged;
 }
 
-CmdSheaf CmdSheaf::merge_all(Alloc *alloc, const CmdSheaf *const *sheaves, USize count) noexcept {
-    if (count == 0) {
+CmdSheaf CmdSheaf::merge_all(Alloc *alloc, Slice<const CmdSheaf *> sheaves) noexcept {
+    if (sheaves.size() == 0) {
         return CmdSheaf(alloc, Thing::nil(), 1);
     }
 
     Thing thing = sheaves[0]->m_thing;
 
     USize arena_size = 0;
-    for (USize s = 0; s < count; ++s) {
+    for (USize s = 0; s < sheaves.size(); ++s) {
         arena_size += impl::compute_fitted_arena_size(sheaves[s]->cmds());
     }
     if (arena_size < 1) {
@@ -887,7 +970,7 @@ CmdSheaf CmdSheaf::merge_all(Alloc *alloc, const CmdSheaf *const *sheaves, USize
     // Sheaf is per-thing: key only by TypeIdx.
     auto mutate_map = HashMap<U64, USize>::with_alloc(alloc);
 
-    for (USize s = 0; s < count; ++s) {
+    for (USize s = 0; s < sheaves.size(); ++s) {
         const CmdSheaf &sheaf = *sheaves[s];
         const Byte *base = sheaf.m_arena_buffer.data();
 
@@ -911,7 +994,7 @@ CmdSheaf CmdSheaf::merge_all(Alloc *alloc, const CmdSheaf *const *sheaves, USize
                     void *next_ptr = result.m_arena.allocate(m.size, m.alignment);
                     m.copy_construct(next_ptr, base + src.mutate_part.next_offset);
                     USize new_idx = result.m_cmds.size();
-                    result.record_mutate_raw({
+                    result.do_record_mutate({
                         .tidx = src.mutate_part.tidx,
                         .thing = src.mutate_part.thing,
                         .prev_offset = result.do_get_offset(prev_ptr),
@@ -924,7 +1007,7 @@ CmdSheaf CmdSheaf::merge_all(Alloc *alloc, const CmdSheaf *const *sheaves, USize
                 FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
                 void *ptr = result.m_arena.allocate(m.size, m.alignment);
                 m.copy_construct(ptr, base + src.insert_part.offset);
-                result.record_insert_raw({
+                result.do_record_insert({
                     .tidx = src.insert_part.tidx,
                     .thing = src.insert_part.thing,
                     .offset = result.do_get_offset(ptr),
@@ -934,7 +1017,7 @@ CmdSheaf CmdSheaf::merge_all(Alloc *alloc, const CmdSheaf *const *sheaves, USize
                 FR_ASSERT(m.copy_construct, "part type is not copy-constructible");
                 void *ptr = result.m_arena.allocate(m.size, m.alignment);
                 m.copy_construct(ptr, base + src.destroy_part.offset);
-                result.record_destroy_raw({
+                result.do_record_destroy({
                     .tidx = src.destroy_part.tidx,
                     .thing = src.destroy_part.thing,
                     .offset = result.do_get_offset(ptr),
@@ -1070,7 +1153,7 @@ bool CmdBatchTimeline::compress_all() noexcept {
         ptrs.push_back(&m_batches[(oldest + i) % m_ring_size]);
     }
 
-    m_batches[oldest] = CmdBatch::merge_all(m_alloc, ptrs.data(), m_count);
+    m_batches[oldest] = CmdBatch::merge_all(m_alloc, ptrs.slice_mut());
     m_calendar[oldest] = m_time;
     m_head = oldest;
     m_cursor = oldest;
@@ -1372,7 +1455,7 @@ bool CmdSheafTimeline::compress_all() noexcept {
         ptrs.push_back(do_sheaf_at((oldest + i) % m_ring_size));
     }
 
-    CmdSheaf merged = CmdSheaf::merge_all(m_alloc, ptrs.data(), m_count);
+    CmdSheaf merged = CmdSheaf::merge_all(m_alloc, ptrs.slice_mut());
     do_destroy_all();
 
     new (do_sheaf_at(oldest)) CmdSheaf(std::move(merged));

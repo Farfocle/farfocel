@@ -53,15 +53,15 @@ S32 main() {
         world.schedule(fr::Stage::PreUpdate, system_a);
         world.schedule(fr::Stage::PostUpdate, system_b);
 
-        fr::Thing a = world.handout();
+        fr::Thing a = world.spawn();
         world.emplace_now<Pos>(a, Pos{1.0, 2.0});
         world.emplace_now<Sprite>(a, Sprite{1, 2, "a.png"});
 
-        fr::Thing b = world.handout();
+        fr::Thing b = world.spawn();
         world.emplace_now<Pos>(b, Pos{3.0, 4.0});
         world.emplace_now<Sprite>(b, Sprite{3, 4, "b.png"});
 
-        fr::Thing c = world.handout();
+        fr::Thing c = world.spawn();
         world.emplace_now<Pos>(c, Pos{5.0, 6.0});
 
         world.run_stage(fr::Stage::PreUpdate);

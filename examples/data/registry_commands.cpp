@@ -31,15 +31,15 @@ S32 main() {
     {
         fr::World world;
 
-        fr::Thing a = world.handout();
+        fr::Thing a = world.spawn();
         world.insert<Pos>(a, Pos{42.0, 67.0});
 
         world.commit_insert();
 
-        fr::Thing b = world.handout();
+        fr::Thing b = world.spawn();
         world.insert<Pos>(b, Pos{42.0, 69.0});
 
-        fr::Thing c = world.handout();
+        fr::Thing c = world.spawn();
         world.insert<Pos>(c, Pos{13.0, 12.0});
 
         std::cout << "--- commit 0\n";

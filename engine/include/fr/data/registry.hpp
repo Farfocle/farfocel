@@ -48,9 +48,9 @@ struct PartMeta {
     void (*commit_insert_move)(void *registry, Thing thing, void *part_ptr) noexcept {nullptr};
 
     /// Copy the part at `part_ptr` into the registry (emplace / insert by copy).
-    void (*commit_insert_copy)(void *registry, Thing thing, void *part_ptr) noexcept {nullptr};
+    void (*commit_insert_copy)(void *registry, Thing thing, const void *part_ptr) noexcept {nullptr};
 
-    /// Destroy the part owned by `thing` in the registry.
+    /// Destroy the part owned by `thing` in the registry (checked).
     void (*commit_destroy)(void *registry, Thing thing) noexcept {nullptr};
 
     /// Overwrite the part owned by `thing` with the value at `next_ptr` (in-place mutate).
@@ -59,8 +59,17 @@ struct PartMeta {
     /// Destroy the part owned by `thing` directly through its PartPool slot.
     void (*pool_destroy)(void *pool, Thing thing) noexcept {nullptr};
 
-    /// Return a raw pointer to the part owned by `thing`, or nullptr if not present.
+    /// Return a raw pointer to the part owned by `thing`, or nullptr if not present (checked).
     void *(*get_raw)(void *registry, Thing thing) noexcept {nullptr};
+
+    /// Move the part at `part_ptr` into the registry unchecked.
+    void (*commit_emplace_unchecked_move)(void *registry, Thing thing, void *part_ptr) noexcept {nullptr};
+
+    /// Copy the part at `part_ptr` into the registry unchecked.
+    void (*commit_emplace_unchecked_copy)(void *registry, Thing thing, const void *part_ptr) noexcept {nullptr};
+
+    /// Return a raw pointer to the part owned by `thing` (unchecked — caller guarantees alive + has part).
+    void *(*get_raw_unchecked)(void *registry, Thing thing) noexcept {nullptr};
 };
 
 // ============================================================ PartMetaRegistry
@@ -299,8 +308,22 @@ public:
         return m_meta_registry;
     }
 
+    /// @brief Returns true if `thing` owns the part for `tidx`.
+    bool has_raw(TypeIdx tidx, Thing thing) const noexcept {
+        if (do_pool_absent(tidx)) [[unlikely]] {
+            return false;
+        }
+        if (thing.is_nil()) [[unlikely]] {
+            return true;
+        }
+        if (!m_thing_pool.check(thing)) [[unlikely]] {
+            return false;
+        }
+        return do_check_part(thing, tidx);
+    }
+
     /**
-     * @brief Move the part at `part_ptr` into the registry for `thing` (type-erased insert).
+     * @brief Move the part at `part_ptr` into the registry for `thing` (checked).
      * @pre `ensure<T>()` must have been called for this part type.
      */
     void insert_raw(TypeIdx tidx, Thing thing, void *part_ptr) noexcept {
@@ -309,27 +332,74 @@ public:
     }
 
     /**
-     * @brief Destroy the part owned by `thing` (type-erased destroy).
+     * @brief Copy the part at `part_ptr` into the registry for `thing` (checked).
+     * @pre `ensure<T>()` must have been called for this part type.
+     */
+    void insert_raw(TypeIdx tidx, Thing thing, const void *part_ptr) noexcept {
+        FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
+        m_meta_registry.get(tidx).commit_insert_copy(static_cast<void *>(this), thing, part_ptr);
+    }
+
+    /**
+     * @brief Move the part at `part_ptr` into the registry for `thing` (unchecked).
+     * @pre Caller guarantees: thing is alive and does not yet own this part.
+     */
+    void emplace_unchecked_raw(TypeIdx tidx, Thing thing, void *part_ptr) noexcept {
+        FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
+        m_meta_registry.get(tidx).commit_emplace_unchecked_move(static_cast<void *>(this), thing,
+                                                                 part_ptr);
+    }
+
+    /**
+     * @brief Copy the part at `part_ptr` into the registry for `thing` (unchecked).
+     * @pre Caller guarantees: thing is alive and does not yet own this part.
+     */
+    void emplace_unchecked_raw(TypeIdx tidx, Thing thing, const void *part_ptr) noexcept {
+        FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
+        m_meta_registry.get(tidx).commit_emplace_unchecked_copy(static_cast<void *>(this), thing,
+                                                                 part_ptr);
+    }
+
+    /**
+     * @brief Destroy the part owned by `thing` (checked).
      * @note No-op if `PartMeta` is not registered or the thing does not own this part.
      */
     void destroy_raw(TypeIdx tidx, Thing thing) noexcept {
         if (!m_meta_registry.has(tidx)) [[unlikely]] {
             return;
         }
-
         m_meta_registry.get(tidx).commit_destroy(static_cast<void *>(this), thing);
     }
 
     /**
-     * @brief Return a raw pointer to the part owned by `thing`, or nullptr if absent.
-     * @note No-op (returns nullptr) if `PartMeta` is not registered.
+     * @brief Destroy the part owned by `thing` (unchecked).
+     * @pre Caller guarantees: thing is alive and owns this part.
+     */
+    void destroy_unchecked_raw(TypeIdx tidx, Thing thing) noexcept {
+        FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
+        m_signature_pool.destroy(thing, tidx);
+        m_meta_registry.get(tidx).pool_destroy(static_cast<void *>(&m_part_pools[tidx.idx()]),
+                                                thing);
+    }
+
+    /**
+     * @brief Return a raw pointer to the part owned by `thing`, or nullptr if absent (checked).
+     * @note Returns nullptr if `PartMeta` is not registered.
      */
     void *get_raw(TypeIdx tidx, Thing thing) noexcept {
         if (!m_meta_registry.has(tidx)) [[unlikely]] {
             return nullptr;
         }
-
         return m_meta_registry.get(tidx).get_raw(static_cast<void *>(this), thing);
+    }
+
+    /**
+     * @brief Return a raw pointer to the part owned by `thing` (unchecked).
+     * @pre Caller guarantees: thing is alive and owns this part.
+     */
+    void *get_unchecked_raw(TypeIdx tidx, Thing thing) noexcept {
+        FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
+        return m_meta_registry.get(tidx).get_raw_unchecked(static_cast<void *>(this), thing);
     }
 
 private:
@@ -1169,8 +1239,9 @@ inline void PartMetaRegistry::ensure() noexcept {
                                                                std::move(*static_cast<T *>(ptr)));
     };
 
-    pm.commit_insert_copy = +[](void *reg, Thing thing, void *ptr) noexcept {
-        static_cast<impl::Registry *>(reg)->emplace_checked<T>(thing, *static_cast<T *>(ptr));
+    pm.commit_insert_copy = +[](void *reg, Thing thing, const void *ptr) noexcept {
+        static_cast<impl::Registry *>(reg)->emplace_checked<T>(thing,
+                                                               *static_cast<const T *>(ptr));
     };
 
     pm.commit_destroy = +[](void *reg, Thing thing) noexcept {
@@ -1192,6 +1263,20 @@ inline void PartMetaRegistry::ensure() noexcept {
 
     pm.get_raw = +[](void *reg, Thing thing) noexcept -> void * {
         return static_cast<impl::Registry *>(reg)->get_checked<T>(thing);
+    };
+
+    pm.commit_emplace_unchecked_move = +[](void *reg, Thing thing, void *ptr) noexcept {
+        static_cast<impl::Registry *>(reg)->emplace_unchecked<T>(thing,
+                                                                  std::move(*static_cast<T *>(ptr)));
+    };
+
+    pm.commit_emplace_unchecked_copy = +[](void *reg, Thing thing, const void *ptr) noexcept {
+        static_cast<impl::Registry *>(reg)->emplace_unchecked<T>(thing,
+                                                                  *static_cast<const T *>(ptr));
+    };
+
+    pm.get_raw_unchecked = +[](void *reg, Thing thing) noexcept -> void * {
+        return &static_cast<impl::Registry *>(reg)->get_unchecked<T>(thing);
     };
 }
 

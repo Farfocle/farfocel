@@ -1,7 +1,6 @@
 /**
  * @file world.hpp
  * @author Kiju
- *
  * @brief World is the heart of all data operations in Farfocel.
  */
 
@@ -49,10 +48,10 @@ public:
     // -------------------------------------------------------- Thing Operations
 
     /// @brief Returns a fresh, non-nil thing immediately.
-    Thing handout() noexcept;
+    Thing spawn() noexcept;
 
     /// @brief Hands out a new thing immediately and records it.
-    Thing handout_deferred() noexcept;
+    Thing spawn_deferred() noexcept;
 
     /**
      * @brief Kills a thing and destroys all of its parts immediately.
@@ -441,14 +440,14 @@ public:
     // -------------------------------------------------------- Thing Operations
 
     /// @brief Returns a fresh, non-nil thing immediately.
-    Thing handout() noexcept;
+    Thing spawn() noexcept;
 
     /**
      * @brief Hands out a new thing immediately, then records it in the batch for tracking.
      * @return The newly created thing (already alive).
      * @note The thing is created now so the handle is usable right away.
      */
-    Thing handout_deferred() noexcept;
+    Thing spawn_deferred() noexcept;
 
     /**
      * @brief Kills a thing and destroys all of its parts immediately.
@@ -532,6 +531,73 @@ public:
      */
     template <typename T>
     T &get(Thing thing) noexcept;
+
+    // -------------------------------------------------- Raw Part Operations
+
+    /// @brief Returns true if `thing` owns the part for `tidx`.
+    bool has_raw(TypeIdx tidx, Thing thing) const noexcept;
+
+    /**
+     * @brief Inserts or overrides the part for `tidx` on `thing` immediately (move, checked).
+     * @note Returns nullptr if thing is dead. Returns stub pointer for nil thing.
+     * @pre `ensure<T>()` (or equivalent) must have been called for this type.
+     */
+    void *try_emplace_now_raw(TypeIdx tidx, Thing thing, void *part) noexcept;
+
+    /**
+     * @brief Inserts or overrides the part for `tidx` on `thing` immediately (copy, checked).
+     * @note Returns nullptr if thing is dead. Returns stub pointer for nil thing.
+     * @pre `ensure<T>()` (or equivalent) must have been called for this type.
+     */
+    void *try_emplace_now_raw(TypeIdx tidx, Thing thing, const void *part) noexcept;
+
+    /**
+     * @brief Inserts the part for `tidx` on `thing` immediately (move, unchecked).
+     * @pre Caller guarantees: thing is alive and does NOT yet own this part.
+     */
+    void *emplace_now_raw(TypeIdx tidx, Thing thing, void *part) noexcept;
+
+    /**
+     * @brief Inserts the part for `tidx` on `thing` immediately (copy, unchecked).
+     * @pre Caller guarantees: thing is alive and does NOT yet own this part.
+     */
+    void *emplace_now_raw(TypeIdx tidx, Thing thing, const void *part) noexcept;
+
+    /**
+     * @brief Inserts or overrides the part for `tidx` on `thing` immediately (move, checked).
+     * @note Does nothing if thing is nil or dead.
+     */
+    void insert_now_raw(TypeIdx tidx, Thing thing, void *part) noexcept;
+
+    /**
+     * @brief Inserts or overrides the part for `tidx` on `thing` immediately (copy, checked).
+     * @note Does nothing if thing is nil or dead.
+     */
+    void insert_now_raw(TypeIdx tidx, Thing thing, const void *part) noexcept;
+
+    /**
+     * @brief Destroys the part for `tidx` on `thing` immediately (checked).
+     * @return false if thing is nil, dead, or does NOT own this part.
+     */
+    bool destroy_now_raw(TypeIdx tidx, Thing thing) noexcept;
+
+    /**
+     * @brief Destroys the part for `tidx` on `thing` immediately (unchecked).
+     * @pre Caller guarantees: thing is alive and owns this part.
+     */
+    void destroy_now_unchecked_raw(TypeIdx tidx, Thing thing) noexcept;
+
+    /**
+     * @brief Returns a raw pointer to the part for `tidx`, or nullptr if absent (checked).
+     * @note Returns stub pointer for nil thing.
+     */
+    void *try_get_raw(TypeIdx tidx, Thing thing) noexcept;
+
+    /**
+     * @brief Returns a raw pointer to the part for `tidx` (unchecked).
+     * @pre Caller guarantees: thing is alive and owns this part.
+     */
+    void *get_raw(TypeIdx tidx, Thing thing) noexcept;
 
     /**
      * @brief Sorts the entire part pool `T` using the hierarchy depth.
@@ -640,7 +706,7 @@ public:
      * @brief Apply all handout commands from the provided batch.
      * @note No-op; exists for symmetry and future hooks.
      */
-    void commit_handout_from(CmdBatch &batch, bool invert = false) noexcept;
+    void commit_spawn_from(CmdBatch &batch, bool invert = false) noexcept;
 
     /**
      * @brief Apply all kill commands from the provided batch.
@@ -652,13 +718,13 @@ public:
      * @brief Apply all commands in the provided batch:
      * mutate -> destroy -> insert -> attach -> detach -> kill.
      */
-    void commit_future_from(CmdBatch &batch) noexcept;
+    void commit_from(CmdBatch &batch) noexcept;
 
     /**
      * @brief Apply all inverse commands from the provided batch:
      * kill' -> detach' -> attach' -> insert' -> destroy' -> mutate'.
      */
-    void commit_past_from(CmdBatch &batch) noexcept;
+    void commit_inverse_from(CmdBatch &batch) noexcept;
 
     /// @brief Apply all recorded insert commands across all part pools.
     void commit_insert(bool invert = false) noexcept {
@@ -686,8 +752,8 @@ public:
     }
 
     /// @brief No-op (things are already alive). Exists for symmetry and future use.
-    void commit_handout(bool invert = false) noexcept {
-        commit_handout_from(m_cmd_batch, invert);
+    void commit_spawn(bool invert = false) noexcept {
+        commit_spawn_from(m_cmd_batch, invert);
     }
 
     /// @brief Kill all things recorded via `kill_deferred()`.
@@ -696,16 +762,16 @@ public:
     }
 
     /// @brief Apply all commands: mutate -> destroy -> insert -> attach -> detach -> kill.
-    void commit_future() noexcept {
-        commit_future_from(m_cmd_batch);
+    void commit() noexcept {
+        commit_from(m_cmd_batch);
     }
 
     /**
      * @brief Apply all inverse commands:
      * kill' -> detach' -> attach' -> insert' -> destroy' -> mutate'
      */
-    void commit_past() noexcept {
-        commit_past_from(m_cmd_batch);
+    void commit_inverse() noexcept {
+        commit_inverse_from(m_cmd_batch);
     }
 
     /**
@@ -728,6 +794,20 @@ public:
      */
     template <typename T>
     void destroy(Thing thing) noexcept;
+
+    // ---------------------------------------------- Raw Deferred Part Operations
+
+    /// @brief Records a deferred insert for `tidx` on `thing` (copy).
+    void insert_raw(TypeIdx tidx, Thing thing, const void *part) noexcept;
+
+    /// @brief Records a deferred insert for `tidx` on `thing` (move).
+    void insert_raw(TypeIdx tidx, Thing thing, void *part) noexcept;
+
+    /// @brief Records a deferred destroy for `tidx` on `thing`, snapshotting `current`.
+    void destroy_raw(TypeIdx tidx, Thing thing, const void *current) noexcept;
+
+    /// @brief Records a deferred mutate for `tidx` on `thing`, capturing `prev` and `next`.
+    void mutate_raw(TypeIdx tidx, Thing thing, const void *prev, const void *next) noexcept;
 
     // ------------------------------------------------------------------- Query
 
@@ -957,11 +1037,11 @@ inline World::World(const Options &opt) noexcept
       m_resource_pool(opt.resource_pool_alloc) {
 }
 
-inline Thing World::handout() noexcept {
+inline Thing World::spawn() noexcept {
     return m_registry.handout();
 }
 
-inline Thing World::handout_deferred() noexcept {
+inline Thing World::spawn_deferred() noexcept {
     Thing thing = m_registry.handout();
     m_cmd_batch.record_handout(thing);
     return thing;
@@ -1199,7 +1279,7 @@ inline void World::commit_detach_child_from(CmdBatch &batch, bool invert) noexce
     }
 }
 
-inline void World::commit_handout_from(CmdBatch & /*batch*/, bool /* invert */) noexcept {
+inline void World::commit_spawn_from(CmdBatch & /*batch*/, bool /* invert */) noexcept {
     // No-op: things handed out via `handout_deferred()` are already alive.
     // This method exists for symmetry and potential future hooks.
 }
@@ -1230,7 +1310,7 @@ inline void World::commit_kill_from(CmdBatch &batch, bool invert) noexcept {
     }
 }
 
-inline void World::commit_future_from(CmdBatch &batch) noexcept {
+inline void World::commit_from(CmdBatch &batch) noexcept {
     commit_mutate_from(batch);
     commit_destroy_from(batch);
     commit_insert_from(batch);
@@ -1240,7 +1320,7 @@ inline void World::commit_future_from(CmdBatch &batch) noexcept {
     batch.reset();
 }
 
-inline void World::commit_past_from(CmdBatch &batch) noexcept {
+inline void World::commit_inverse_from(CmdBatch &batch) noexcept {
     commit_kill_from(batch, true);
     commit_detach_child_from(batch, true);
     commit_attach_child_from(batch, true);
@@ -1268,6 +1348,77 @@ inline void World::destroy(Thing thing) noexcept {
     if (current) [[likely]] {
         m_cmd_batch.record_destroy<T>(thing, *current);
     }
+}
+
+// -------------------------------------------------- Raw Part Operations
+
+inline bool World::has_raw(TypeIdx tidx, Thing thing) const noexcept {
+    return m_registry.has_raw(tidx, thing);
+}
+
+inline void *World::try_emplace_now_raw(TypeIdx tidx, Thing thing, void *part) noexcept {
+    m_registry.insert_raw(tidx, thing, part);
+    return m_registry.get_raw(tidx, thing);
+}
+
+inline void *World::try_emplace_now_raw(TypeIdx tidx, Thing thing, const void *part) noexcept {
+    m_registry.insert_raw(tidx, thing, part);
+    return m_registry.get_raw(tidx, thing);
+}
+
+inline void *World::emplace_now_raw(TypeIdx tidx, Thing thing, void *part) noexcept {
+    m_registry.emplace_unchecked_raw(tidx, thing, part);
+    return m_registry.get_unchecked_raw(tidx, thing);
+}
+
+inline void *World::emplace_now_raw(TypeIdx tidx, Thing thing, const void *part) noexcept {
+    m_registry.emplace_unchecked_raw(tidx, thing, part);
+    return m_registry.get_unchecked_raw(tidx, thing);
+}
+
+inline void World::insert_now_raw(TypeIdx tidx, Thing thing, void *part) noexcept {
+    m_registry.insert_raw(tidx, thing, part);
+}
+
+inline void World::insert_now_raw(TypeIdx tidx, Thing thing, const void *part) noexcept {
+    m_registry.insert_raw(tidx, thing, part);
+}
+
+inline bool World::destroy_now_raw(TypeIdx tidx, Thing thing) noexcept {
+    bool had = m_registry.has_raw(tidx, thing);
+    m_registry.destroy_raw(tidx, thing);
+    return had;
+}
+
+inline void World::destroy_now_unchecked_raw(TypeIdx tidx, Thing thing) noexcept {
+    m_registry.destroy_unchecked_raw(tidx, thing);
+}
+
+inline void *World::try_get_raw(TypeIdx tidx, Thing thing) noexcept {
+    return m_registry.get_raw(tidx, thing);
+}
+
+inline void *World::get_raw(TypeIdx tidx, Thing thing) noexcept {
+    return m_registry.get_unchecked_raw(tidx, thing);
+}
+
+// ------------------------------------------ Raw Deferred Part Operations
+
+inline void World::insert_raw(TypeIdx tidx, Thing thing, const void *part) noexcept {
+    m_cmd_batch.record_insert_raw(thing, tidx, part);
+}
+
+inline void World::insert_raw(TypeIdx tidx, Thing thing, void *part) noexcept {
+    m_cmd_batch.record_insert_raw(thing, tidx, part);
+}
+
+inline void World::destroy_raw(TypeIdx tidx, Thing thing, const void *current) noexcept {
+    m_cmd_batch.record_destroy_raw(thing, tidx, current);
+}
+
+inline void World::mutate_raw(TypeIdx tidx, Thing thing, const void *prev,
+                              const void *next) noexcept {
+    m_cmd_batch.record_mutate_raw(thing, tidx, prev, next);
 }
 
 inline void World::attach_child_now(Thing parent, Thing child) noexcept {
@@ -1542,12 +1693,12 @@ inline Scope::Scope(World *world) noexcept
     : m_world(world) {
 }
 
-inline Thing Scope::handout() noexcept {
-    return m_world->handout();
+inline Thing Scope::spawn() noexcept {
+    return m_world->spawn();
 }
 
-inline Thing Scope::handout_deferred() noexcept {
-    return m_world->handout_deferred();
+inline Thing Scope::spawn_deferred() noexcept {
+    return m_world->spawn_deferred();
 }
 
 inline void Scope::kill(Thing thing) noexcept {
