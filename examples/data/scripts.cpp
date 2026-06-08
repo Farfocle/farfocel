@@ -63,7 +63,7 @@ struct Game {
 
     void init() {
         player = world.spawn();
-        world.insert_script(player, PlayerScript(10));
+        world.insert(player, PlayerScript(10));
         world.commit();
     }
 

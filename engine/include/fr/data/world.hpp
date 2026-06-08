@@ -225,45 +225,6 @@ public:
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
 
-    // ----------------------------------------------------------------- Scripts
-
-    /// @brief Attaches a script to a thing.
-    template <typename S>
-    void insert_script(Thing thing, S script) noexcept;
-
-    /**
-     * @brief Removes a script from a thing..
-     * @note If the thing is dead; does nothing.
-     * @note If the thing is nil; does nothing.
-     * @note If the thing does have a script `S`; does nothing.
-     */
-    template <typename S>
-    void destroy_script(Thing thing) noexcept;
-
-    /// @brief Inserts a script immediately; returns pointer (nullptr if dead).
-    template <typename S>
-    S *try_emplace_script_now(Thing thing, S script) noexcept;
-
-    /// @brief Inserts a script immediately without checks; returns reference.
-    /// @pre thing is alive and does NOT yet have script `S`.
-    template <typename S>
-    S &emplace_script_now(Thing thing, S script) noexcept;
-
-    /// @brief Inserts a script immediately (checked, void return).
-    template <typename S>
-    void insert_script_now(Thing thing, S script) noexcept;
-
-    /// @brief Destroys a script immediately; returns false if not found.
-    template <typename S>
-    bool try_destroy_script_now(Thing thing) noexcept;
-
-    /**
-     * @brief Destroys a script immediately.
-     * @pre thing is alive and has script `S`.
-     */
-    template <typename S>
-    void destroy_script_now(Thing thing) noexcept;
-
     // ---------------------------------------------------------------- Resources
 
     /**
@@ -914,45 +875,6 @@ public:
      */
     void run() noexcept;
 
-    // ----------------------------------------------------------------- Scripts
-
-    /// @brief Attaches a script to a thing.
-    template <IsScript S>
-    void insert_script(Thing thing, S script) noexcept;
-
-    /**
-     * @brief Removes a script from a thing..
-     * @note If the thing is dead; does nothing.
-     * @note If the thing is nil; does nothing.
-     * @note If the thing does have a script `S`; does nothing.
-     */
-    template <IsScript S>
-    void destroy_script(Thing thing) noexcept;
-
-    /// @brief Inserts a script immediately; returns pointer (nullptr if dead).
-    template <IsScript S>
-    S *try_emplace_script_now(Thing thing, S script) noexcept;
-
-    /// @brief Inserts a script immediately without checks; returns reference.
-    /// @pre thing is alive and does NOT yet have script `S`.
-    template <IsScript S>
-    S &emplace_script_now(Thing thing, S script) noexcept;
-
-    /// @brief Inserts a script immediately (checked, void return).
-    template <IsScript S>
-    void insert_script_now(Thing thing, S script) noexcept;
-
-    /// @brief Destroys a script immediately; returns false if not found.
-    template <IsScript S>
-    bool try_destroy_script_now(Thing thing) noexcept;
-
-    /**
-     * @brief Destroys a script immediately.
-     * @pre thing is alive and has script `S`.
-     */
-    template <IsScript S>
-    void destroy_script_now(Thing thing) noexcept;
-
     // --------------------------------------------------------------- Resources
 
     /**
@@ -1044,6 +966,10 @@ private:
     void do_update_hierarchy(HierarchyDepth parent_depth, Thing child) noexcept;
     void do_detach_from_hierarchy_unchecked(Thing thing) noexcept;
 
+    /// @brief Registers lifecycle systems for script type `S` if not already registered.
+    template <IsScript S>
+    void do_register_script_type() noexcept;
+
     // ----------------------------------------------------------------- Members
     Options m_options{};
     impl::Registry m_registry;
@@ -1130,33 +1056,105 @@ inline bool World::has(Thing thing) const noexcept {
 
 template <typename T, typename... Args>
 inline T *World::try_emplace_now(Thing thing, Args &&...args) noexcept {
-    return m_registry.emplace_checked<T>(thing, std::forward<Args>(args)...);
+    if constexpr (IsScript<T>) {
+        T script(std::forward<Args>(args)...);
+        script.self = thing;
+        script.scope = Scope(this);
+
+        if constexpr (ScriptHasOnInit<T>) {
+            script.on_init();
+        }
+
+        do_register_script_type<T>();
+
+        return m_registry.emplace_checked<T>(thing, script);
+    } else {
+        return m_registry.emplace_checked<T>(thing, std::forward<Args>(args)...);
+    }
 }
 
 template <typename T, typename... Args>
 inline T &World::emplace_now(Thing thing, Args &&...args) noexcept {
-    return m_registry.emplace_unchecked<T>(thing, std::forward<Args>(args)...);
+    if constexpr (IsScript<T>) {
+        T script(std::forward<Args>(args)...);
+        script.self = thing;
+        script.scope = Scope(this);
+
+        if constexpr (ScriptHasOnInit<T>) {
+            script.on_init();
+        }
+
+        do_register_script_type<T>();
+
+        return m_registry.emplace_unchecked<T>(thing, script);
+    } else {
+        return m_registry.emplace_unchecked<T>(thing, std::forward<Args>(args)...);
+    }
 }
 
 template <typename T>
 inline void World::insert_now(Thing thing, const T &part) noexcept {
-    m_registry.emplace_checked<T>(thing, part);
+    if constexpr (IsScript<T>) {
+        T script = part;
+        script.self = thing;
+        script.scope = Scope(this);
+
+        if constexpr (ScriptHasOnInit<T>) {
+            script.on_init();
+        }
+
+        do_register_script_type<T>();
+
+        m_registry.emplace_checked<T>(thing, script);
+    } else {
+        m_registry.emplace_checked<T>(thing, part);
+    }
 }
 
 template <typename T>
 inline void World::insert_now(Thing thing, T &&part) noexcept {
-    m_registry.emplace_checked<T>(thing, std::forward<T>(part));
+    if constexpr (IsScript<T>) {
+        T script = std::move(part);
+        script.self = thing;
+        script.scope = Scope(this);
+        if constexpr (ScriptHasOnInit<T>) {
+            script.on_init();
+        }
+        do_register_script_type<T>();
+        m_registry.emplace_checked<T>(thing, script);
+    } else {
+        m_registry.emplace_checked<T>(thing, std::forward<T>(part));
+    }
 }
 
 template <typename T>
 inline bool World::try_destroy_now(Thing thing) noexcept {
-    return m_registry.destroy_checked<T>(thing);
+    if constexpr (IsScript<T>) {
+        if (!m_registry.has<T>(thing)) {
+            return false;
+        }
+        if constexpr (ScriptHasOnDestroy<T>) {
+            m_registry.get_unchecked<T>(thing).on_destroy();
+        }
+        m_registry.destroy_unchecked<T>(thing);
+        return true;
+    } else {
+        return m_registry.destroy_checked<T>(thing);
+    }
 }
 
 template <typename T>
 inline void World::destroy_now(Thing thing) noexcept {
-    [[maybe_unused]] bool ok = m_registry.destroy_checked<T>(thing);
-    FR_ASSERT(ok, "destroy_now: thing is nil, dead, or does not have the part");
+    if constexpr (IsScript<T>) {
+        FR_ASSERT(m_registry.has<T>(thing), "destroy_now: thing does not have the script");
+        if constexpr (ScriptHasOnDestroy<T>) {
+            m_registry.get_unchecked<T>(thing).on_destroy();
+        }
+        m_registry.destroy_unchecked<T>(thing);
+    } else {
+        [[maybe_unused]] bool ok = m_registry.destroy_checked<T>(thing);
+        FR_ASSERT(ok, "destroy_now: thing is nil, dead, or does not have the part");
+    }
 }
 
 template <typename T>
@@ -1364,6 +1362,7 @@ inline void World::commit_kill_from(CmdBatch &batch, bool invert) noexcept {
             m_registry.spawn();
             (void)inverse;
         }
+
         return;
     }
 
@@ -1398,22 +1397,62 @@ inline void World::commit_inverse_from(CmdBatch &batch) noexcept {
 
 template <typename T>
 inline void World::insert(Thing thing, const T &part) noexcept {
-    m_registry.ensure<T>(); // lazily register pool + PartMeta on first use
-    m_cmd_batch.record_insert<T>(thing, part);
+    if constexpr (IsScript<T>) {
+        T script = part;
+        script.self = thing;
+        script.scope = Scope(this);
+
+        if constexpr (ScriptHasOnInit<T>) {
+            script.on_init();
+        }
+
+        do_register_script_type<T>();
+
+        m_registry.ensure<T>();
+        m_cmd_batch.record_insert<T>(thing, script);
+    } else {
+        m_registry.ensure<T>();
+        m_cmd_batch.record_insert<T>(thing, part);
+    }
 }
 
 template <typename T>
 inline void World::insert(Thing thing, T &&part) noexcept {
-    m_registry.ensure<T>();
-    m_cmd_batch.record_insert<T>(thing, std::forward<T>(part));
+    if constexpr (IsScript<T>) {
+        T script = std::move(part);
+        script.self = thing;
+        script.scope = Scope(this);
+
+        if constexpr (ScriptHasOnInit<T>) {
+            script.on_init();
+        }
+
+        do_register_script_type<T>();
+
+        m_registry.ensure<T>();
+        m_cmd_batch.record_insert<T>(thing, script);
+    } else {
+        m_registry.ensure<T>();
+        m_cmd_batch.record_insert<T>(thing, std::forward<T>(part));
+    }
 }
 
 template <typename T>
 inline void World::destroy(Thing thing) noexcept {
     T *current = m_registry.get_checked<T>(thing);
-    if (current) [[likely]] {
-        m_cmd_batch.record_destroy<T>(thing, *current);
+    if (!current) [[unlikely]] {
+        return;
     }
+
+    if constexpr (IsScript<T>) {
+        if constexpr (ScriptHasOnDestroy<T>) {
+            if (!thing.is_nil()) {
+                current->on_destroy();
+            }
+        }
+    }
+
+    m_cmd_batch.record_destroy<T>(thing, *current);
 }
 
 // -------------------------------------------------- Raw Part Operations
@@ -1692,208 +1731,37 @@ inline void World::run() noexcept {
 }
 
 template <IsScript S>
-inline void World::insert_script(Thing thing, S script) noexcept {
+inline void World::do_register_script_type() noexcept {
     TypeIdx tidx = TypeIdx::from_type<S>();
-    script.self = thing;
-    script.scope = Scope(this);
-
-    if constexpr (ScriptHasOnInit<S>) {
-        script.on_init();
-    }
-
-    if (!m_script_registry.check_bit(tidx.idx())) {
-        if constexpr (ScriptHasOnPostUpdate<S>) {
-            schedule(Stage::PreUpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_pre_update();
-                }
-            });
-        }
-
-        if constexpr (ScriptHasOnUpdate<S>) {
-            schedule(Stage::UpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_update();
-                }
-            });
-        }
-
-        if constexpr (ScriptHasOnPostUpdate<S>) {
-            schedule(Stage::PostUpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_post_update();
-                }
-            });
-        }
-
-        m_script_registry.one_bit(tidx.idx());
-    }
-
-    insert<S>(thing, script);
-}
-
-template <IsScript S>
-inline void World::destroy_script(Thing thing) noexcept {
-    if (thing.is_nil()) [[unlikely]] {
+    if (m_script_registry.check_bit(tidx.idx())) {
         return;
     }
 
-    if (m_registry.is_dead(thing)) [[unlikely]] {
-        return;
+    if constexpr (ScriptHasOnPreUpdate<S>) {
+        schedule(Stage::PreUpdateScript, [](Scope scope) {
+            for (auto [t, s] : scope.query<S>()) {
+                s.on_pre_update();
+            }
+        });
     }
 
-    if (!m_registry.has<S>(thing)) [[unlikely]] {
-        return;
+    if constexpr (ScriptHasOnUpdate<S>) {
+        schedule(Stage::UpdateScript, [](Scope scope) {
+            for (auto [t, s] : scope.query<S>()) {
+                s.on_update();
+            }
+        });
     }
 
-    if constexpr (ScriptHasOnDestroy<S>) {
-        m_registry.get_unchecked<S>(thing).on_destroy();
+    if constexpr (ScriptHasOnPostUpdate<S>) {
+        schedule(Stage::PostUpdateScript, [](Scope scope) {
+            for (auto [t, s] : scope.query<S>()) {
+                s.on_post_update();
+            }
+        });
     }
 
-    m_registry.destroy_checked<S>(thing);
-}
-
-template <IsScript S>
-inline S *World::try_emplace_script_now(Thing thing, S script) noexcept {
-    TypeIdx tidx = TypeIdx::from_type<S>();
-
-    script.self = thing;
-    script.scope = Scope(this);
-
-    if constexpr (ScriptHasOnInit<S>) {
-        script.on_init();
-    }
-
-    if (!m_script_registry.check_bit(tidx.idx())) {
-        if constexpr (ScriptHasOnPreUpdate<S>) {
-            schedule(Stage::PreUpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_pre_update();
-                }
-            });
-        }
-
-        if constexpr (ScriptHasOnUpdate<S>) {
-            schedule(Stage::UpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_update();
-                }
-            });
-        }
-
-        if constexpr (ScriptHasOnPostUpdate<S>) {
-            schedule(Stage::PostUpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_post_update();
-                }
-            });
-        }
-
-        m_script_registry.one_bit(tidx.idx());
-    }
-    return m_registry.emplace_checked<S>(thing, script);
-}
-
-template <IsScript S>
-inline S &World::emplace_script_now(Thing thing, S script) noexcept {
-    TypeIdx tidx = TypeIdx::from_type<S>();
-
-    script.self = thing;
-    script.scope = Scope(this);
-
-    if constexpr (ScriptHasOnInit<S>) {
-        script.on_init();
-    }
-
-    if (!m_script_registry.check_bit(tidx.idx())) {
-        if constexpr (ScriptHasOnPreUpdate<S>) {
-            schedule(Stage::PreUpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_pre_update();
-                }
-            });
-        }
-
-        if constexpr (ScriptHasOnUpdate<S>) {
-            schedule(Stage::UpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_update();
-                }
-            });
-        }
-
-        if constexpr (ScriptHasOnPostUpdate<S>) {
-            schedule(Stage::PostUpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_post_update();
-                }
-            });
-        }
-
-        m_script_registry.one_bit(tidx.idx());
-    }
-
-    return m_registry.emplace_unchecked<S>(thing, script);
-}
-
-template <IsScript S>
-inline void World::insert_script_now(Thing thing, S script) noexcept {
-    TypeIdx tidx = TypeIdx::from_type<S>();
-    script.self = thing;
-    script.scope = Scope(this);
-    if constexpr (ScriptHasOnInit<S>) {
-        script.on_init();
-    }
-    if (!m_script_registry.check_bit(tidx.idx())) {
-        if constexpr (ScriptHasOnPreUpdate<S>) {
-            schedule(Stage::PreUpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_pre_update();
-                }
-            });
-        }
-        if constexpr (ScriptHasOnUpdate<S>) {
-            schedule(Stage::UpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_update();
-                }
-            });
-        }
-        if constexpr (ScriptHasOnPostUpdate<S>) {
-            schedule(Stage::PostUpdateScript, [](Scope scope) {
-                for (auto [t, s] : scope.query<S>()) {
-                    s.on_post_update();
-                }
-            });
-        }
-        m_script_registry.one_bit(tidx.idx());
-    }
-    m_registry.emplace_checked<S>(thing, script);
-}
-
-template <IsScript S>
-inline bool World::try_destroy_script_now(Thing thing) noexcept {
-    if (thing.is_nil() || m_registry.is_dead(thing) || !m_registry.has<S>(thing)) [[unlikely]] {
-        return false;
-    }
-
-    if constexpr (ScriptHasOnDestroy<S>) {
-        m_registry.get_unchecked<S>(thing).on_destroy();
-    }
-
-    m_registry.destroy_unchecked<S>(thing);
-    return true;
-}
-
-template <IsScript S>
-inline void World::destroy_script_now(Thing thing) noexcept {
-    FR_ASSERT(m_registry.has<S>(thing), "thing does not have script S");
-
-    if constexpr (ScriptHasOnDestroy<S>) {
-        m_registry.get_unchecked<S>(thing).on_destroy();
-    }
-
-    m_registry.destroy_unchecked<S>(thing);
+    m_script_registry.one_bit(tidx.idx());
 }
 
 // ================================================ Scope Method Implementations
@@ -2034,41 +1902,6 @@ inline auto Scope::top_down_query(QueryOptions options) noexcept {
 template <typename... Include>
 inline auto Scope::bottom_up_query(QueryOptions options) noexcept {
     return m_world->bottom_up_query<Include...>(options);
-}
-
-template <typename S>
-inline void Scope::insert_script(Thing thing, const S script) noexcept {
-    m_world->insert_script(thing, script);
-}
-
-template <typename S>
-inline void Scope::destroy_script(Thing thing) noexcept {
-    m_world->destroy_script<S>(thing);
-}
-
-template <typename S>
-inline S *Scope::try_emplace_script_now(Thing thing, S script) noexcept {
-    return m_world->try_emplace_script_now(thing, script);
-}
-
-template <typename S>
-inline S &Scope::emplace_script_now(Thing thing, S script) noexcept {
-    return m_world->emplace_script_now(thing, script);
-}
-
-template <typename S>
-inline void Scope::insert_script_now(Thing thing, S script) noexcept {
-    m_world->insert_script_now(thing, script);
-}
-
-template <typename S>
-inline bool Scope::try_destroy_script_now(Thing thing) noexcept {
-    return m_world->try_destroy_script_now<S>(thing);
-}
-
-template <typename S>
-inline void Scope::destroy_script_now(Thing thing) noexcept {
-    m_world->destroy_script_now<S>(thing);
 }
 
 template <typename T>
