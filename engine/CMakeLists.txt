@@ -79,6 +79,7 @@ set(ENGINE_HEADERS
 set(ENGINE_SOURCES
 #### core
     "src/core/ctx.cpp"
+    "src/core/hash.cpp"
 
 #### data
     "src/data/cmd.cpp"
@@ -108,6 +109,7 @@ target_link_libraries(engine PRIVATE glad)
 target_link_libraries(engine PUBLIC glm::glm)
 target_link_libraries(engine PUBLIC SDL3::SDL3-static)
 target_link_libraries(engine PRIVATE cgltf)
+target_link_libraries(engine PUBLIC wyhash)
 
 target_include_directories(engine
     PUBLIC "include"
