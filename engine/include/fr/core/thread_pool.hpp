@@ -141,6 +141,7 @@ private:
                 }
 
                 task = std::move(m_tasks.front());
+                m_tasks.dequeue();
                 ++m_running_count;
             }
 
