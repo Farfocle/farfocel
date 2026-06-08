@@ -5,6 +5,7 @@
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
 
+
 S32 main() {
     fr::init_core_ctx();
 

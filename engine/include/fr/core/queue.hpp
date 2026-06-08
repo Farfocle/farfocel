@@ -395,7 +395,11 @@ private:
 
         ++m_size;
         m_front = 0;
-        m_back = m_size;
+
+        // m_size now equals m_array.size() (the queue is full). Applying modulo keeps m_back
+        // inside [0, slots), so the next emplace_enqueue after a dequeue doesn't write past
+        // the end of the backing array.
+        m_back = m_size % m_array.size();
         return inserted;
     }
 

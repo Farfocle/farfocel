@@ -10,6 +10,7 @@ set(BENCH_SOURCES
     "radix_sort.cpp"
     "serialization.cpp"
     "slice.cpp"
+    "thread_pool.cpp"
     "unique_ptr.cpp"
 )
 
