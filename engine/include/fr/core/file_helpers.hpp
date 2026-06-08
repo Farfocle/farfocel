@@ -6,9 +6,11 @@
 
 #pragma once
 
+#include "fr/core/optional.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/typedefs.hpp"
+#include <sys/stat.h>
 
 namespace fr::file_helpers {
 
@@ -114,6 +116,15 @@ inline void normalize(String &path) noexcept {
     }
 
     return filename.view_to(last_dot - 1);
+}
+
+// 1. get_file_size - rozmiar pliku w bajtach przy użyciu stat
+inline Optional<S64> get_file_size(String path) {
+    struct stat stat_buf;
+    int rc = stat(path.c_str(), &stat_buf);
+
+    if(rc == 0) return stat_buf.st_size;
+    return fr::none();
 }
 
 } // namespace fr::file_helpers

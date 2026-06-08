@@ -4,12 +4,12 @@
 #include "fr/core/ctx.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/core/unique_ptr.hpp"
-#include "fr/logger/sinks/standard_sink.hpp"
+#include "fr/logger/sinks/pretty_sink.hpp"
 
 S32 main() {
     fr::init_core_ctx();
 
-    auto standard_sink = fr::make_unique<fr::StandardSink>(fr::StandardSink::Options{});
+    auto standard_sink = fr::make_unique<fr::PrettySink>(fr::PrettySink::Options{});
     fr::get_ambient_ctx().logger->add_sink(std::move(standard_sink));
 
     {
@@ -19,6 +19,14 @@ S32 main() {
         FR_LOG("Extension: {}", fr::file_helpers::get_extension(path));
         FR_LOG("Parent path: {}", fr::file_helpers::get_parent_path(path));
         FR_LOG("Stem: {}", fr::file_helpers::get_stem(path));
+
+        auto sz = fr::file_helpers::get_file_size(path);
+        if(sz) {
+            FR_LOG("Size: {}", sz.unwrap());
+        } else {
+            FR_LOG_ERR("Cannot get file size")
+        }
+
     }
 
     fr::shutdown_core_ctx();
