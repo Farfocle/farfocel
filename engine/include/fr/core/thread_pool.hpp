@@ -43,6 +43,14 @@ private:
     std::atomic<USize> m_running_count{0};
     bool m_stop{false};
 
+    /**
+     * The ambient context of the thread that constructed this pool. Captured once at construction
+     * time (on the spawning thread, where the ctx is valid) and installed on every worker thread at
+     * the start of `do_work()`. This gives workers access to the same allocator, logger, and other
+     * ctx-bound services as the owner thread - without requiring callers to think about it.
+     */
+    Ctx *m_ctx{nullptr};
+
     std::mutex m_mutex{};
     std::condition_variable m_work_cv{};
     std::condition_variable m_done_cv{};
@@ -57,7 +65,14 @@ public:
     explicit ThreadPool(Alloc *alloc,
                         USize thread_count = std::thread::hardware_concurrency()) noexcept
         : m_tasks(alloc),
-          m_thread_count(thread_count) {
+          m_thread_count(thread_count),
+
+          // Snapshot the ambient context of the *constructing* thread. This must happen here,
+          // before any worker threads are spawned, because get_ambient_ctx_mut() reads a
+          // thread_local pointer that is only valid on the thread that called init_core_ctx()
+          // (or had `set_ambient_ctx()` called on it). Worker threads start with a null
+          // thread_local, so they cannot safely call `get_ambient_ctx()` themselves.
+          m_ctx(&get_ambient_ctx_mut()) {
         for (USize i = 0; i < m_thread_count; ++i) {
             m_threads[i] = std::thread([this] { do_work(); });
         }
@@ -129,6 +144,16 @@ private:
     // --------------------------------------------------------------- Internals
 
     void do_work() {
+        // Install the spawning thread's ambient context onto this worker thread. fr's ambient
+        // context is thread_local, so each new std::thread starts with a null pointer. Without
+        // this call, any ctx-dependent operation inside a task (allocations via fr containers,
+        // `FR_LOG`, etc.) would dereference a null pointer and corrupt the heap or crash.
+        //
+        // We set it once here, before entering the work loop, so every task this thread ever
+        // runs inherits the same context — matching the behavior a caller would expect if the
+        // work were running on the main thread.
+        set_ambient_ctx(m_ctx);
+
         while (true) {
             Task task;
 
