@@ -37,6 +37,7 @@ set(ENGINE_HEADERS
     "include/fr/core/string.hpp"
     "include/fr/core/string_base.hpp"
     "include/fr/core/string_view.hpp"
+    "include/fr/core/thread_pool.hpp"
     "include/fr/core/time.hpp"
     "include/fr/core/tuple.hpp"
     "include/fr/core/typedefs.hpp"
@@ -112,7 +113,7 @@ target_include_directories(engine
     PUBLIC "include"
     PRIVATE "src"
     # this is quite ugly, but i couldn't get aliases to work properly
-    PRIVATE "${CMAKE_SOURCE_DIR}/3rdparty/glad/include"
+    "${CMAKE_SOURCE_DIR}/3rdparty/glad/include"
 )
 
 if(BUILD_SHARED_LIBS)
