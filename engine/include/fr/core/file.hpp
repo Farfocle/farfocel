@@ -11,7 +11,7 @@
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/typedefs.hpp"
-#include <stdio.h>
+#include <cstdio>
 #include <sys/stat.h>
 
 namespace fr::file {
@@ -28,6 +28,13 @@ namespace impl {
     }
     return StringView::npos;
 }
+
+struct ScopedFile {
+    FILE* handle;
+    explicit ScopedFile(FILE* f) : handle(f) {}
+    ~ScopedFile() { if (handle) std::fclose(handle); }
+    operator FILE*() const { return handle; }
+};
 } // namespace impl
 
 /**
@@ -124,21 +131,17 @@ inline void normalize(String &path) noexcept {
  */
 [[nodiscard]] inline StringView get_extension(StringView path) noexcept {
     StringView filename = get_filename(path);
-    USize dot = filename.find('.');
-
-    if (dot == StringView::npos) {
+    if (filename.is_empty()) {
         return StringView();
     }
 
-    USize last_dot = dot;
-    while (true) {
-        USize next_dot = filename.find('.', last_dot + 1);
-        if (next_dot == StringView::npos)
-            break;
-        last_dot = next_dot;
+    for (USize i = filename.size(); i-- > 0;) {
+        if (filename[i] == '.') {
+            if (i == 0) break; // Hidden file edge case (for example .gitignore)
+            return filename.view_from(i + 1);
+        }
     }
-
-    return filename.view_from(last_dot + 1);
+    return StringView();
 }
 
 /**
@@ -146,27 +149,23 @@ inline void normalize(String &path) noexcept {
  */
 [[nodiscard]] inline StringView get_stem(StringView path) noexcept {
     StringView filename = get_filename(path);
-    USize dot = filename.find('.');
-
-    if (dot == StringView::npos || dot == 0) {
+    if (filename.is_empty()) {
         return filename;
     }
 
-    USize last_dot = dot;
-    while (true) {
-        USize next_dot = filename.find('.', last_dot + 1);
-        if (next_dot == StringView::npos)
-            break;
-        last_dot = next_dot;
+    for (USize i = filename.size(); i-- > 0;) {
+        if (filename[i] == '.') {
+            if (i == 0) break; // Hidden file edge case
+            return filename.view_to(i - 1);
+        }
     }
-
-    return filename.view_to(last_dot - 1);
+    return filename;
 }
 
 /**
  * @brief Gets file size
  */
-[[nodiscard]] inline Optional<S64> get_file_size(String path) {
+[[nodiscard]] inline Optional<S64> get_file_size(const String& path) {
     struct stat stat_buf;
     int rc = stat(path.c_str(), &stat_buf);
 
@@ -181,32 +180,31 @@ inline void normalize(String &path) noexcept {
  * @param path Path to the file
  */
 [[nodiscard]] inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(Alloc *alloc,
-                                                                         const fr::String path) {
-    FILE *file = std::fopen(path.c_str(), "rb");
+                                                                         const fr::String& path) {
+    impl::ScopedFile file(std::fopen(path.c_str(), "rb"));
     if (!file) {
         return fr::none();
     }
 
-    auto sz = get_file_size(path);
-    if (sz.is_none())
+    std::fseek(file, 0, SEEK_END);
+    long size = std::ftell(file);
+    std::rewind(file);
+
+    if (size < 0) {
         return fr::none();
-    auto size = sz.unwrap();
-
-    // empty file edge case
-    if (size == 0)
-        return fr::DynamicArray<Byte>::with_alloc(alloc);
-
-    auto buffer = fr::DynamicArray<Byte>::with_size(alloc, size);
-
-    if (size > 0) {
-        USize bytesRead = std::fread(buffer.data(), 1, size, file);
-        if (bytesRead < static_cast<USize>(size)) {
-            std::fclose(file);
-            return fr::none();
-        }
     }
 
-    std::fclose(file);
+    if (size == 0) {
+        return fr::DynamicArray<Byte>::with_alloc(alloc);
+    }
+
+    auto buffer = fr::DynamicArray<Byte>::with_size(alloc, static_cast<USize>(size));
+
+    USize bytesRead = std::fread(buffer.data(), 1, static_cast<USize>(size), file);
+    if (bytesRead < static_cast<USize>(size)) {
+        return fr::none();
+    }
+
     return buffer;
 }
 
@@ -214,7 +212,7 @@ inline void normalize(String &path) noexcept {
  * @brief Reads all bytes to a DynamicArray.
  * @param path Path to the file
  */
-[[nodiscard]] inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(const fr::String path) {
+[[nodiscard]] inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(const fr::String& path) {
     return read_all_bytes(get_ambient_ctx().alloc, path);
 }
 
@@ -223,34 +221,32 @@ inline void normalize(String &path) noexcept {
  * @param alloc Pointer to the allocator to use.
  * @param path Path to the file
  */
-[[nodiscard]] inline fr::Optional<fr::String> read_all_text(Alloc *alloc, const fr::String path) {
-    FILE *file = std::fopen(path.c_str(), "rb");
+[[nodiscard]] inline fr::Optional<fr::String> read_all_text(Alloc *alloc, const fr::String& path) {
+    impl::ScopedFile file(std::fopen(path.c_str(), "rb"));
     if (!file) {
         return fr::none();
     }
 
-    auto sz = get_file_size(path);
-    if (sz.is_none()) {
-        std::fclose(file);
+    std::fseek(file, 0, SEEK_END);
+    long size = std::ftell(file);
+    std::rewind(file);
+
+    if (size < 0) {
         return fr::none();
     }
 
-    auto size = sz.unwrap();
-
-    // empty file edge case
-    if (size == 0)
+    if (size == 0) {
         return fr::String::with_alloc(alloc);
+    }
 
-    auto result = fr::String::with_capacity(alloc, size);
+    auto result = fr::String::with_capacity(alloc, static_cast<USize>(size));
+    result.grow_default(static_cast<USize>(size));
 
-    result.grow_default(size);
-    USize bytesRead = std::fread(result.data(), 1, size, file);
+    USize bytesRead = std::fread(result.data(), 1, static_cast<USize>(size), file);
     if (bytesRead < static_cast<USize>(size)) {
-        std::fclose(file);
         return fr::none();
     }
 
-    std::fclose(file);
     return result;
 }
 
@@ -258,7 +254,7 @@ inline void normalize(String &path) noexcept {
  * @brief Reads all text from a file into a String.
  * @param path Path to the file
  */
-[[nodiscard]] inline fr::Optional<fr::String> read_all_text(const fr::String path) {
+[[nodiscard]] inline fr::Optional<fr::String> read_all_text(const fr::String& path) {
     return read_all_text(get_ambient_ctx().alloc, path);
 }
 
@@ -268,8 +264,8 @@ inline void normalize(String &path) noexcept {
  * @param bytes Slice of elements to write.
  * @return True if the entire slice was written successfully, false otherwise.
  */
-inline bool write_all_bytes(const fr::String path, fr::Slice<Byte> bytes) noexcept {
-    FILE *file = std::fopen(path.c_str(), "wb");
+inline bool write_all_bytes(const fr::String& path, fr::Slice<Byte> bytes) noexcept {
+    impl::ScopedFile file(std::fopen(path.c_str(), "wb"));
     if (!file) {
         return false;
     }
@@ -279,12 +275,10 @@ inline bool write_all_bytes(const fr::String path, fr::Slice<Byte> bytes) noexce
     if (size > 0) {
         USize bytesWritten = std::fwrite(bytes.data(), 1, size, file);
         if (bytesWritten < size) {
-            std::fclose(file);
             return false;
         }
     }
 
-    std::fclose(file);
     return true;
 }
 
@@ -293,7 +287,7 @@ inline bool write_all_bytes(const fr::String path, fr::Slice<Byte> bytes) noexce
  * @param path Path to the file or directory.
  * @return True if file exists, false otherwise.
  */
-[[nodiscard]] inline bool exists(const fr::String &path) noexcept {
+[[nodiscard]] inline bool exists(const fr::String& path) noexcept {
     struct stat stat_buf;
     return stat(path.c_str(), &stat_buf) == 0;
 }

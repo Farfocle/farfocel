@@ -21,8 +21,8 @@ S32 main() {
 
     {
         // example path with mixed forward and backward slashes that will be normalized
-        fr::String readPath = "\\home\\jeffrey/Documents/shopping_list.txt";
-        fr::String writePath = "/home/jeffrey/Documents/shopping_list.txt";
+        fr::String readPath = "\\home\\staszek/Documents/inwokacja.txt";
+        fr::String writePath = "/home/staszek/Documents/shopping_list.txt";
         fr::file::normalize(readPath);
         fr::file::normalize(writePath);
 
