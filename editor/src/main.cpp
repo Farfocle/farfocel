@@ -5,45 +5,36 @@
  * project
  */
 
-#include "fr/asscooker/asscooker.hpp"
-
-#include "fr/core/ctx.hpp"
-#include "fr/core/macros.hpp"
-#include "fr/core/string.hpp"
-#include "fr/core/string_view.hpp"
-#include "fr/core/time.hpp"
-
-#include "fr/data/asset_manager.hpp"
-#include "fr/data/world.hpp"
-
-#include "fr/platform/input.hpp"
-#include "fr/platform/keycode.hpp"
-#include "fr/platform/window.hpp"
-
-#include "fr/renderer/render_device.hpp"
-#include "fr/renderer/render_queue.hpp"
-#include "fr/renderer/renderer.hpp"
-
-#include "fr/scene/camera_system.hpp"
-#include "fr/scene/render_parts.hpp"
-#include "fr/scene/render_system.hpp"
-
 #include <SDL3/SDL.h>
-
-#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <future>
-#include <string>
-
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 #include <imgui_impl_sdl3.h>
+#include <string>
+
+#include "fr/asscooker/asscooker.hpp"
+#include "fr/core/ctx.hpp"
+#include "fr/core/macros.hpp"
+#include "fr/core/string.hpp"
+#include "fr/core/string_view.hpp"
+#include "fr/core/time.hpp"
+#include "fr/data/asset_manager.hpp"
+#include "fr/data/world.hpp"
+#include "fr/platform/input.hpp"
+#include "fr/platform/keycode.hpp"
+#include "fr/platform/window.hpp"
+#include "fr/renderer/render_device.hpp"
+#include "fr/renderer/render_queue.hpp"
+#include "fr/renderer/renderer.hpp"
+#include "fr/scene/camera_system.hpp"
+#include "fr/scene/render_parts.hpp"
+#include "fr/scene/render_system.hpp"
 
 namespace fs = std::filesystem;
 
@@ -482,20 +473,20 @@ static void destroy_gpu_resources() {
 }
 
 static void create_camera(fr::World &world, EditorState &state) {
-    state.camera_entity = world.handout();
+    state.camera_entity = world.spawn();
 
-    fr::TransformPart &transform = world.emplace<fr::TransformPart>(state.camera_entity);
+    fr::TransformPart &transform = world.emplace_now<fr::TransformPart>(state.camera_entity);
     transform.position = glm::vec3(0.0f, 2.0f, 0.0f);
     transform.rotation = glm::quat(glm::radians(glm::vec3(0.0f, -90.0f, 0.0f)));
     transform.scale = glm::vec3(1.0f);
 
-    fr::CameraPart &camera = world.emplace<fr::CameraPart>(state.camera_entity);
+    fr::CameraPart &camera = world.emplace_now<fr::CameraPart>(state.camera_entity);
     camera.fov = 70.0f;
     camera.near_plane = 0.1f;
     camera.far_plane = 1000.0f;
     camera.is_main = true;
 
-    fr::FPSControllerPart &fps = world.emplace<fr::FPSControllerPart>(state.camera_entity);
+    fr::FPSControllerPart &fps = world.emplace_now<fr::FPSControllerPart>(state.camera_entity);
     fps.pitch = 0.0f;
     fps.yaw = -90.0f;
     fps.move_speed = 15.0f;
@@ -503,25 +494,25 @@ static void create_camera(fr::World &world, EditorState &state) {
 }
 
 static void create_lights(fr::World &world, EditorState &state) {
-    state.sun_entity = world.handout();
+    state.sun_entity = world.spawn();
 
-    fr::TransformPart &sun_transform = world.emplace<fr::TransformPart>(state.sun_entity);
+    fr::TransformPart &sun_transform = world.emplace_now<fr::TransformPart>(state.sun_entity);
     sun_transform.position = glm::vec3(0.0f);
     sun_transform.rotation = glm::quat(glm::radians(state.sun_rotation_deg));
     sun_transform.scale = glm::vec3(1.0f);
 
-    fr::DirectionalLightPart &sun = world.emplace<fr::DirectionalLightPart>(state.sun_entity);
+    fr::DirectionalLightPart &sun = world.emplace_now<fr::DirectionalLightPart>(state.sun_entity);
     sun.color = glm::vec3(1.0f, 0.95f, 0.9f);
     sun.intensity = 3.0f;
 
-    state.point_light_entity = world.handout();
+    state.point_light_entity = world.spawn();
 
-    fr::TransformPart &point_transform = world.emplace<fr::TransformPart>(state.point_light_entity);
+    fr::TransformPart &point_transform = world.emplace_now<fr::TransformPart>(state.point_light_entity);
     point_transform.position = state.point_light_position;
     point_transform.rotation = glm::quat(glm::vec3(0.0f));
     point_transform.scale = glm::vec3(1.0f);
 
-    fr::PointLightPart &point = world.emplace<fr::PointLightPart>(state.point_light_entity);
+    fr::PointLightPart &point = world.emplace_now<fr::PointLightPart>(state.point_light_entity);
     point.color = glm::vec3(1.0f, 0.9f, 0.7f);
     point.intensity = 5.0f;
     point.radius = 50.0f;
@@ -529,14 +520,14 @@ static void create_lights(fr::World &world, EditorState &state) {
     point.shadow_strength = 1.0f;
     point.shadow_bias = 0.005f;
 
-    state.spot_light_entity = world.handout();
+    state.spot_light_entity = world.spawn();
 
-    fr::TransformPart &spot_transform = world.emplace<fr::TransformPart>(state.spot_light_entity);
+    fr::TransformPart &spot_transform = world.emplace_now<fr::TransformPart>(state.spot_light_entity);
     spot_transform.position = state.spot_light_position;
     spot_transform.rotation = glm::quat(glm::radians(state.spot_light_rotation_deg));
     spot_transform.scale = glm::vec3(1.0f);
 
-    fr::SpotLightPart &spot = world.emplace<fr::SpotLightPart>(state.spot_light_entity);
+    fr::SpotLightPart &spot = world.emplace_now<fr::SpotLightPart>(state.spot_light_entity);
     spot.color = glm::vec3(1.0f, 0.95f, 0.85f);
     spot.intensity = 0.0f;
     spot.radius = 30.0f;
@@ -578,16 +569,16 @@ static void load_cooked_model(fr::World &world, fr::AssetManager &assets, Editor
     unload_model(world, assets, state);
 
     state.model_handle = mesh;
-    state.model_entity = world.handout();
+    state.model_entity = world.spawn();
 
-    fr::TransformPart &transform = world.emplace<fr::TransformPart>(state.model_entity);
+    fr::TransformPart &transform = world.emplace_now<fr::TransformPart>(state.model_entity);
     transform.position = glm::vec3(0.0f);
     transform.rotation = glm::quat(glm::vec3(0.0f));
     transform.scale = glm::vec3(1.0f);
 
-    world.emplace<fr::MeshPart>(state.model_entity, state.model_handle);
+    world.emplace_now<fr::MeshPart>(state.model_entity, state.model_handle);
 
-    fr::MaterialPart &material = world.emplace<fr::MaterialPart>(state.model_entity);
+    fr::MaterialPart &material = world.emplace_now<fr::MaterialPart>(state.model_entity);
     material.shading_model = state.shading_model;
 
     set_status_path(state, "Loaded model: ", fr::String::from_view(path).data());
