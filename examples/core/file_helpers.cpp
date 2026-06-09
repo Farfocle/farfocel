@@ -1,3 +1,9 @@
+/**
+ * @file file_helpers.cpp
+ * @author Stachu
+ * @brief Example showcasing fr::file usage.
+ */
+
 #include "fr/core/ctx.hpp"
 #include "fr/core/file.hpp"
 #include "fr/core/slice.hpp"
@@ -14,10 +20,24 @@ S32 main() {
     fr::get_ambient_ctx().logger->add_sink(std::move(standard_sink));
 
     {
-        fr::String readPath = "/home/jeffrey/Documents/shopping_list.txt";
+        // example path with mixed forward and backward slashes that will be normalized
+        fr::String readPath = "\\home\\jeffrey/Documents/shopping_list.txt";
         fr::String writePath = "/home/jeffrey/Documents/shopping_list.txt";
+        fr::file::normalize(readPath);
+        fr::file::normalize(writePath);
 
         FR_LOG("Full path: {}", readPath);
+
+        FR_LOG("Unix-normalized path: {}", fr::file::get_normalized_unix(readPath));
+        FR_LOG("Windows-normalized path: {}", fr::file::get_normalized_windows(readPath));
+        FR_LOG("Path for this platform: {}", fr::file::get_normalized(readPath));
+
+        if(fr::file::exists(readPath)) {
+            FR_LOG_OK("File exists!");
+        } else {
+            FR_LOG_WARN("File does not exist!");
+        }
+
         FR_LOG("Filename: {}", fr::file::get_filename(readPath));
         FR_LOG("Extension: {}", fr::file::get_extension(readPath));
         FR_LOG("Parent path: {}", fr::file::get_parent_path(readPath));
@@ -56,6 +76,7 @@ S32 main() {
             auto bytes_array = all_bytes.unwrap();
             fr::Slice<Byte> slice_to_save(bytes_array.data(), bytes_array.size());
 
+            fr::file::normalize(writePath);
             auto write_result = fr::file::write_all_bytes(writePath, slice_to_save);
 
             if (write_result) {
@@ -64,7 +85,8 @@ S32 main() {
                 FR_LOG_ERR("Error saving file.");
             }
         } else {
-            FR_LOG_WARN("write_all_bytes example will not be ran becuse it requires read_all_bytes to succeed")
+            FR_LOG_WARN("write_all_bytes example will not be ran becuse it requires read_all_bytes "
+                        "to succeed")
         }
     }
 

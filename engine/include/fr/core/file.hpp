@@ -1,5 +1,5 @@
 /**
- * @file file_helpers.hpp
+ * @file file.hpp
  * @author Stachu
  * @brief Basic helpers for file handling.
  */
@@ -11,6 +11,7 @@
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/typedefs.hpp"
+#include <stdio.h>
 #include <sys/stat.h>
 
 namespace fr::file {
@@ -30,9 +31,10 @@ namespace impl {
 } // namespace impl
 
 /**
- * @brief Normalizes the path by replacing all backslashes with forward slashes.
+ * @brief Normalizes the path for Unix-like systems by replacing all backslashes with forward
+ * slashes.
  */
-inline void normalize(String &path) noexcept {
+inline void normalize_unix(String &path) noexcept {
     USize sz = path.size();
     for (USize i = 0; i < sz; ++i) {
         if (path[i] == '\\') {
@@ -42,11 +44,53 @@ inline void normalize(String &path) noexcept {
 }
 
 /**
- * @brief Returns a normalized copy of the path with all backslashes converted to forward slashes.
+ * @brief Normalizes the path for Windows by replacing all forward slashes with backslashes.
  */
-[[nodiscard]] inline String normalize(StringView path) noexcept {
+inline void normalize_windows(String &path) noexcept {
+    USize sz = path.size();
+    for (USize i = 0; i < sz; ++i) {
+        if (path[i] == '/') {
+            path[i] = '\\';
+        }
+    }
+}
+
+/**
+ * @brief Platform-aware path normalization.
+ * Uses backslashes on Windows and forward slashes on Unix-like systems.
+ */
+inline void normalize(String &path) noexcept {
+#if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
+    normalize_windows(path);
+#else
+    normalize_unix(path);
+#endif
+}
+
+/**
+ * @brief Returns a normalized copy of the path. Platform-aware.
+ */
+[[nodiscard]] inline String get_normalized(StringView path) noexcept {
     String result(path);
     normalize(result);
+    return result;
+}
+
+/**
+ * @brief Returns a normalized copy of the path for Unix-like systems.
+ */
+[[nodiscard]] inline String get_normalized_unix(StringView path) noexcept {
+    String result(path);
+    normalize_unix(result);
+    return result;
+}
+
+/**
+ * @brief Returns a normalized copy of the path for Windows.
+ */
+[[nodiscard]] inline String get_normalized_windows(StringView path) noexcept {
+    String result(path);
+    normalize_windows(result);
     return result;
 }
 
@@ -194,7 +238,7 @@ inline void normalize(String &path) noexcept {
     auto size = sz.unwrap();
 
     // empty file edge case
-    if(size == 0)
+    if (size == 0)
         return fr::String::with_alloc(alloc);
 
     auto result = fr::String::with_capacity(alloc, size);
@@ -243,4 +287,15 @@ inline bool write_all_bytes(const fr::String path, fr::Slice<Byte> bytes) noexce
     std::fclose(file);
     return true;
 }
+
+/**
+ * @brief Checks if a file or directory exists at the given path.
+ * @param path Path to the file or directory.
+ * @return True if file exists, false otherwise.
+ */
+[[nodiscard]] inline bool exists(const fr::String &path) noexcept {
+    struct stat stat_buf;
+    return stat(path.c_str(), &stat_buf) == 0;
+}
+
 } // namespace fr::file
