@@ -11,6 +11,7 @@
 #include "fr/renderer/renderer.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/renderer/renderer_constants.hpp"
+#include "fr/renderer/renderer_frame_data.hpp"
 
 
 namespace fr {
