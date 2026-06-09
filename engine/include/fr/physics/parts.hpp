@@ -33,7 +33,7 @@ namespace fr {
  * @details Decomposed form: position, orientation quaternion, and per-axis scale.
  * The physics and rendering systems reconstruct a matrix from these as needed via `to_mat4()`.
  */
-struct LocalTransform {
+struct LocalTransformPart {
     Vec3 pos{0.0f, 0.0f, 0.0f};
     Quat rot{1.0f, 0.0f, 0.0f, 0.0f};
     Vec3 scale{1.0f, 1.0f, 1.0f};
@@ -45,13 +45,13 @@ struct LocalTransform {
     })
 
     /// @brief Returns a transform at the origin with identity rotation and unit scale.
-    static LocalTransform identity() noexcept {
+    static LocalTransformPart identity() noexcept {
         return {};
     }
 
     /// @brief Returns a transform at `p` with identity rotation and unit scale.
-    static LocalTransform from_pos(Vec3 p) noexcept {
-        LocalTransform t;
+    static LocalTransformPart from_pos(Vec3 p) noexcept {
+        LocalTransformPart t;
         t.pos = p;
         return t;
     }
@@ -77,7 +77,7 @@ struct LocalTransform {
  * `pos` and `rot` are kept separate for physics queries that need world position/orientation
  * without decomposing the matrix.
  */
-struct WorldTransform {
+struct WorldTransformPart {
     Vec3 pos{0.0f, 0.0f, 0.0f};
     Quat rot{1.0f, 0.0f, 0.0f, 0.0f};
     Mat4 mat{1.0f};
@@ -89,7 +89,7 @@ struct WorldTransform {
     })
 
     /// @brief Returns an identity world transform.
-    static WorldTransform identity() noexcept {
+    static WorldTransformPart identity() noexcept {
         return {};
     }
 };
@@ -105,7 +105,7 @@ struct WorldTransform {
  * The inertia tensor is stored in **local body space**; the physics system rotates it to world
  * space each step as needed: I_world = R * inv_inertia * R^T.
  */
-struct Mass {
+struct MassPart {
     Mat3 inv_inertia{1.0f};
     F32 inv_mass{1.0f};
     F32 restitution{0.5f};
@@ -122,18 +122,18 @@ struct Mass {
     }
 
     /// @brief Creates a mass with a scalar `m` and identity (isotropic) inertia tensor.
-    static Mass from_mass(F32 m, F32 restitution = 0.5f) noexcept {
+    static MassPart from_mass(F32 m, F32 restitution = 0.5f) noexcept {
         FR_ASSERT(m > 0.0f, "mass must be positive");
         return {Mat3(1.0f / m), 1.0f / m, restitution};
     }
 
     /// @brief Creates an immovable body (inv_mass = 0, zero inertia).
-    static Mass infinite() noexcept {
+    static MassPart infinite() noexcept {
         return {Mat3(0.0f), 0.0f, 0.0f};
     }
 
     /// @brief Solid sphere: I = (2/5) * m * r^2 on each diagonal axis.
-    static Mass from_sphere(F32 m, F32 radius, F32 restitution = 0.5f) noexcept {
+    static MassPart from_sphere(F32 m, F32 radius, F32 restitution = 0.5f) noexcept {
         FR_ASSERT(m > 0.0f && radius > 0.0f, "mass and radius must be positive");
         const F32 i_inv = 5.0f / (2.0f * m * radius * radius);
         return {Mat3(i_inv), 1.0f / m, restitution};
@@ -145,7 +145,7 @@ struct Mass {
      *
      * @param half_extents Half-dimensions along each axis (hx, hy, hz).
      */
-    static Mass from_box(F32 m, Vec3 half_extents, F32 restitution = 0.5f) noexcept {
+    static MassPart from_box(F32 m, Vec3 half_extents, F32 restitution = 0.5f) noexcept {
         FR_ASSERT(m > 0.0f, "mass must be positive");
 
         const F32 k = m / 3.0f;
@@ -244,7 +244,7 @@ enum class ColliderKind : U8 { AABB, Sphere };
  * added when computing the world-space bounds so the primitive can be positioned
  * independently of the thing's origin (useful for off-center colliders).
  */
-struct Collider {
+struct ColliderPart {
     ColliderKind kind{ColliderKind::AABB};
     union {
         AABB aabb;
@@ -253,13 +253,13 @@ struct Collider {
 
     Vec3 offset{};
 
-    Collider() noexcept {
+    ColliderPart() noexcept {
 
     };
 
     /// @brief Creates an AABB collider with an optional local-space offset.
-    static Collider make_aabb(AABB box, Vec3 offset = {}) noexcept {
-        Collider c;
+    static ColliderPart make_aabb(AABB box, Vec3 offset = {}) noexcept {
+        ColliderPart c;
         c.kind = ColliderKind::AABB;
         c.aabb = box;
         c.offset = offset;
@@ -268,8 +268,8 @@ struct Collider {
     }
 
     /// @brief Creates a sphere collider with an optional local-space offset.
-    static Collider make_sphere(Sphere s, Vec3 offset = {}) noexcept {
-        Collider c;
+    static ColliderPart make_sphere(Sphere s, Vec3 offset = {}) noexcept {
+        ColliderPart c;
         c.kind = ColliderKind::Sphere;
         c.sphere = s;
         c.offset = offset;
@@ -288,7 +288,7 @@ struct Collider {
  * Capped at MAX_COLLISIONS - excess contacts are silently dropped (broad phase
  * should keep this small in practice).
  */
-struct CollisionEvents {
+struct CollisionEventsPart {
     static constexpr USize MAX_COLLISIONS = 16;
 
     USize count{0};
@@ -330,7 +330,7 @@ struct CollisionEvents {
  * (e.g. by averaging or taking the minimum) to compute a single friction and
  * restitution value for the contact.
  */
-struct PhysicsMaterial {
+struct PhysicsMaterialPart {
     F32 friction{0.5f};
     F32 restitution{0.5f};
 
@@ -374,7 +374,7 @@ inline bool check_collision(const Sphere &s, const AABB &a) noexcept {
  * @brief Dispatches a collision test between two Colliders based on their runtime kind.
  * @note Covers all four kind-pairs: AABB/AABB, Sphere/Sphere, AABB/Sphere, Sphere/AABB.
  */
-inline bool check_collision(const Collider &a, const Collider &b) noexcept {
+inline bool check_collision(const ColliderPart &a, const ColliderPart &b) noexcept {
     if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::AABB)
         return check_collision(a.aabb, b.aabb);
     if (a.kind == ColliderKind::Sphere && b.kind == ColliderKind::Sphere)
