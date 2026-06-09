@@ -30,7 +30,7 @@ struct QueryOptions {
     Signature without{};
 };
 
-// ================================================================== PartMeta
+// ==================================================================== PartMeta
 
 /// @brief Type-erased metadata for a single part type.
 struct PartMeta {

@@ -14,6 +14,7 @@
 #include <cmath>
 
 #include "fr/core/math.hpp"
+#include "fr/data/parts.hpp"
 #include "fr/data/world.hpp"
 #include "fr/physics/parts.hpp"
 #include "fr/physics/resources.hpp"
