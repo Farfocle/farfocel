@@ -13,7 +13,7 @@
 #include "fr/core/typedefs.hpp"
 #include <sys/stat.h>
 
-namespace fr::file_helpers {
+namespace fr::file {
 
 namespace impl {
 [[nodiscard]] inline USize find_last_separator(StringView path) noexcept {
@@ -217,5 +217,4 @@ inline void normalize(String &path) noexcept {
 [[nodiscard]] inline fr::Optional<fr::String> read_all_text(const fr::String path) {
     return read_all_text(get_ambient_ctx().alloc, path);
 }
-
-} // namespace fr::file_helpers
+} // namespace fr::file

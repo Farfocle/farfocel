@@ -1,4 +1,4 @@
-#include "fr/core/file_helpers.hpp"
+#include "fr/core/file.hpp"
 #include "fr/core/string.hpp"
 #include "fr/logger/logger.hpp"
 #include "fr/core/ctx.hpp"
@@ -15,19 +15,19 @@ S32 main() {
     {
         fr::String path = "/home/jeffrey/Documents/shopping_list.txt";
         FR_LOG("Full path: {}", path);
-        FR_LOG("Filename: {}", fr::file_helpers::get_filename(path));
-        FR_LOG("Extension: {}", fr::file_helpers::get_extension(path));
-        FR_LOG("Parent path: {}", fr::file_helpers::get_parent_path(path));
-        FR_LOG("Stem: {}", fr::file_helpers::get_stem(path));
+        FR_LOG("Filename: {}", fr::file::get_filename(path));
+        FR_LOG("Extension: {}", fr::file::get_extension(path));
+        FR_LOG("Parent path: {}", fr::file::get_parent_path(path));
+        FR_LOG("Stem: {}", fr::file::get_stem(path));
 
-        auto sz = fr::file_helpers::get_file_size(path);
+        auto sz = fr::file::get_file_size(path);
         if(sz) {
             FR_LOG("Size: {}", sz.unwrap());
         } else {
             FR_LOG_ERR("Cannot get file size");
         }
 
-        auto all_bytes = fr::file_helpers::read_all_bytes(path);
+        auto all_bytes = fr::file::read_all_bytes(path);
         if (all_bytes) {
             auto bytes_array = all_bytes.unwrap(); // file bytes
             // log all bytes:
@@ -40,7 +40,7 @@ S32 main() {
             FR_LOG_ERR("Cannot read file");
         }
 
-        auto text = fr::file_helpers::read_all_text(path);
+        auto text = fr::file::read_all_text(path);
         if(text) {
             FR_LOG("Contents: {}", text.unwrap());
         } else {

@@ -45,6 +45,7 @@ set(ENGINE_HEADERS
     "include/fr/core/unique_ptr.hpp"
     "include/fr/core/slot_map.hpp"
     "include/fr/core/timestamp.hpp"
+    "include/fr/core/file.hpp"
 
 #### platform
     "include/fr/platform/window.hpp"
