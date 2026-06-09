@@ -37,15 +37,24 @@ set(ENGINE_HEADERS
     "include/fr/core/string.hpp"
     "include/fr/core/string_base.hpp"
     "include/fr/core/string_view.hpp"
+    "include/fr/core/thread_pool.hpp"
     "include/fr/core/time.hpp"
     "include/fr/core/tuple.hpp"
     "include/fr/core/typedefs.hpp"
-    "include/fr/core/typeidx.hpp"
     "include/fr/core/typetraits.hpp"
     "include/fr/core/unique_ptr.hpp"
     "include/fr/core/slot_map.hpp"
     "include/fr/core/strong_handle.hpp"
-    
+    "include/fr/core/timestamp.hpp"
+    "include/fr/core/file.hpp"
+
+#### physics
+    "include/fr/physics/collision_manifold_pool.hpp"
+    "include/fr/physics/parts.hpp"
+    "include/fr/physics/resources.hpp"
+    "include/fr/physics/spatial_hash_grid.hpp"
+    "include/fr/physics/systems.hpp"
+
 #### platform
     "include/fr/platform/window.hpp"
     "include/fr/platform/keycode.hpp"
@@ -61,33 +70,50 @@ set(ENGINE_HEADERS
     "include/fr/renderer/texture_loader.hpp"
 
 ### data
+    "include/fr/data/cmd.hpp"
     "include/fr/data/part.hpp"
-    "include/fr/data/part_pool.hpp"
-    "include/fr/data/query.hpp"
     "include/fr/data/registry.hpp"
-    "include/fr/data/signature_pool.hpp"
+    "include/fr/data/relations.hpp"
+    "include/fr/data/resource.hpp"
     "include/fr/data/thing.hpp"
-    "include/fr/data/thing_pool.hpp"
-    "include/fr/data/typeidx.hpp"
     "include/fr/data/world.hpp"
     "include/fr/data/asset_manager.hpp"
 
 ### scene?
     "include/fr/scene/render_parts.hpp"
     "include/fr/scene/render_system.hpp"
+
+### logger
+    "include/fr/logger/logger.hpp"
+    "include/fr/logger/sink.hpp"
+    "include/fr/logger/log.hpp"
+    "include/fr/logger/sinks/standard_sink.hpp"
+    "include/fr/logger/sinks/pretty_sink.hpp"
 )
 
 set(ENGINE_SOURCES
 #### core
     "src/core/ctx.cpp"
+    "src/core/hash.cpp"
+
+#### data
+    "src/data/cmd.cpp"
 #### platform
     "src/platform/sdl3/sdl_window.cpp"
-    
+
 #### renderer
     "src/renderer/opengl/opengl_render_device.cpp"
     "src/renderer/mesh.cpp"
     "src/renderer/mesh_loader.cpp"
     "src/renderer/texture_loader.cpp"
+
+#### physics
+    "src/physics/systems.cpp"
+
+#### logger
+    "src/logger/logger.cpp"
+    "src/logger/sinks/standard_sink.cpp"
+    "src/logger/sinks/pretty_sink.cpp"
 )
 
 
@@ -103,12 +129,13 @@ target_link_libraries(engine PUBLIC glm::glm)
 target_link_libraries(engine PUBLIC SDL3::SDL3-static)
 target_link_libraries(engine PRIVATE cgltf)
 target_link_libraries(engine PRIVATE stb)
+target_link_libraries(engine PUBLIC wyhash)
 
 target_include_directories(engine
     PUBLIC "include"
     PRIVATE "src"
     # this is quite ugly, but i couldn't get aliases to work properly
-    PRIVATE "${CMAKE_SOURCE_DIR}/3rdparty/glad/include"
+    "${CMAKE_SOURCE_DIR}/3rdparty/glad/include"
 )
 
 if(BUILD_SHARED_LIBS)

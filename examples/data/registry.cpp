@@ -9,6 +9,8 @@
 
 #include "fr/core/ctx.hpp"
 #include "fr/core/format.hpp"
+#include "fr/core/meta.hpp"
+#include "fr/core/shape.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/registry.hpp"
@@ -18,11 +20,10 @@ struct Pos {
     F32 x{0.0};
     F32 y{0.0};
 
-    template <typename A>
-    void shape(A &a) {
-        a.prop("x", x);
-        a.prop("y", y);
-    }
+    FR_SHAPE({
+        FR_PROP(x);
+        FR_PROP(y);
+    })
 };
 
 struct Sprite {
@@ -30,30 +31,32 @@ struct Sprite {
     U32 height{0};
     fr::String path{};
 
-    template <typename A>
-    void shape(A &a) {
-        a.prop("width", width);
-        a.prop("height", height);
-        a.prop("path", path);
-    }
+    FR_SHAPE({
+        FR_PROP(width);
+        FR_PROP(height);
+        FR_PROP(path);
+    })
 };
+
+FR_TYPE(Pos);
+FR_TYPE(Sprite);
 
 S32 main() {
     fr::init_core_ctx();
 
     {
-        fr::impl::Registry registry;
+        fr::impl::Registry registry{fr::get_ambient_ctx().alloc};
 
-        fr::Thing a = registry.handout();
-        registry.emplace<Pos>(a, Pos{42.0, 67.0});
-        registry.emplace<Sprite>(a, Sprite{42, 42, "banana.png"});
+        fr::Thing a = registry.spawn();
+        registry.emplace_checked<Pos>(a, Pos{42.0, 67.0});
+        registry.emplace_checked<Sprite>(a, Sprite{42, 42, "banana.png"});
 
-        fr::Thing b = registry.handout();
-        registry.emplace<Pos>(b, Pos{42.0, 69.0});
-        registry.emplace<Sprite>(b, Sprite{42, 42, "apple.png"});
+        fr::Thing b = registry.spawn();
+        registry.emplace_checked<Pos>(b, Pos{42.0, 69.0});
+        registry.emplace_checked<Sprite>(b, Sprite{42, 42, "apple.png"});
 
-        fr::Thing c = registry.handout();
-        registry.emplace<Pos>(c, Pos{13.0, 12.0});
+        fr::Thing c = registry.spawn();
+        registry.emplace_checked<Pos>(c, Pos{13.0, 12.0});
 
         std::cout << "---- query<Pos, Sprite>()\n";
         for (auto [thing, pos, spirte] : registry.query<Pos, Sprite>()) {
@@ -61,9 +64,14 @@ S32 main() {
         }
 
         std::cout << "---- query<Pos>().without<Sprite>()\n";
-        for (auto [thing, pos] : registry.query<Pos>().without<Sprite>()) {
+        for (auto [thing, pos] : registry.query<Pos>()) {
             std::cout << fr::format("pos: {}", pos) << "\n";
         }
+
+        const fr::TypeRegistry &type_registry = *fr::get_ambient_ctx().type_registry;
+        std::cout << "---- Type Registry\n"
+                  << fr::format_with_options({.pretty = true}, "{}", type_registry.storage())
+                  << "\n";
     }
 
     fr::shutdown_core_ctx();

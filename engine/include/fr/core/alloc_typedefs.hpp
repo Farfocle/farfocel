@@ -21,6 +21,12 @@ void shape(A &a, OOMHandlerAction &value) {
     a.prop("@value", value == OOMHandlerAction::Fail ? "fail" : "retry");
 }
 
+template <typename A>
+void shape(A &a, const OOMHandlerAction &value) {
+    a.prop("@value", value == OOMHandlerAction::Fail ? "fail" : "retry");
+}
+
+
 /**
  * @brief Out-of-memory callback.
  *
@@ -64,6 +70,20 @@ void shape(A &a, OwnershipResult &value) {
     a.prop("@value", str);
 }
 
+template <typename A>
+void shape(A &a, const OwnershipResult &value) {
+    const char *str = "@unknown";
+
+    if (value == OwnershipResult::Owns) {
+        str = "owns";
+    } else if (value == OwnershipResult::DoesNotOwn) {
+        str = "does_not_own";
+    }
+
+    a.prop("@value", str);
+}
+
+
 // ----------------------------------------------------------------------- Debug
 
 /**
@@ -87,6 +107,20 @@ void shape(A &a, AllocAction &value) {
 
     a.prop("@value", str);
 }
+
+template <typename A>
+void shape(A &a, const AllocAction &value) {
+    const char *str = "allocate";
+
+    if (value == AllocAction::Reallocate) {
+        str = "reallocate";
+    } else if (value == AllocAction::Deallocate) {
+        str = "deallocate";
+    }
+
+    a.prop("@value", str);
+}
+
 
 /**
  * @brief Recorded allocation frame for debugging.
@@ -123,5 +157,25 @@ struct AllocFrame {
         archive.prop("success", success);
         archive.prop("attempt", attempt);
     }
+
+    template <typename A>
+    void shape(A &archive) const {
+        archive.prop("timestamp", timestamp);
+        archive.prop("action", action);
+
+        U64 prev = reinterpret_cast<U64>(prev_pointer);
+        U64 next = reinterpret_cast<U64>(next_pointer);
+
+        archive.prop("prev_pointer", prev);
+        archive.prop("next_pointer", next);
+
+        archive.prop("prev_size", prev_size);
+        archive.prop("next_size", next_size);
+        archive.prop("alignment", alignment);
+        archive.prop("tag", tag);
+        archive.prop("success", success);
+        archive.prop("attempt", attempt);
+    }
+
 };
 } // namespace fr

@@ -16,7 +16,7 @@ TEST_CASE("Radix Sort - Unsigned integral keys") {
     keys.push_back(0);
     keys.push_back(9);
 
-    radix_sort_inplace(keys.slice_mut());
+    radix_sort(keys.slice_mut());
 
     CHECK(keys.size() == 6);
     CHECK(keys[0] == 0);
@@ -35,7 +35,7 @@ TEST_CASE("Radix Sort - Signed integral keys") {
     keys.push_back(-10);
     keys.push_back(2);
 
-    radix_sort_inplace(keys.slice_mut());
+    radix_sort(keys.slice_mut());
 
     CHECK(keys.size() == 5);
     CHECK(keys[0] == -10);
@@ -52,7 +52,7 @@ TEST_CASE("Radix Sort - Byte keys") {
     keys.push_back(Array<U8, 2>{0, 0});
     keys.push_back(Array<U8, 2>{2, 0});
 
-    radix_sort_inplace(keys.slice_mut());
+    radix_sort_raw(keys.slice_mut());
 
     CHECK(keys.size() == 4);
     CHECK(keys[0][0] == 0);
@@ -77,7 +77,7 @@ TEST_CASE("Radix Sort - By key") {
     items.push_back(Item{2, 21});
     items.push_back(Item{0, 5});
 
-    radix_sort_by_key_inplace(items.slice_mut(), [](const Item &item) { return item.key; });
+    radix_sort_key(items.slice_mut(), [](const Item &item) { return item.key; });
 
     CHECK(items.size() == 4);
     CHECK(items[0].key == 0);

@@ -396,6 +396,25 @@ public:
         }
     }
 
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            USize sz = SZ;
+
+            archive.prop("@size", sz);
+
+            String s = String::with_capacity(SZ);
+            for (USize i = 0; i < SZ; ++i) {
+                s.push_back(check_bit(i) ? '1' : '0');
+            }
+
+            archive.prop("@value", s);
+        } else {
+            FR_ASSERT(false, "cannot deserialize into const Bitset");
+        }
+    }
+
+
 private:
     Storage m_words{};
 

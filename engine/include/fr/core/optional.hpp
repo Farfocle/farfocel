@@ -413,6 +413,19 @@ public:
             }
         }
     }
+
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            bool has_value = is_some();
+            archive.prop("@has_value", has_value);
+            if (has_value) {
+                archive.prop("@value", unwrap());
+            }
+        } else {
+            FR_ASSERT(false, "cannot deserialize into const Optional");
+        }
+    }
 };
 
 /// @brief Factory function for engaged Optional.

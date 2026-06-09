@@ -23,6 +23,8 @@ namespace fr {
  */
 class ArenaAlloc final : public Alloc {
 public:
+    ArenaAlloc() noexcept = default;
+
     /**
      * @brief Construct an arena allocator.
      *

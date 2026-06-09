@@ -19,3 +19,7 @@ add_subdirectory(SDL)
 add_subdirectory(stb)
 
 add_subdirectory(cgltf)
+
+# Marked as SYSTEM - suppresses strict C++ compiler warnings
+add_library(wyhash INTERFACE)
+target_include_directories(wyhash SYSTEM INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/wyhash")

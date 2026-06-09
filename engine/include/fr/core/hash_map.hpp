@@ -622,6 +622,32 @@ public:
         });
     }
 
+    template <typename Archive>
+    void shape(Archive &archive) const {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            USize l = m_load;
+            archive.prop("@load", l);
+
+            USize cap = m_capacity;
+            archive.prop("@capacity", cap);
+
+            archive.list("@items", [&](Archive &list_archive) {
+                for (auto pair : *this) {
+                    auto &key = pair.first();
+                    auto &val = pair.second();
+
+                    list_archive.dict("", [&](Archive &entry_archive) {
+                        entry_archive.prop("@key", key);
+                        entry_archive.prop("@value", val);
+                    });
+                }
+            });
+        } else {
+            FR_ASSERT(false, "cannot deserialize into const HashMap");
+        }
+    }
+
+
 private:
     std::ptrdiff_t do_find_idx(const Key &key) const noexcept {
         if (m_capacity == 0)
