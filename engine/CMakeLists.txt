@@ -118,11 +118,9 @@ set(ENGINE_SOURCES
     "src/platform/sdl3/sdl_window.cpp"
 
 #### renderer
+    "src/renderer/opengl/opengl_render_device.cpp"
     "src/renderer/renderer.cpp"
     "src/renderer/renderer_passes.cpp"
-    "src/renderer/opengl/opengl_render_device.cpp"
-
-
 )
 
 
@@ -130,6 +128,7 @@ add_library(engine ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
 set_target_properties(engine PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(engine PRIVATE farfocel_compiler_options)
+
 # should this be public?
 target_link_libraries(engine PUBLIC yyjson)
 
