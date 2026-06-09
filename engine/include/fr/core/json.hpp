@@ -23,6 +23,7 @@
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/tuple.hpp" // IWYU pragma: keep
+#include "fr/core/typedefs.hpp"
 
 namespace fr {
 
@@ -155,6 +156,8 @@ public:
 
         if constexpr (std::is_same_v<RawT, bool>) {
             do_add_value(name, yyjson_mut_bool(m_doc, value));
+        } else if constexpr (std::is_same_v<RawT, Byte>) {
+            do_add_value(name, yyjson_mut_uint(m_doc, static_cast<U64>(value)));
         } else if constexpr (std::is_same_v<RawT, U8>) {
             do_add_value(name, yyjson_mut_uint(m_doc, static_cast<U64>(value)));
         } else if constexpr (std::is_same_v<RawT, U16>) {
@@ -461,6 +464,8 @@ public:
 
         if constexpr (std::is_same_v<RawT, bool>) {
             value = yyjson_get_bool(val);
+        } else if constexpr (std::is_same_v<RawT, Byte>) {
+            value = static_cast<Byte>(yyjson_get_uint(val));
         } else if constexpr (std::is_same_v<RawT, U8>) {
             value = static_cast<U8>(yyjson_get_uint(val));
         } else if constexpr (std::is_same_v<RawT, U16>) {

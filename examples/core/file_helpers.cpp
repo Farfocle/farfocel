@@ -13,7 +13,7 @@ S32 main() {
     fr::get_ambient_ctx().logger->add_sink(std::move(standard_sink));
 
     {
-        fr::String path = "/home/jeffrey/Documents/shopping_list.txt";
+        fr::String path = "/home/staszek/Documents/inwokacja.txt";
         FR_LOG("Full path: {}", path);
         FR_LOG("Filename: {}", fr::file_helpers::get_filename(path));
         FR_LOG("Extension: {}", fr::file_helpers::get_extension(path));
@@ -24,8 +24,22 @@ S32 main() {
         if(sz) {
             FR_LOG("Size: {}", sz.unwrap());
         } else {
-            FR_LOG_ERR("Cannot get file size")
+            FR_LOG_ERR("Cannot get file size");
         }
+
+        auto all_bytes = fr::file_helpers::read_all_bytes(path);
+        if (all_bytes) {
+            auto bytes_array = all_bytes.unwrap(); // file bytes
+            // log all bytes:
+            FR_LOG("Reading {} bytes:", bytes_array.size());
+            for (USize i = 0; i < bytes_array.size(); ++i) {
+                Byte b = bytes_array[i];
+                FR_LOG("{}", static_cast<U8>(b));
+            }
+        } else {
+            FR_LOG_ERR("Cannot read file");
+        }
+
 
     }
 

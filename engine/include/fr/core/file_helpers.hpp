@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include "fr/core/alloc_tracer.hpp"
+#include "fr/core/dynamic_array.hpp"
 #include "fr/core/optional.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
@@ -118,13 +120,54 @@ inline void normalize(String &path) noexcept {
     return filename.view_to(last_dot - 1);
 }
 
-// 1. get_file_size - rozmiar pliku w bajtach przy użyciu stat
-inline Optional<S64> get_file_size(String path) {
+/**
+ * @brief Gets file size
+ */
+[[nodiscard]] inline Optional<S64> get_file_size(String path) {
     struct stat stat_buf;
     int rc = stat(path.c_str(), &stat_buf);
 
-    if(rc == 0) return stat_buf.st_size;
+    if (rc == 0)
+        return stat_buf.st_size;
     return fr::none();
+}
+
+/**
+ * @brief Reads all bytes to a DynamicArray using specified allocator.
+ * @param alloc Pointer to the allocator to use.
+ * @param path Path to the file
+ */
+inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(Alloc* alloc, const fr::String path) {
+    FILE *file = std::fopen(path.c_str(), "rb");
+    if (!file) {
+        return fr::none();
+    }
+
+    auto sz = get_file_size(path);
+    if (sz.is_none())
+        return fr::none();
+    auto size = sz.unwrap();
+
+    auto buffer = fr::DynamicArray<Byte>::with_size(alloc, size);
+
+    if (size > 0) {
+        USize bytesRead = std::fread(buffer.data(), 1, size, file);
+        if (bytesRead < static_cast<USize>(size)) {
+            std::fclose(file);
+            return fr::none();
+        }
+    }
+
+    std::fclose(file);
+    return buffer;
+}
+
+/**
+ * @brief Reads all bytes to a DynamicArray.
+ * @param path Path to the file
+ */
+inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(const fr::String path) {
+    return read_all_bytes(get_ambient_ctx().alloc, path);
 }
 
 } // namespace fr::file_helpers
