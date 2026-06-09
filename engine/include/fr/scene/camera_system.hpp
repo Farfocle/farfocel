@@ -6,13 +6,13 @@
 
 #pragma once
 
-#include "fr/data/world.hpp"
-#include "fr/platform/input.hpp"
-#include "fr/scene/render_parts.hpp"
-
 #include <algorithm>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+
+#include "fr/data/world.hpp"
+#include "fr/platform/input.hpp"
+#include "fr/scene/render_parts.hpp"
 
 namespace fr {
 

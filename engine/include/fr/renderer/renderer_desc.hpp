@@ -6,12 +6,12 @@
 
 #pragma once
 
+#include <glm/glm.hpp>
+
 #include "fr/core/typedefs.hpp"
 #include "fr/renderer/render_device.hpp"
 #include "fr/renderer/render_queue.hpp"
 #include "fr/renderer/renderer_constants.hpp"
-
-#include <glm/glm.hpp>
 
 namespace fr {
 

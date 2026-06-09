@@ -13,6 +13,7 @@ set(ENGINE_HEADERS
     "include/fr/core/block_alloc.hpp"
     "include/fr/core/ctx.hpp"
     "include/fr/core/dynamic_array.hpp"
+    "include/fr/core/file.hpp"
     "include/fr/core/format.hpp"
     "include/fr/core/hash.hpp"
     "include/fr/core/hash_map.hpp"
@@ -33,20 +34,37 @@ set(ENGINE_HEADERS
     "include/fr/core/queue.hpp"
     "include/fr/core/shape.hpp"
     "include/fr/core/slice.hpp"
+    "include/fr/core/slot_map.hpp"
     "include/fr/core/stack.hpp"
     "include/fr/core/string.hpp"
     "include/fr/core/string_base.hpp"
     "include/fr/core/string_view.hpp"
+    "include/fr/core/strong_handle.hpp"
     "include/fr/core/thread_pool.hpp"
     "include/fr/core/time.hpp"
+    "include/fr/core/timestamp.hpp"
     "include/fr/core/tuple.hpp"
     "include/fr/core/typedefs.hpp"
     "include/fr/core/typetraits.hpp"
     "include/fr/core/unique_ptr.hpp"
-    "include/fr/core/slot_map.hpp"
-    "include/fr/core/strong_handle.hpp"
-    "include/fr/core/timestamp.hpp"
-    "include/fr/core/file.hpp"
+
+### data
+    "include/fr/data/asset_format.hpp"
+    "include/fr/data/asset_manager.hpp"
+    "include/fr/data/cmd.hpp"
+    "include/fr/data/part.hpp"
+    "include/fr/data/registry.hpp"
+    "include/fr/data/relations.hpp"
+    "include/fr/data/resource.hpp"
+    "include/fr/data/thing.hpp"
+    "include/fr/data/world.hpp"
+
+### logger
+    "include/fr/logger/sinks/pretty_sink.hpp"
+    "include/fr/logger/sinks/standard_sink.hpp"
+    "include/fr/logger/log.hpp"
+    "include/fr/logger/logger.hpp"
+    "include/fr/logger/sink.hpp"
 
 #### physics
     "include/fr/physics/collision_manifold_pool.hpp"
@@ -56,9 +74,9 @@ set(ENGINE_HEADERS
     "include/fr/physics/systems.hpp"
 
 #### platform
-    "include/fr/platform/window.hpp"
-    "include/fr/platform/keycode.hpp"
     "include/fr/platform/input.hpp"
+    "include/fr/platform/keycode.hpp"
+    "include/fr/platform/window.hpp"
 
 #### renderer
     "include/fr/renderer/frustum.hpp"
@@ -74,28 +92,10 @@ set(ENGINE_HEADERS
     "include/fr/renderer/renderer_frame_data.hpp"
     "include/fr/renderer/renderer_resources.hpp"
 
-
-### data
-    "include/fr/data/cmd.hpp"
-    "include/fr/data/part.hpp"
-    "include/fr/data/registry.hpp"
-    "include/fr/data/relations.hpp"
-    "include/fr/data/resource.hpp"
-    "include/fr/data/thing.hpp"
-    "include/fr/data/world.hpp"
-    "include/fr/data/asset_manager.hpp"
-    "include/fr/data/asset_format.hpp"
-
-### scene?
+### scene
+    "include/fr/scene/camera_system.hpp"
     "include/fr/scene/render_parts.hpp"
     "include/fr/scene/render_system.hpp"
-
-### logger
-    "include/fr/logger/logger.hpp"
-    "include/fr/logger/sink.hpp"
-    "include/fr/logger/log.hpp"
-    "include/fr/logger/sinks/standard_sink.hpp"
-    "include/fr/logger/sinks/pretty_sink.hpp"
 )
 
 set(ENGINE_SOURCES
@@ -105,24 +105,22 @@ set(ENGINE_SOURCES
 
 #### data
     "src/data/cmd.cpp"
-#### platform
-    "src/platform/sdl3/sdl_window.cpp"
 
-#### renderer
-    "src/renderer/renderer.cpp"
-    "src/renderer/renderer_passes.cpp"
-    "src/renderer/opengl/opengl_render_device.cpp"
-    "src/renderer/mesh.cpp"
-    "src/renderer/mesh_loader.cpp"
-    "src/renderer/texture_loader.cpp"
+#### logger
+    "src/logger/sinks/pretty_sink.cpp"
+    "src/logger/sinks/standard_sink.cpp"
+    "src/logger/logger.cpp"
 
 #### physics
     "src/physics/systems.cpp"
 
-#### logger
-    "src/logger/logger.cpp"
-    "src/logger/sinks/standard_sink.cpp"
-    "src/logger/sinks/pretty_sink.cpp"
+#### platform
+    "src/platform/sdl3/sdl_window.cpp"
+
+#### renderer
+    "src/renderer/opengl/opengl_render_device.cpp"
+    "src/renderer/renderer.cpp"
+    "src/renderer/renderer_passes.cpp"
 )
 
 
@@ -130,6 +128,7 @@ add_library(engine ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
 set_target_properties(engine PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(engine PRIVATE farfocel_compiler_options)
+
 # should this be public?
 target_link_libraries(engine PUBLIC yyjson)
 

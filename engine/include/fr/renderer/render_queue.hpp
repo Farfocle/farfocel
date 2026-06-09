@@ -6,15 +6,15 @@
 
 #pragma once
 
+#include <algorithm>
+#include <glm/glm.hpp>
+
 #include "fr/core/alloc.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/renderer/render_light_data.hpp"
 #include "fr/renderer/render_sort_key.hpp"
-
-#include <algorithm>
-#include <glm/glm.hpp>
 
 namespace fr {
 class RenderQueue {

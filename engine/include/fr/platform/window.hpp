@@ -5,12 +5,12 @@
  * @brief Represents an OS level window.
  * * Manages the graphics context and transforms OS messages (e.g., clicks, resizing)
  */
+
 #pragma once
+
 #include "fr/core/string_view.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/platform/input.hpp"
-#include "fr/platform/keycode.hpp"
-#include <cstring>
 
 namespace fr {
 

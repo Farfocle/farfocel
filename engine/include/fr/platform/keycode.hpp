@@ -4,7 +4,9 @@
  *
  * @brief keycodes for input handling.
  * * Values are mapped 1:1 with the SDL_Scancode  */
+
 #pragma once
+
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
