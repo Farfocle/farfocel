@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "fr/core/typedefs.hpp"
-
 #include <glm/glm.hpp>
+
+#include "fr/core/typedefs.hpp"
 
 namespace fr {
 

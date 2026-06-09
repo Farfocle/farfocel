@@ -9,7 +9,6 @@
 #include "fr/renderer/render_device.hpp"
 #include "fr/renderer/render_queue.hpp"
 #include "fr/renderer/renderer_desc.hpp"
-#include "fr/renderer/renderer_frame_data.hpp"
 #include "fr/renderer/renderer_resources.hpp"
 
 namespace fr {

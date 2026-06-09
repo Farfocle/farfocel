@@ -6,15 +6,14 @@
 
 #pragma once
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 #include "fr/data/asset_manager.hpp"
 #include "fr/data/world.hpp"
 #include "fr/renderer/frustum.hpp"
 #include "fr/renderer/render_queue.hpp"
-#include "fr/scene/camera_system.hpp"
 #include "fr/scene/render_parts.hpp"
-
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 namespace fr {
 
@@ -92,8 +91,8 @@ public:
      * @return Camera data for the active main camera, or identity fallback if no camera exists.
      */
     static CamData extract_cam_data(World &world, F32 aspect_ratio) noexcept {
-        for (auto [entity, cam, trans] : world.query<CameraPart, TransformPart>()) {
-            (void)entity;
+        for (auto [thing, cam, trans] : world.query<CameraPart, TransformPart>()) {
+            (void)thing;
 
             if (cam.is_main) {
                 glm::mat4 proj = glm::perspective(glm::radians(cam.fov), aspect_ratio,
@@ -138,9 +137,9 @@ public:
         RenderStats stats{};
         Frustum frustum = Frustum::extract_from_matrix(view_proj);
 
-        for (auto [entity, mesh_part, mat_part, trans_part] :
+        for (auto [thing, mesh_part, mat_part, trans_part] :
              world.query<MeshPart, MaterialPart, TransformPart>()) {
-            (void)entity;
+            (void)thing;
 
             if (!mesh_part.handle.is_valid()) {
                 continue;
@@ -198,9 +197,9 @@ public:
                                             RenderPipelineHandle default_pipe) noexcept {
         RenderStats stats{};
 
-        for (auto [entity, mesh_part, mat_part, trans_part] :
+        for (auto [thing, mesh_part, mat_part, trans_part] :
              world.query<MeshPart, MaterialPart, TransformPart>()) {
-            (void)entity;
+            (void)thing;
 
             if (!mesh_part.handle.is_valid()) {
                 continue;
@@ -254,9 +253,9 @@ public:
                                              RenderPipelineHandle shadow_pipe) noexcept {
         RenderStats stats{};
 
-        for (auto [entity, mesh_part, mat_part, trans_part] :
+        for (auto [thing, mesh_part, mat_part, trans_part] :
              world.query<MeshPart, MaterialPart, TransformPart>()) {
-            (void)entity;
+            (void)thing;
 
             if (!mesh_part.handle.is_valid()) {
                 continue;
@@ -301,8 +300,8 @@ public:
         U32 point_shadow_count = 0;
         U32 spot_shadow_count = 0;
 
-        for (auto [entity, light, trans] : world.query<PointLightPart, TransformPart>()) {
-            (void)entity;
+        for (auto [thing, light, trans] : world.query<PointLightPart, TransformPart>()) {
+            (void)thing;
 
             PointLightData data{};
             data.position = trans.position;
@@ -327,8 +326,8 @@ public:
             queue.send_point_light(data);
         }
 
-        for (auto [entity, light, trans] : world.query<SpotLightPart, TransformPart>()) {
-            (void)entity;
+        for (auto [thing, light, trans] : world.query<SpotLightPart, TransformPart>()) {
+            (void)thing;
 
             const F32 inner_angle = glm::clamp(light.inner_angle_deg, 0.1f, 89.0f);
             const F32 outer_angle = glm::clamp(light.outer_angle_deg, inner_angle + 0.1f, 89.5f);
@@ -421,8 +420,8 @@ public:
         glm::vec3 safe_cam_dir =
             glm::length(cam_dir) > 0.0001f ? glm::normalize(cam_dir) : glm::vec3(0.0f, 0.0f, -1.0f);
 
-        for (auto [entity, light, trans] : world.query<DirectionalLightPart, TransformPart>()) {
-            (void)entity;
+        for (auto [thing, light, trans] : world.query<DirectionalLightPart, TransformPart>()) {
+            (void)thing;
 
             DirectionalLightData data{};
             data.direction = glm::normalize(trans.rotation * glm::vec3(0.0f, 0.0f, -1.0f));

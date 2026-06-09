@@ -4,6 +4,12 @@
  * @brief OpenGL render device backend.
  */
 
+#include <SDL3/SDL.h>
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <glad/gl.h>
+
 #include "fr/core/alloc.hpp"
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
@@ -14,14 +20,6 @@
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/renderer/render_device.hpp"
-
-#include <SDL3/SDL.h>
-#include <algorithm>
-#include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <glad/gl.h>
-#include <iostream>
 
 namespace fr {
 

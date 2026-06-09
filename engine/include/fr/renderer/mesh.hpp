@@ -10,10 +10,11 @@
  */
 #pragma once
 
+#include <glm/glm.hpp>
+
 #include "fr/core/dynamic_array.hpp"
 #include "fr/renderer/render_device.hpp"
-#include "fr/renderer/render_queue.hpp"
-#include <glm/glm.hpp>
+#include "fr/renderer/render_sort_key.hpp"
 
 namespace fr {
 

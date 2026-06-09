@@ -4,14 +4,14 @@
  * @brief Deferred renderer resource and frame management.
  */
 
-#include "fr/renderer/renderer.hpp"
-
-#include "fr/core/macros.hpp"
-#include "fr/renderer/renderer_constants.hpp"
-
 #include <algorithm>
 #include <glm/common.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
+
+#include "fr/renderer/renderer.hpp"
+#include "fr/core/macros.hpp"
+#include "fr/renderer/renderer_constants.hpp"
+
 
 namespace fr {
 namespace {

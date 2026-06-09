@@ -1,8 +1,9 @@
-#include "fr/logger/sinks/standard_sink.hpp"
+#include <iostream>
+
 #include "fr/core/format.hpp"
 #include "fr/core/timestamp.hpp"
 #include "fr/logger/log.hpp"
-#include <iostream>
+#include "fr/logger/sinks/standard_sink.hpp"
 
 namespace fr {
 

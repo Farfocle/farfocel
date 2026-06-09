@@ -1,16 +1,16 @@
 /**
- * @file components.hpp
+ * @file render_parts.hpp
  * @author Tfoedy
- * @brief Core ECS components, or in our case, parts, for the rendering system.
+ * @brief Core ECS parts, or in our case, parts, for the rendering system.
  */
-#pragma once
 
-#include "fr/core/shape.hpp"
-#include "fr/core/typedefs.hpp"
-#include "fr/data/asset_manager.hpp"
+#pragma once
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+
+#include "fr/core/typedefs.hpp"
+#include "fr/data/asset_manager.hpp"
 
 namespace fr {
 

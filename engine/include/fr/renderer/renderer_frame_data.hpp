@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include "fr/core/typedefs.hpp"
-
 #include <glm/glm.hpp>
 
 namespace fr {

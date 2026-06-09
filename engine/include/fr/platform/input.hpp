@@ -4,10 +4,13 @@
  *
  * @brief Global window input state representation for the current frame.
  */
+
 #pragma once
+
+#include <cstring>
+
 #include "fr/core/typedefs.hpp"
 #include "fr/platform/keycode.hpp"
-#include <cstring>
 
 namespace fr {
 struct WindowInput {

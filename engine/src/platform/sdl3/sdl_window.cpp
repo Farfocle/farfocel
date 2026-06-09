@@ -1,13 +1,12 @@
-#include "SDL3/SDL_events.h"
-#include "SDL3/SDL_video.h"
-#include "fr/core/ctx.hpp"
-#include "fr/platform/window.hpp"
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_video.h>
 
 #include "fr/core/alloc.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/string.hpp"
-
-#include <SDL3/SDL.h>
+#include "fr/platform/window.hpp"
 
 namespace fr {
 struct WindowState {

@@ -4,12 +4,10 @@
  * @brief Deferred renderer pass implementations.
  */
 
-#include "fr/renderer/renderer.hpp"
+#include <algorithm>
 
 #include "fr/renderer/render_bindings.hpp"
-#include "fr/renderer/renderer_constants.hpp"
-
-#include <algorithm>
+#include "fr/renderer/renderer.hpp"
 
 namespace fr {
 
