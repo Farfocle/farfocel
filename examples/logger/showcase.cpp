@@ -38,17 +38,16 @@ S32 main() {
     {
         // 1. setup sink
         auto enhanced_sink = fr::make_unique<fr::PrettySink>(fr::PrettySink::Options{
-            .timestampFormatOptions{
-                .date = false, // no date = skiping calendar math (faster)
-                .time = true,
-                .milliseconds = false},
+            .timestampFormatOptions{.date = false, // no date = skiping calendar math (faster)
+                                    .time = true,
+                                    .milliseconds = false},
             .shorterLevelNames = true // e.g. "ERR" instead of "ERROR"
         });
 
         // 2. add sink to the logger
         fr::get_ambient_ctx().logger->add_sink(std::move(enhanced_sink));
 
-        // et voila!
+        // et voila
         std::cout << "Enter a number between 0 and 100: ";
         S32 user_input = 0;
         std::cin >> user_input;

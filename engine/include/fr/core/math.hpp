@@ -10,6 +10,19 @@
 #include <bit>
 
 #include "fr/core/typedefs.hpp"
+#include "glm/ext/matrix_float2x2.hpp"
+#include "glm/ext/matrix_float3x3.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/quaternion_float.hpp"
+#include "glm/ext/vector_float2.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/ext/vector_float4.hpp"
+#include "glm/ext/vector_int2.hpp"
+#include "glm/ext/vector_int3.hpp"
+#include "glm/ext/vector_int4.hpp"
+#include "glm/ext/vector_uint2.hpp"
+#include "glm/ext/vector_uint3.hpp"
+#include "glm/ext/vector_uint4.hpp"
 
 namespace fr::math {
 
@@ -60,3 +73,118 @@ inline USize round_up_to_multiple_of(USize n, USize multiple) noexcept {
     return (n + multiple - 1) & ~(multiple - 1);
 }
 } // namespace fr::math
+
+namespace fr {
+
+// --------------------------------------------------------------- Float Vectors
+using Vec2 = glm::vec2;
+using Vec3 = glm::vec3;
+using Vec4 = glm::vec4;
+
+// ----------------------------------------------------------------- Int Vectors
+using IVec2 = glm::ivec2;
+using IVec3 = glm::ivec3;
+using IVec4 = glm::ivec4;
+
+// ---------------------------------------------------------------- Uint Vectors
+using UVec2 = glm::uvec2;
+using UVec3 = glm::uvec3;
+using UVec4 = glm::uvec4;
+
+// -------------------------------------------------------------------- Matrices
+using Mat2 = glm::mat2;
+using Mat3 = glm::mat3;
+using Mat4 = glm::mat4;
+
+// ------------------------------------------------------------------ Quaternion
+using Quat = glm::quat;
+
+// ------------------------------------------------------------- Shape Protocols
+
+template <typename A>
+void shape(A &archive, Vec2 &v) {
+    archive.prop("x", v.x);
+    archive.prop("y", v.y);
+}
+template <typename A>
+void shape(A &archive, Vec3 &v) {
+    archive.prop("x", v.x);
+    archive.prop("y", v.y);
+    archive.prop("z", v.z);
+}
+template <typename A>
+void shape(A &archive, Vec4 &v) {
+    archive.prop("x", v.x);
+    archive.prop("y", v.y);
+    archive.prop("z", v.z);
+    archive.prop("w", v.w);
+}
+
+template <typename A>
+void shape(A &archive, IVec2 &v) {
+    archive.prop("x", v.x);
+    archive.prop("y", v.y);
+}
+template <typename A>
+void shape(A &archive, IVec3 &v) {
+    archive.prop("x", v.x);
+    archive.prop("y", v.y);
+    archive.prop("z", v.z);
+}
+template <typename A>
+void shape(A &archive, IVec4 &v) {
+    archive.prop("x", v.x);
+    archive.prop("y", v.y);
+    archive.prop("z", v.z);
+    archive.prop("w", v.w);
+}
+
+template <typename A>
+void shape(A &archive, UVec2 &v) {
+    archive.prop("x", v.x);
+    archive.prop("y", v.y);
+}
+template <typename A>
+void shape(A &archive, UVec3 &v) {
+    archive.prop("x", v.x);
+    archive.prop("y", v.y);
+    archive.prop("z", v.z);
+}
+template <typename A>
+void shape(A &archive, UVec4 &v) {
+    archive.prop("x", v.x);
+    archive.prop("y", v.y);
+    archive.prop("z", v.z);
+    archive.prop("w", v.w);
+}
+
+// Matrices are serialized column-by-column (glm is column-major).
+template <typename A>
+void shape(A &archive, Mat2 &m) {
+    archive.prop("c0", m[0]);
+    archive.prop("c1", m[1]);
+}
+template <typename A>
+void shape(A &archive, Mat3 &m) {
+    archive.prop("c0", m[0]);
+    archive.prop("c1", m[1]);
+    archive.prop("c2", m[2]);
+}
+template <typename A>
+void shape(A &archive, Mat4 &m) {
+    archive.prop("c0", m[0]);
+    archive.prop("c1", m[1]);
+    archive.prop("c2", m[2]);
+    archive.prop("c3", m[3]);
+}
+
+// Quaternion stored as (x, y, z, w) — the standard interop order.
+template <typename A>
+void shape(A &archive, Quat &q) {
+    archive.prop("x", q.x);
+    archive.prop("y", q.y);
+    archive.prop("z", q.z);
+    archive.prop("w", q.w);
+}
+
+} // namespace fr
