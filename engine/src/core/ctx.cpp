@@ -61,9 +61,6 @@ void shutdown_core_ctx() noexcept {
     glob::logger_ptr->~Logger();
     glob::logger_ptr = nullptr;
 
-    static_cast<MallocAlloc *>(glob::core_heap_alloc_ptr)->~MallocAlloc();
-    glob::core_heap_alloc_ptr = nullptr;
-
     glob::core_alloc_tracer_ptr->~AllocTracer();
     glob::core_alloc_tracer_ptr = nullptr;
 
