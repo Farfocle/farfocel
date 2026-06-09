@@ -1,6 +1,6 @@
 #include <doctest.h>
 
-#include "fr/data/relations.hpp"
+#include "fr/data/parts.hpp"
 #include "fr/data/world.hpp"
 
 namespace fr {

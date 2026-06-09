@@ -1,6 +1,6 @@
 #include <doctest.h>
 
-#include "fr/data/relations.hpp"
+#include "fr/data/parts.hpp"
 #include "fr/data/world.hpp"
 
 namespace {
@@ -124,14 +124,16 @@ TEST_CASE("Query - reverse_query iterates in reverse order") {
     int fwd_count = 0;
     Thing fwd_first;
     for (auto [thing, tag] : world.query<QTag>()) {
-        if (fwd_count == 0) fwd_first = thing;
+        if (fwd_count == 0)
+            fwd_first = thing;
         ++fwd_count;
     }
 
     int rev_count = 0;
     Thing rev_first;
     for (auto [thing, tag] : world.reverse_query<QTag>()) {
-        if (rev_count == 0) rev_first = thing;
+        if (rev_count == 0)
+            rev_first = thing;
         ++rev_count;
     }
 

@@ -21,7 +21,7 @@
 #include "fr/data/cmd.hpp"
 #include "fr/data/part.hpp"
 #include "fr/data/registry.hpp"
-#include "fr/data/relations.hpp"
+#include "fr/data/parts.hpp"
 #include "fr/data/resource.hpp"
 #include "fr/data/thing.hpp"
 

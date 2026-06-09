@@ -1,8 +1,8 @@
 /**
- * @file relations.hpp
+ * @file parts.hpp
  * @author Kiju
  *
- * @brief Relations part and its utils.
+ * @brief Commonly used parts.
  */
 
 #pragma once
@@ -11,6 +11,9 @@
 #include "fr/data/thing.hpp"
 
 namespace fr {
+
+// =================================================================== Relations
+
 using HierarchyDepth = U32;
 constexpr HierarchyDepth ROOT_HIERARCHY_DEPTH = 0;
 constexpr HierarchyDepth MAX_HIERARCHY_DEPTH = std::numeric_limits<HierarchyDepth>::max();
