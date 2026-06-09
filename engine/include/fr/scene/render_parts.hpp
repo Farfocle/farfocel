@@ -30,25 +30,6 @@ enum class MaterialBlendMode : U8 {
 };
 
 /**
- * @brief Space properties of an entity.
- */
-struct TransformPart {
-    using vec3_t = glm::vec3;
-    using quat_t = glm::quat;
-
-    vec3_t position;
-    quat_t rotation;
-
-    vec3_t scale;
-
-    TransformPart() noexcept
-        : position(0.0f, 0.0f, 0.0f),
-          rotation(1.0f, 0.0f, 0.0f, 0.0f),
-          scale(1.0f, 1.0f, 1.0f) {
-    }
-};
-
-/**
  * @brief Lens properties of a camera.
  */
 struct CameraPart {

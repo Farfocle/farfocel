@@ -45,13 +45,15 @@ struct RelationsPart {
  * The physics and rendering systems reconstruct a matrix from these as needed via `to_mat4()`.
  */
 struct LocalTransformPart {
-    Vec3 pos{0.0f, 0.0f, 0.0f};
-    Quat rot{1.0f, 0.0f, 0.0f, 0.0f};
+    Vec3 position{0.0f, 0.0f, 0.0f};
+    Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     Vec3 scale{1.0f, 1.0f, 1.0f};
 
+    LocalTransformPart() noexcept = default;
+
     FR_SHAPE({
-        FR_PROP(pos);
-        FR_PROP(rot);
+        FR_PROP(position);
+        FR_PROP(rotation);
         FR_PROP(scale);
     })
 
@@ -63,7 +65,7 @@ struct LocalTransformPart {
     /// @brief Returns a transform at `p` with identity rotation and unit scale.
     static LocalTransformPart from_pos(Vec3 p) noexcept {
         LocalTransformPart t;
-        t.pos = p;
+        t.position = p;
         return t;
     }
 
@@ -72,9 +74,9 @@ struct LocalTransformPart {
      * @note Column 3 carries the translation; the upper-left 3x3 is R*S.
      */
     Mat4 to_mat4() const noexcept {
-        Mat4 m = glm::mat4_cast(rot);
+        Mat4 m = glm::mat4_cast(rotation);
         m = glm::scale(m, scale);
-        m[3] = Vec4(pos, 1.0f);
+        m[3] = Vec4(position, 1.0f);
 
         return m;
     }
@@ -83,20 +85,24 @@ struct LocalTransformPart {
 /**
  * @brief The fully composed world-space transform of a thing.
  *
- * @details Computed by the transform propagation system from the @ref LocalTransform hierarchy.
+ * @details Computed by the transform propagation system from the `LocalTransformPart` hierarchy.
  * `mat` is the cached TRS matrix ready to upload to the GPU.
- * `pos` and `rot` are kept separate for physics queries that need world position/orientation
- * without decomposing the matrix.
+ * `position` and `rotation` are kept separate for physics queries that need world
+ * position/orientation without decomposing the matrix.
  */
 struct WorldTransformPart {
-    Vec3 pos{0.0f, 0.0f, 0.0f};
-    Quat rot{1.0f, 0.0f, 0.0f, 0.0f};
-    Mat4 mat{1.0f};
+    Vec3 position{0.0f, 0.0f, 0.0f};
+    Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    Vec3 scale{1.0f, 1.0f, 1.0f};
+    Mat4 matrix{1.0f};
+
+    WorldTransformPart() noexcept = default;
 
     FR_SHAPE({
-        FR_PROP(pos);
-        FR_PROP(rot);
-        FR_PROP(mat);
+        FR_PROP(position);
+        FR_PROP(rotation);
+        FR_PROP(scale);
+        FR_PROP(matrix);
     })
 
     /// @brief Returns an identity world transform.
