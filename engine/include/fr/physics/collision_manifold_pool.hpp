@@ -43,10 +43,64 @@ public:
         }
     }
 
-    CollisionManifoldPool(const CollisionManifoldPool &) = delete;
-    CollisionManifoldPool &operator=(const CollisionManifoldPool &) = delete;
-    CollisionManifoldPool(CollisionManifoldPool &&) = delete;
-    CollisionManifoldPool &operator=(CollisionManifoldPool &&) = delete;
+    CollisionManifoldPool(const CollisionManifoldPool &other) noexcept {
+        m_alloc = other.m_alloc;
+        m_capacity = other.m_capacity;
+        m_count = other.m_count;
+
+        const USize bytes = m_capacity * sizeof(CollisionManifold);
+        m_raw_buffer = static_cast<Byte *>(m_alloc->allocate(bytes, alignof(CollisionManifold)));
+        m_arena = ArenaAlloc(m_raw_buffer, bytes, "CollisionManifoldPool");
+
+        std::memcpy(m_raw_buffer, other.m_raw_buffer, bytes);
+    };
+
+    CollisionManifoldPool &operator=(const CollisionManifoldPool &other) noexcept {
+        if (this != &other) {
+            m_alloc = other.m_alloc;
+            m_capacity = other.m_capacity;
+            m_count = other.m_count;
+
+            const USize bytes = m_capacity * sizeof(CollisionManifold);
+            m_raw_buffer =
+                static_cast<Byte *>(m_alloc->allocate(bytes, alignof(CollisionManifold)));
+            m_arena = ArenaAlloc(m_raw_buffer, bytes, "CollisionManifoldPool");
+
+            std::memcpy(m_raw_buffer, other.m_raw_buffer, bytes);
+        }
+
+        return *this;
+    };
+
+    CollisionManifoldPool(CollisionManifoldPool &&other) noexcept {
+        m_alloc = other.m_alloc;
+        m_capacity = other.m_capacity;
+        m_count = other.m_count;
+        m_raw_buffer = other.m_raw_buffer;
+        m_arena = other.m_arena;
+
+        other.m_alloc = nullptr;
+        other.m_capacity = 0;
+        other.m_count = 0;
+        other.m_raw_buffer = nullptr;
+        other.m_arena = ArenaAlloc();
+    };
+
+    CollisionManifoldPool &operator=(CollisionManifoldPool &&other) noexcept {
+        m_alloc = other.m_alloc;
+        m_capacity = other.m_capacity;
+        m_count = other.m_count;
+        m_raw_buffer = other.m_raw_buffer;
+        m_arena = other.m_arena;
+
+        other.m_alloc = nullptr;
+        other.m_capacity = 0;
+        other.m_count = 0;
+        other.m_raw_buffer = nullptr;
+        other.m_arena = ArenaAlloc();
+
+        return *this;
+    };
 
     // -------------------------------------------------------------------- API
 

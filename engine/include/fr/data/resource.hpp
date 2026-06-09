@@ -169,6 +169,7 @@ public:
         }
 
         meta.destroy(m_resources[idx]);
+        m_alloc->deallocate(m_resources[idx], meta.size, meta.alignment);
         m_resources[idx] = nullptr;
         return true;
     }
