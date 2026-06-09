@@ -46,6 +46,13 @@ set(ENGINE_HEADERS
     "include/fr/core/slot_map.hpp"
     "include/fr/core/timestamp.hpp"
 
+#### physics
+    "include/fr/physics/collision_manifold_pool.hpp"
+    "include/fr/physics/parts.hpp"
+    "include/fr/physics/resources.hpp"
+    "include/fr/physics/spatial_hash_grid.hpp"
+    "include/fr/physics/systems.hpp"
+
 #### platform
     "include/fr/platform/window.hpp"
     "include/fr/platform/keycode.hpp"
@@ -90,6 +97,9 @@ set(ENGINE_SOURCES
     "src/renderer/opengl/opengl_render_device.cpp"
     "src/renderer/mesh.cpp"
     "src/renderer/mesh_loader.cpp"
+
+#### physics
+    "src/physics/systems.cpp"
 
 #### logger
     "src/logger/logger.cpp"

@@ -19,6 +19,8 @@
 #include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/thing.hpp"
+#include <cmath>
+
 #include "glm/common.hpp"
 #include "glm/geometric.hpp"
 #include "glm/gtc/quaternion.hpp"
@@ -187,13 +189,13 @@ struct AABB {
         return (max - min) * 0.5f;
     }
 
-    /// @brief Returns true if @p point is inside or on the boundary.
+    /// @brief Returns true if `point` is inside or on the boundary.
     bool contains(const Vec3 &point) const noexcept {
         return point.x >= min.x && point.x <= max.x && point.y >= min.y && point.y <= max.y &&
                point.z >= min.z && point.z <= max.z;
     }
 
-    /// @brief Returns true if this box overlaps @p other (touching counts as overlap).
+    /// @brief Returns true if this box overlaps `other` (touching counts as overlap).
     bool overlaps(const AABB &other) const noexcept {
         return min.x <= other.max.x && max.x >= other.min.x && min.y <= other.max.y &&
                max.y >= other.min.y && min.z <= other.max.z && max.z >= other.min.z;
@@ -278,6 +280,24 @@ struct ColliderPart {
     }
 };
 
+/// @brief Represents a collision manifold between two things.
+struct CollisionManifold {
+    Thing a;
+    Thing b;
+
+    Vec3 normal{};
+    Vec3 point{};
+    F32 depth{0};
+
+    FR_SHAPE({
+        FR_PROP(a);
+        FR_PROP(b);
+        FR_PROP(normal);
+        FR_PROP(point);
+        FR_PROP(depth);
+    })
+};
+
 // ============================================================ Collision Events
 
 /**
@@ -295,7 +315,7 @@ struct CollisionEventsPart {
     Array<Thing, MAX_COLLISIONS> contacts{
         Array<Thing, MAX_COLLISIONS>::from_repeated(Thing::nil())};
 
-    /// @brief Returns true if @p thing appears in the current contact list.
+    /// @brief Returns true if `p` thing appears in the current contact list.
     bool has(Thing thing) const noexcept {
         for (USize i = 0; i < count; ++i) {
             if (contacts[i] == thing) {
@@ -307,7 +327,7 @@ struct CollisionEventsPart {
     }
 
     /**
-     * @brief Inserts @p thing into the contact list if there is room.
+     * @brief Inserts `thing` into the contact list if there is room.
      * @return True if the contact was inserted, false if the list is full.
      */
     bool insert(Thing thing) {
@@ -320,7 +340,7 @@ struct CollisionEventsPart {
     }
 };
 
-// ================================================================ Physics Material
+// ============================================================ Physics Material
 
 /**
  * @brief Surface response parameters for collision resolution.
@@ -375,13 +395,205 @@ inline bool check_collision(const Sphere &s, const AABB &a) noexcept {
  * @note Covers all four kind-pairs: AABB/AABB, Sphere/Sphere, AABB/Sphere, Sphere/AABB.
  */
 inline bool check_collision(const ColliderPart &a, const ColliderPart &b) noexcept {
-    if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::AABB)
+    if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::AABB) {
         return check_collision(a.aabb, b.aabb);
-    if (a.kind == ColliderKind::Sphere && b.kind == ColliderKind::Sphere)
+    }
+
+    if (a.kind == ColliderKind::Sphere && b.kind == ColliderKind::Sphere) {
         return check_collision(a.sphere, b.sphere);
-    if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::Sphere)
+    }
+
+    if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::Sphere) {
         return check_collision(a.aabb, b.sphere);
-    /* Sphere vs AABB */ return check_collision(b.aabb, a.sphere);
+    }
+
+    return check_collision(b.aabb, a.sphere);
+}
+
+// ======================================================== Manifold Computation
+
+/**
+ * @brief Result of a narrow-phase collision test.
+ *
+ * @details If `hit` is false, the `manifold` field is uninitialised and must not be read.
+ * The `Thing` fields inside `manifold` are left as `Thing::nil()` — the caller (narrowphase
+ * system) is responsible for filling them in before storing the manifold.
+ */
+struct ManifoldResult {
+    bool hit{false};
+    CollisionManifold manifold{};
+};
+
+/**
+ * @brief Computes the contact manifold for two overlapping AABBs using SAT.
+ *
+ * @details Picks the axis with minimum penetration depth as the separation axis.
+ * The manifold normal points from `b` toward `a` (resolves `a` when applied positively).
+ * `point` is the centre of the overlap interval along the contact axis.
+ *
+ * @return `{false, {}}` when the AABBs do not overlap.
+ */
+inline ManifoldResult compute_manifold(const AABB &a, const AABB &b) noexcept {
+    const F32 ox = std::min(a.max.x, b.max.x) - std::max(a.min.x, b.min.x);
+    const F32 oy = std::min(a.max.y, b.max.y) - std::max(a.min.y, b.min.y);
+    const F32 oz = std::min(a.max.z, b.max.z) - std::max(a.min.z, b.min.z);
+
+    if (ox <= 0.0f || oy <= 0.0f || oz <= 0.0f) {
+        return {false, {}};
+    }
+
+    // Pick the axis with the smallest penetration.
+    Vec3 normal;
+    F32 depth;
+    if (ox <= oy && ox <= oz) {
+        depth = ox;
+        normal = {1.0f, 0.0f, 0.0f};
+    } else if (oy <= ox && oy <= oz) {
+        depth = oy;
+        normal = {0.0f, 1.0f, 0.0f};
+    } else {
+        depth = oz;
+        normal = {0.0f, 0.0f, 1.0f};
+    }
+
+    // Flip normal so it points from b toward a.
+    const Vec3 d = a.center() - b.center();
+    if (glm::dot(d, normal) < 0.0f) {
+        normal = -normal;
+    }
+
+    // Contact point: centre of the overlap region along each axis.
+    const Vec3 point = {
+        (std::max(a.min.x, b.min.x) + std::min(a.max.x, b.max.x)) * 0.5f,
+        (std::max(a.min.y, b.min.y) + std::min(a.max.y, b.max.y)) * 0.5f,
+        (std::max(a.min.z, b.min.z) + std::min(a.max.z, b.max.z)) * 0.5f,
+    };
+
+    return {true, {Thing::nil(), Thing::nil(), normal, point, depth}};
+}
+
+/**
+ * @brief Computes the contact manifold for two overlapping spheres.
+ *
+ * @details The manifold normal points from `b` toward `a`.
+ * When the sphere centres coincide, an arbitrary up-vector is used to avoid a zero normal.
+ *
+ * @return `{false, {}}` when the spheres do not overlap.
+ */
+inline ManifoldResult compute_manifold(const Sphere &a, const Sphere &b) noexcept {
+    const Vec3 delta = a.center - b.center; // from b toward a
+    const F32 dist_sq = glm::dot(delta, delta);
+    const F32 combined = a.radius + b.radius;
+
+    if (dist_sq > combined * combined) {
+        return {false, {}};
+    }
+
+    const F32 dist = std::sqrt(dist_sq);
+    const Vec3 normal = (dist > 1e-6f) ? delta / dist : Vec3{0.0f, 1.0f, 0.0f};
+    const F32 depth = combined - dist;
+
+    // Contact point: surface of b along the collision normal.
+    const Vec3 point = b.center + normal * b.radius;
+
+    return {true, {Thing::nil(), Thing::nil(), normal, point, depth}};
+}
+
+/**
+ * @brief Computes the contact manifold for an AABB and an overlapping sphere.
+ *
+ * @details Finds the closest point on the AABB to the sphere centre.
+ * When the sphere centre is inside the AABB the nearest face is selected as the exit face.
+ * The manifold normal points from `b` (sphere) toward `a` (AABB).
+ *
+ * @return `{false, {}}` when there is no overlap.
+ */
+inline ManifoldResult compute_manifold(const AABB &a, const Sphere &b) noexcept {
+    const Vec3 closest = glm::clamp(b.center, a.min, a.max);
+    const Vec3 delta = b.center - closest; // from closest-on-a toward b center
+    const F32 dist_sq = glm::dot(delta, delta);
+
+    if (dist_sq > b.radius * b.radius) {
+        return {false, {}};
+    }
+
+    Vec3 normal;
+    F32 depth;
+    Vec3 point;
+
+    if (dist_sq < 1e-10f) {
+        // Sphere centre is inside the AABB: find the face it is closest to and push it out.
+        const Vec3 d_min = b.center - a.min; // distances to each -face
+        const Vec3 d_max = a.max - b.center; // distances to each +face
+
+        // Find the axis and face with the smallest distance.
+        F32 min_d = d_min.x;
+        normal = {-1.0f, 0.0f, 0.0f}; // outward normal of the -x face
+
+        if (d_min.y < min_d) {
+            min_d = d_min.y;
+            normal = {0.0f, -1.0f, 0.0f};
+        }
+
+        if (d_min.z < min_d) {
+            min_d = d_min.z;
+            normal = {0.0f, 0.0f, -1.0f};
+        }
+
+        if (d_max.x < min_d) {
+            min_d = d_max.x;
+            normal = {1.0f, 0.0f, 0.0f};
+        }
+
+        if (d_max.y < min_d) {
+            min_d = d_max.y;
+            normal = {0.0f, 1.0f, 0.0f};
+        }
+
+        if (d_max.z < min_d) {
+            normal = {0.0f, 0.0f, 1.0f};
+        }
+
+        depth = b.radius + min_d;
+        point = b.center;
+    } else {
+        const F32 dist = std::sqrt(dist_sq);
+
+        // delta points from a's surface toward b; negate to get normal from b toward a.
+        normal = -(delta / dist);
+        depth = b.radius - dist;
+        point = closest; // contact point on a's surface
+    }
+
+    return {true, {Thing::nil(), Thing::nil(), normal, point, depth}};
+}
+
+/// @brief Sphere vs AABB manifold - symmetric: delegates and negates the normal.
+inline ManifoldResult compute_manifold(const Sphere &a, const AABB &b) noexcept {
+    ManifoldResult r = compute_manifold(b, a);
+    r.manifold.normal = -r.manifold.normal;
+    return r;
+}
+
+/**
+ * @brief Dispatches manifold computation between two `ColliderPart`s based on their kind.
+ * @note Covers AABB/AABB, Sphere/Sphere, AABB/Sphere, Sphere/AABB.
+ */
+inline ManifoldResult compute_manifold(const ColliderPart &a, const ColliderPart &b) noexcept {
+    if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::AABB) {
+        return compute_manifold(a.aabb, b.aabb);
+    }
+
+    if (a.kind == ColliderKind::Sphere && b.kind == ColliderKind::Sphere) {
+        return compute_manifold(a.sphere, b.sphere);
+    }
+
+    if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::Sphere) {
+        return compute_manifold(a.aabb, b.sphere);
+    }
+
+    /* Sphere vs AABB */
+    return compute_manifold(a.sphere, b.aabb);
 }
 
 } // namespace fr
