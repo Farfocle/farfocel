@@ -14,9 +14,9 @@
 S32 main() {
     fr::init_core_ctx();
 
-    // setup the enhanced sink and add it to the logger
-    auto enhanced_sink = fr::make_unique<fr::StandardSink>(fr::StandardSink::Options{});
-    fr::get_ambient_ctx().logger->add_sink(std::move(enhanced_sink));
+    // setup the standard sink and add it to the logger
+    auto standard_sink = fr::make_unique<fr::StandardSink>(fr::StandardSink::Options{});
+    fr::get_ambient_ctx().logger->add_sink(std::move(standard_sink));
 
     // use logger
     FR_LOG("Hello {}! ", "world");
