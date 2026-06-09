@@ -604,9 +604,11 @@ inline T *Registry::get_checked(Thing thing) noexcept {
 template <typename T>
 inline T &Registry::get_unchecked(Thing thing) noexcept {
     TypeIdx tidx = TypeIdx::from_type<T>();
+
     FR_ASSERT(!do_pool_absent(tidx), "part pool missing");
     FR_ASSERT(m_thing_pool.check(thing), "thing must be alive");
     FR_ASSERT(do_check_part(thing, tidx), "thing does not own part T");
+
     return *m_part_pools[tidx.idx()].cast_ref<PartPool<T>>().get_unchecked(thing);
 }
 

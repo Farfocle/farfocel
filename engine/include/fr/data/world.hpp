@@ -173,15 +173,17 @@ public:
     // ------------------------------------------------- Command Part Operations
 
     /**
-     * @brief Records a deferred insert command for part `T` on a thing.
-     * @note Does nothing if thing is nil, dead, or already has part `T`.
+     * @brief Records a deferred insert-or-override command for part `T` on a thing.
+     * @note Does nothing if thing is nil or dead.
+     * @note If thing already has part `T`, the existing value is overridden at commit time.
      */
     template <typename T>
     void insert(Thing thing, const T &part) noexcept;
 
     /**
-     * @brief Records a deferred insert command for part `T` on a thing.
-     * @note Does nothing if thing is nil, dead, or already has part `T`.
+     * @brief Records a deferred insert-or-override command for part `T` on a thing.
+     * @note Does nothing if thing is nil or dead.
+     * @note If thing already has part `T`, the existing value is overridden at commit time.
      */
     template <typename T>
     void insert(Thing thing, T &&part) noexcept;
@@ -770,15 +772,17 @@ public:
     }
 
     /**
-     * @brief Records a deferred insert command for part `T` on a thing.
-     * @note Does nothing if thing is nil, dead, or already has part `T`.
+     * @brief Records a deferred insert-or-override command for part `T` on a thing.
+     * @note Does nothing if thing is nil or dead.
+     * @note If thing already has part `T`, the existing value is overridden at commit time.
      */
     template <typename T>
     void insert(Thing thing, const T &part) noexcept;
 
     /**
-     * @brief Records a deferred insert command for part `T` on a thing.
-     * @note Does nothing if thing is nil, dead, or already has part `T`.
+     * @brief Records a deferred insert-or-override command for part `T` on a thing.
+     * @note Does nothing if thing is nil or dead.
+     * @note If thing already has part `T`, the existing value is overridden at commit time.
      */
     template <typename T>
     void insert(Thing thing, T &&part) noexcept;
@@ -904,7 +908,7 @@ public:
      */
     template <typename T>
     void insert_resource(T &&t) noexcept {
-        m_resource_pool.insert<T>(std::move<T>(t));
+        m_resource_pool.insert<T>(std::move(t));
     }
 
     /**
@@ -1585,6 +1589,10 @@ inline void World::detach_child(Thing parent, Thing child) noexcept {
 }
 
 inline void World::update_hierarchy(Thing root) noexcept {
+    if (root.is_nil()) [[unlikely]] {
+        return;
+    }
+
     Relations &root_rel = m_registry.get_unchecked<Relations>(root);
     Thing curr = root_rel.first_child;
 
@@ -1644,6 +1652,7 @@ inline void World::do_detach_from_hierarchy_unchecked(Thing thing) noexcept {
             next_rel.prev_sibling = Thing::nil();
             thing_rel.next_sibling = Thing::nil();
         }
+        thing_rel.parent = Thing::nil();
 
         return;
     }

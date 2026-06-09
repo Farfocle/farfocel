@@ -2,6 +2,12 @@
 
 set(TEST_DATA_SOURCES
     "main.cpp"
+    "world.cpp"
+    "world_parts.cpp"
+    "world_relations.cpp"
+    "world_queries.cpp"
+    "world_resources.cpp"
+    "world_cmds.cpp"
 )
 
 
