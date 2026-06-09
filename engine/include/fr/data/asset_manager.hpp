@@ -1,8 +1,11 @@
 /**
  * @file asset_manager.hpp
+ * @author Tfoedy
  * @brief Asset manager.
  */
 #pragma once
+
+#include <fstream>
 
 #include "fr/core/alloc.hpp"
 #include "fr/core/dynamic_array.hpp"
@@ -14,13 +17,11 @@
 #include "fr/core/string_view.hpp"
 #include "fr/core/strong_handle.hpp"
 #include "fr/core/typedefs.hpp"
-#include <fstream>
 
 #include "fr/data/asset_format.hpp"
 #include "fr/renderer/mesh.hpp"
 #include "fr/renderer/render_device.hpp"
 
-#include <cstdio>
 #include <glm/gtc/type_ptr.hpp>
 
 namespace fr {
