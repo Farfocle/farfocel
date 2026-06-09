@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include "fr/core/alloc_tracer.hpp"
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/optional.hpp"
 #include "fr/core/string.hpp"
@@ -137,7 +136,8 @@ inline void normalize(String &path) noexcept {
  * @param alloc Pointer to the allocator to use.
  * @param path Path to the file
  */
-inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(Alloc* alloc, const fr::String path) {
+[[nodiscard]] inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(Alloc *alloc,
+                                                                         const fr::String path) {
     FILE *file = std::fopen(path.c_str(), "rb");
     if (!file) {
         return fr::none();
@@ -147,6 +147,10 @@ inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(Alloc* alloc, const f
     if (sz.is_none())
         return fr::none();
     auto size = sz.unwrap();
+
+    // empty file edge case
+    if (size == 0)
+        return fr::DynamicArray<Byte>::with_alloc(alloc);
 
     auto buffer = fr::DynamicArray<Byte>::with_size(alloc, size);
 
@@ -166,8 +170,52 @@ inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(Alloc* alloc, const f
  * @brief Reads all bytes to a DynamicArray.
  * @param path Path to the file
  */
-inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(const fr::String path) {
+[[nodiscard]] inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(const fr::String path) {
     return read_all_bytes(get_ambient_ctx().alloc, path);
+}
+
+/**
+ * @brief Reads all text from a file into a String using a specified allocator.
+ * @param alloc Pointer to the allocator to use.
+ * @param path Path to the file
+ */
+[[nodiscard]] inline fr::Optional<fr::String> read_all_text(Alloc *alloc, const fr::String path) {
+    FILE *file = std::fopen(path.c_str(), "rb");
+    if (!file) {
+        return fr::none();
+    }
+
+    auto sz = get_file_size(path);
+    if (sz.is_none()) {
+        std::fclose(file);
+        return fr::none();
+    }
+
+    auto size = sz.unwrap();
+
+    // empty file edge case
+    if(size == 0)
+        return fr::String::with_alloc(alloc);
+
+    auto result = fr::String::with_capacity(alloc, size);
+
+    result.grow_default(size);
+    USize bytesRead = std::fread(result.data(), 1, size, file);
+    if (bytesRead < static_cast<USize>(size)) {
+        std::fclose(file);
+        return fr::none();
+    }
+
+    std::fclose(file);
+    return result;
+}
+
+/**
+ * @brief Reads all text from a file into a String.
+ * @param path Path to the file
+ */
+[[nodiscard]] inline fr::Optional<fr::String> read_all_text(const fr::String path) {
+    return read_all_text(get_ambient_ctx().alloc, path);
 }
 
 } // namespace fr::file_helpers

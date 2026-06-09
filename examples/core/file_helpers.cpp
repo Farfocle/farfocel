@@ -13,7 +13,7 @@ S32 main() {
     fr::get_ambient_ctx().logger->add_sink(std::move(standard_sink));
 
     {
-        fr::String path = "/home/staszek/Documents/inwokacja.txt";
+        fr::String path = "/home/jeffrey/Documents/shopping_list.txt";
         FR_LOG("Full path: {}", path);
         FR_LOG("Filename: {}", fr::file_helpers::get_filename(path));
         FR_LOG("Extension: {}", fr::file_helpers::get_extension(path));
@@ -40,6 +40,12 @@ S32 main() {
             FR_LOG_ERR("Cannot read file");
         }
 
+        auto text = fr::file_helpers::read_all_text(path);
+        if(text) {
+            FR_LOG("Contents: {}", text.unwrap());
+        } else {
+            FR_LOG_ERR("Error reading file contents");
+        }
 
     }
 
