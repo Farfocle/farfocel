@@ -217,4 +217,30 @@ inline void normalize(String &path) noexcept {
 [[nodiscard]] inline fr::Optional<fr::String> read_all_text(const fr::String path) {
     return read_all_text(get_ambient_ctx().alloc, path);
 }
+
+/**
+ * @brief Writes all bytes from a Slice to a file.
+ * @param path Path to the destination file.
+ * @param bytes Slice of elements to write.
+ * @return True if the entire slice was written successfully, false otherwise.
+ */
+inline bool write_all_bytes(const fr::String path, fr::Slice<Byte> bytes) noexcept {
+    FILE *file = std::fopen(path.c_str(), "wb");
+    if (!file) {
+        return false;
+    }
+
+    USize size = bytes.size();
+
+    if (size > 0) {
+        USize bytesWritten = std::fwrite(bytes.data(), 1, size, file);
+        if (bytesWritten < size) {
+            std::fclose(file);
+            return false;
+        }
+    }
+
+    std::fclose(file);
+    return true;
+}
 } // namespace fr::file
