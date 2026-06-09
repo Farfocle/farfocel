@@ -17,8 +17,11 @@
 
 namespace fr {
 struct PhysicsOptions {
-    Vec3 gravity{};
-    USize iteration_count{};
+    /// @brief Gravitational acceleration in world space.
+    Vec3 gravity{0.0f, 0.0f, 0.0f};
+
+    /// @brief Number of constraint solver iterations per step.
+    USize iteration_count{1};
 
     FR_SHAPE({
         FR_PROP(gravity);
@@ -30,6 +33,7 @@ struct PhysicsState {
     PhysicsOptions options;
     impl::SpatialHashGrid grid;
     impl::CollisionManifoldPool manifold_pool;
+    F32 dt{1.0f / 60.0f};
 
     FR_SHAPE({ FR_PROP(options); })
 };
