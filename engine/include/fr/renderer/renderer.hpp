@@ -1,136 +1,98 @@
 /**
  * @file renderer.hpp
  * @author Tfoedy
- *
- * @brief High-level renderer implementation.
+ * @brief High-level deferred renderer.
  */
+
 #pragma once
 
-#include "fr/core/macros.hpp"
 #include "fr/renderer/render_device.hpp"
 #include "fr/renderer/render_queue.hpp"
-
-#include <iostream>
+#include "fr/renderer/renderer_desc.hpp"
+#include "fr/renderer/renderer_frame_data.hpp"
+#include "fr/renderer/renderer_resources.hpp"
 
 namespace fr {
+
 class Renderer {
 public:
-    /**
-     * @brief Constructs the Renderer utilizing the provided RenderDevice.
-     * * @param device Pointer to an initialized RenderDevice.
-     */
-    explicit Renderer(RenderDevice *device) noexcept
-        : m_device(device) {
-        FR_ASSERT(device != nullptr, "Renderer requires valid RenderDevice");
-    }
+    explicit Renderer(RenderDevice *device,
+                      const RendererCreateDesc &desc = RendererCreateDesc{}) noexcept;
 
-    ~Renderer() noexcept {
-        if (m_device) {
-            if (m_transform_ssbo.is_valid())
-                m_device->destroy_buffer(m_transform_ssbo);
-            if (m_camera_ssbo.is_valid())
-                m_device->destroy_buffer(m_camera_ssbo);
-        }
-    }
-    /**
-     * @brief Executes the rendering pipeline for the current frame.
-     * * @param queue The sorted render queue containing all draw calls.
-     * @param color_targets A slice of color targets for the render pass.
-     * @param depth_target The depth target for the render pass.
-     * @param width Viewport width.
-     * @param height Viewport height.
-     * @param view_proj The combined View-Projection matrix from the active camera.
-     */
-    void render(const RenderQueue &queue, Slice<const TextureHandle> color_targets,
-                TextureHandle depth_target, U32 width, U32 height,
-                const glm::mat4 &view_proj) noexcept {
-        if (queue.is_empty())
-            return;
+    ~Renderer() noexcept;
 
-        // SSBO
-        auto transforms = queue.get_transforms();
-        U32 needed_capacity = static_cast<U32>(transforms.size());
+    Renderer(const Renderer &) = delete;
+    Renderer(Renderer &&) = delete;
+    Renderer &operator=(const Renderer &) = delete;
+    Renderer &operator=(Renderer &&) = delete;
 
-        if (needed_capacity > m_transform_capacity) {
-            m_transform_capacity = (needed_capacity * 200) / 100;
-            if (m_transform_capacity < 256)
-                m_transform_capacity = 256;
+    void render(const RenderFrameDesc &desc) noexcept;
 
-            m_device->destroy_buffer(m_transform_ssbo);
+    [[nodiscard]] TextureHandle get_final_image() const noexcept;
 
-            USize transform_matrix_byte_size = m_transform_capacity * sizeof(glm::mat4);
-            m_transform_ssbo = m_device->create_buffer(
-                Slice<const Byte>(nullptr, transform_matrix_byte_size), true);
-        }
+private:
+    void init_global_buffers() noexcept;
+    void init_fallback_textures() noexcept;
 
-        Slice<const Byte> transform_bytes(reinterpret_cast<const Byte *>(transforms.data()),
-                                          transforms.size() * sizeof(glm::mat4));
-        m_device->update_buffer(m_transform_ssbo, transform_bytes);
+    void prepare_render_targets(U32 width, U32 height) noexcept;
+    void update_global_buffers(const RenderFrameDesc &desc) noexcept;
 
-        if (!m_camera_ssbo.is_valid())
-            m_camera_ssbo =
-                m_device->create_buffer(Slice<const Byte>(nullptr, sizeof(glm::mat4)), true);
+    void execute_present_pass(CommandBuffer *cmd, RenderPipelineHandle present_pipe) noexcept;
 
-        m_device->update_buffer(
-            m_camera_ssbo,
-            Slice<const Byte>(reinterpret_cast<const Byte *>(&view_proj), sizeof(glm::mat4)));
+    void execute_ibl_environment_pass(CommandBuffer *cmd, TextureHandle source,
+                                      RenderPipelineHandle pipe) noexcept;
 
-        CommandBuffer *cmd = m_device->adopt_command_buffer();
-        cmd->begin_render_pass(color_targets, depth_target);
-        cmd->set_viewport(width, height);
+    void execute_ibl_irradiance_pass(CommandBuffer *cmd, RenderPipelineHandle pipe) noexcept;
 
-        cmd->bind_storage_buffer(m_transform_ssbo, 0);
-        cmd->bind_storage_buffer(m_camera_ssbo, 1);
+    void execute_ibl_prefilter_pass(CommandBuffer *cmd, RenderPipelineHandle pipe) noexcept;
 
-        RenderPipelineHandle curr_pipe{};
-        BufferHandle curr_vbo{};
-        BufferHandle curr_ibo{};
-        TextureHandle curr_texture{};
+    void execute_ibl_brdf_lut_pass(CommandBuffer *cmd, RenderPipelineHandle pipe) noexcept;
 
-        // this is the heart of the rendering system in farfocel (this will likely be
-        // optimized with graphs, but for now, this will more than do)
-        // because everything is sorted, the opengl state is changed only when it is required to,
-        // meaning that if two models do not require two different shaders or textures, then there's
-        // no opengl state change
-        for (const DrawCall &call : queue.get_calls()) {
-            // changed only when it's of different material...
-            if (call.pipe.key != curr_pipe.key) {
-                cmd->set_pipeline(call.pipe);
-                curr_pipe = call.pipe;
-            }
+    void execute_shadow_pass(CommandBuffer *cmd, const RenderQueue &shadow_queue,
+                             RenderPipelineHandle shadow_pipe) noexcept;
 
-            if (call.texture.is_valid() && call.texture.key != curr_texture.key) {
-                cmd->bind_texture(call.texture, 0);
-                curr_texture = call.texture;
-            }
+    void execute_point_shadow_pass(CommandBuffer *cmd, const RenderQueue &shadow_queue,
+                                   const RenderQueue &geom_queue,
+                                   RenderPipelineHandle point_shadow_pipe) noexcept;
 
-            if (call.vbo.key != curr_vbo.key) {
-                cmd->bind_vertex_buffer(call.vbo, call.vbo_stride);
-                curr_vbo = call.vbo;
-            }
+    void execute_spot_shadow_pass(CommandBuffer *cmd, const RenderQueue &shadow_queue,
+                                  const RenderQueue &geom_queue,
+                                  RenderPipelineHandle spot_shadow_pipe) noexcept;
 
-            if (call.ibo.key != curr_ibo.key) {
-                cmd->bind_index_buffer(call.ibo);
-                curr_ibo = call.ibo;
-            }
+    void execute_geometry_pass(CommandBuffer *cmd, const RenderQueue &geom_queue, U32 width,
+                               U32 height) noexcept;
 
-            Slice<const Byte> push_bytes(reinterpret_cast<const Byte *>(&call.transform_index),
-                                         sizeof(U32));
-            cmd->set_push_constants(push_bytes);
+    void execute_hbao_pass(CommandBuffer *cmd, const RenderFrameDesc &desc) noexcept;
 
-            cmd->draw_indexed(call.index_count, call.index_offset, call.vertex_offset);
-        }
+    void execute_lighting_pass(CommandBuffer *cmd, const RenderFrameDesc &desc) noexcept;
 
-        cmd->end_render_pass();
-        m_device->submit_command_buffer(cmd);
-    }
+    void destroy_global_buffers() noexcept;
+    void destroy_fallback_textures() noexcept;
+    void destroy_final_color() noexcept;
+    void destroy_gbuffer() noexcept;
+    void destroy_ao() noexcept;
+    void destroy_shadow_resources() noexcept;
+    void destroy_point_shadow_resources() noexcept;
+    void destroy_spot_shadow_resources() noexcept;
+    void destroy_ibl_resources() noexcept;
 
 private:
     RenderDevice *m_device{nullptr};
+    RendererLimits m_limits{};
 
-    BufferHandle m_transform_ssbo{};
-    U32 m_transform_capacity{0}; // the amount of matrixes reserved
-                                 //
-    BufferHandle m_camera_ssbo{};
+    RendererGlobalBuffers m_global{};
+    RendererFallbackTextures m_fallback{};
+
+    FinalColorTarget m_final{};
+
+    GBufferTargets m_gbuffer{};
+    AmbientOcclusionTargets m_ao{};
+
+    ShadowResources m_shadow{};
+    PointShadowResources m_point_shadows{};
+    SpotShadowResources m_spot_shadows{};
+
+    IblResources m_ibl{};
 };
+
 } // namespace fr

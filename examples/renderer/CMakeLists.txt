@@ -1,5 +1,4 @@
 set(BENCH_SOURCES
-    "model_loading_with_fps_camera.cpp"
 )
 
 foreach(source ${BENCH_SOURCES})

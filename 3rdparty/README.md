@@ -4,3 +4,4 @@
 - glm
 - SDL
 - cgltf
+- bc7enc
