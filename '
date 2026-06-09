@@ -1,0 +1,1010 @@
+/**
+ * @file main.cpp
+ * @brief Farfocel editor and renderer testbed.
+ *
+ * @details
+ * It is used to test the renderer,
+ * asset cooking, cooked asset loading, camera movement, lights, shadows, and material modes.
+ *
+ * Features:
+ * - Asynchronous GLTF cooking and loading.
+ * - Asynchronous HDR cooking and loading.
+ * - ImGui controls for assets, lights, shadow settings, wireframe mode, and shading mode.
+ * - FPS camera controlled with RMB + WASD.
+ * - Geometry and shadow submission statistics.
+ *
+ * File loading function helpers are AI SLOP until we have our own implementation in core. Have no
+ * time to waste on stupid file loading.
+ */
+
+#include "fr/asscooker/asscooker.hpp"
+
+#include "fr/core/ctx.hpp"
+#include "fr/core/macros.hpp"
+#include "fr/core/string.hpp"
+#include "fr/core/string_view.hpp"
+#include "fr/core/time.hpp"
+
+#include "fr/data/asset_manager.hpp"
+#include "fr/data/world.hpp"
+
+#include "fr/platform/input.hpp"
+#include "fr/platform/keycode.hpp"
+#include "fr/platform/window.hpp"
+
+#include "fr/renderer/render_device.hpp"
+#include "fr/renderer/render_queue.hpp"
+#include "fr/renderer/renderer.hpp"
+
+#include "fr/scene/camera_system.hpp"
+#include "fr/scene/render_parts.hpp"
+#include "fr/scene/render_system.hpp"
+
+#include <SDL3/SDL.h>
+
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <future>
+#include <string>
+
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+
+#include <imgui.h>
+#include <imgui_impl_opengl3.h>
+#include <imgui_impl_sdl3.h>
+
+namespace fs = std::filesystem;
+
+/**
+ * @brief Forwards SDL events from the engine window wrapper to ImGui.
+ */
+static void imgui_event_callback(void *event_data, void *user_data) {
+    (void)user_data;
+    ImGui_ImplSDL3_ProcessEvent(static_cast<SDL_Event *>(event_data));
+}
+
+/**
+ * @brief Current asynchronous editor job.
+ */
+enum class EditorJob : U8 {
+    None,
+    CookModel,
+    CookSkybox,
+};
+
+/**
+ * @brief Minimal editor state.
+ */
+struct EditorState {
+    bool running{true};
+    bool wireframe{false};
+
+    EditorJob job{EditorJob::None};
+    std::future<bool> cook_future{};
+
+    char gltf_path[512]{""};
+    char hdr_path[512]{""};
+    char status[512]{"Ready."};
+
+    fr::String pending_model_path{};
+    fr::String pending_skybox_path{};
+
+    fr::Thing camera_entity{fr::Thing::nil()};
+    fr::Thing model_entity{fr::Thing::nil()};
+    fr::Thing sun_entity{fr::Thing::nil()};
+    fr::Thing point_light_entity{fr::Thing::nil()};
+
+    fr::MeshAssetHandle model_handle{};
+    fr::TextureAssetHandle skybox_handle{};
+
+    fr::ShadingModel shading_model{fr::ShadingModel::PBR};
+    fr::RenderDebugMode debug_mode{fr::RenderDebugMode::Final};
+
+    F32 exposure{1.0f};
+    F32 pbr_ambient_strength{0.03f};
+    F32 standard_ambient_strength{0.035f};
+    F32 standard_specular_default{0.25f};
+
+    fr::DirectionalShadowSettings shadow_settings{};
+
+    glm::vec3 sun_rotation_deg{-60.0f, 30.0f, 0.0f};
+    glm::vec3 point_light_position{5.0f, 15.0f, 0.0f};
+
+    bool enable_hbao{false};
+    F32 hbao_radius{1.5f};
+    F32 hbao_intensity{1.2f};
+    F32 hbao_bias{0.05f};
+    F32 hbao_power{1.5f};
+    F32 hbao_thickness{1.0f};
+
+    fr::RenderStats geometry_stats{};
+    fr::RenderStats shadow_stats{};
+};
+
+/**
+ * @brief Writes a status message into the editor status buffer.
+ */
+static void set_status(EditorState &state, const char *message) {
+    std::snprintf(state.status, sizeof(state.status), "%s", message ? message : "");
+}
+
+/**
+ * @brief Writes a status message with a path suffix.
+ */
+static void set_status_path(EditorState &state, const char *prefix, const char *path) {
+    std::snprintf(state.status, sizeof(state.status), "%s%s", prefix ? prefix : "",
+                  path ? path : "");
+}
+
+/**
+ * @brief Returns a readable editor job name.
+ */
+static const char *job_name(EditorJob job) {
+    switch (job) {
+    case EditorJob::None:
+        return "Idle";
+    case EditorJob::CookModel:
+        return "Cooking Model";
+    case EditorJob::CookSkybox:
+        return "Cooking Skybox";
+    default:
+        return "Unknown";
+    }
+}
+
+/**
+ * @brief Returns a readable renderer debug mode name.
+ */
+static const char *debug_mode_name(fr::RenderDebugMode mode) {
+    switch (mode) {
+    case fr::RenderDebugMode::Final:
+        return "Final";
+    case fr::RenderDebugMode::Albedo:
+        return "Albedo";
+    case fr::RenderDebugMode::Normal:
+        return "Normal";
+    case fr::RenderDebugMode::MetallicSpecular:
+        return "Metallic / Specular";
+    case fr::RenderDebugMode::Roughness:
+        return "Roughness";
+    case fr::RenderDebugMode::AmbientOcclusion:
+        return "Ambient Occlusion";
+    case fr::RenderDebugMode::ShadingModel:
+        return "Shading Model";
+    case fr::RenderDebugMode::Shadow:
+        return "Shadow";
+    case fr::RenderDebugMode::Hbao:
+        return "HBAO";
+    default:
+        return "Unknown";
+    }
+}
+
+/**
+ * @brief Replaces the extension of a source path and returns an engine string.
+ * AI slop until we have our own file handling functions
+ */
+static fr::String cooked_path_from_source(const char *path, const char *extension) {
+    fs::path fs_path(path);
+    fs_path.replace_extension(extension);
+
+    std::string native_path = fs_path.string();
+    return fr::String::from_chars(native_path.c_str());
+}
+
+/**
+ * @brief Reads a whole text file into fr::String.
+ */
+static fr::String read_text_file(fr::StringView path) {
+    fr::String path_str = fr::String::from_view(path);
+
+    std::ifstream file(path_str.data(), std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        std::fprintf(stderr, "[Editor] Failed to open file: %s\n", path_str.data());
+        return fr::String{};
+    }
+
+    const std::streamoff file_size = file.tellg();
+    if (file_size <= 0) {
+        std::fprintf(stderr, "[Editor] Empty or invalid file: %s\n", path_str.data());
+        return fr::String{};
+    }
+
+    file.seekg(0, std::ios::beg);
+
+    fr::String content = fr::String::with_capacity(static_cast<USize>(file_size));
+    content.grow_default(static_cast<USize>(file_size));
+
+    if (!file.read(content.data(), file_size)) {
+        std::fprintf(stderr, "[Editor] Failed to read file: %s\n", path_str.data());
+        return fr::String{};
+    }
+
+    return content;
+}
+
+/**
+ * @brief Creates a shader from vertex and fragment GLSL source files.
+ * A better shader loading will be implemented at one point, will likely be similar to asset
+ * handling.
+ */
+static fr::ShaderHandle create_shader_from_files(fr::RenderDevice *device, const char *vert_path,
+                                                 const char *frag_path) {
+    fr::String vert = read_text_file(fr::StringView(vert_path));
+    fr::String frag = read_text_file(fr::StringView(frag_path));
+
+    if (vert.size() == 0 || frag.size() == 0) {
+        return fr::ShaderHandle{};
+    }
+
+    return device->create_shader(vert.view(), frag.view());
+}
+
+/**
+ * @brief Creates a simple render pipeline.
+ */
+static fr::RenderPipelineHandle create_pipeline(fr::RenderDevice *device, fr::ShaderHandle shader,
+                                                fr::CullMode cull_mode, bool depth_test,
+                                                bool depth_write, bool wireframe) {
+    fr::RenderPipelineProperties props{};
+    props.shader = shader;
+    props.cull_mode = cull_mode;
+    props.depth_test = depth_test;
+    props.depth_write = depth_write;
+    props.wireframe = wireframe;
+
+    return device->create_render_pipeline(props);
+}
+
+/**
+ * @brief Creates the default editor camera.
+ */
+static void create_camera(fr::World &world, EditorState &state) {
+    state.camera_entity = world.handout();
+
+    fr::TransformPart &transform = world.emplace<fr::TransformPart>(state.camera_entity);
+    transform.position = glm::vec3(0.0f, 2.0f, 0.0f);
+    transform.rotation = glm::quat(glm::radians(glm::vec3(0.0f, -90.0f, 0.0f)));
+    transform.scale = glm::vec3(1.0f);
+
+    fr::CameraPart &camera = world.emplace<fr::CameraPart>(state.camera_entity);
+    camera.fov = 70.0f;
+    camera.near_plane = 0.1f;
+    camera.far_plane = 1000.0f;
+    camera.is_main = true;
+
+    fr::FPSControllerPart &fps = world.emplace<fr::FPSControllerPart>(state.camera_entity);
+    fps.pitch = 0.0f;
+    fps.yaw = -90.0f;
+    fps.move_speed = 15.0f;
+    fps.mouse_sensitivity = 0.1f;
+}
+
+/**
+ * @brief Creates the default directional light and point light.
+ */
+static void create_lights(fr::World &world, EditorState &state) {
+    state.sun_entity = world.handout();
+
+    fr::TransformPart &sun_transform = world.emplace<fr::TransformPart>(state.sun_entity);
+    sun_transform.position = glm::vec3(0.0f);
+    sun_transform.rotation = glm::quat(glm::radians(state.sun_rotation_deg));
+    sun_transform.scale = glm::vec3(1.0f);
+
+    fr::DirectionalLightPart &sun = world.emplace<fr::DirectionalLightPart>(state.sun_entity);
+    sun.color = glm::vec3(1.0f, 0.95f, 0.9f);
+    sun.intensity = 3.0f;
+
+    state.point_light_entity = world.handout();
+
+    fr::TransformPart &point_transform = world.emplace<fr::TransformPart>(state.point_light_entity);
+    point_transform.position = state.point_light_position;
+    point_transform.rotation = glm::quat(glm::vec3(0.0f));
+    point_transform.scale = glm::vec3(1.0f);
+
+    fr::PointLightPart &point = world.emplace<fr::PointLightPart>(state.point_light_entity);
+    point.color = glm::vec3(1.0f, 0.9f, 0.7f);
+    point.intensity = 5.0f;
+    point.radius = 50.0f;
+}
+
+/**
+ * @brief Unloads the current model asset and removes its entity from render queries.
+ */
+static void unload_model(fr::World &world, fr::AssetManager &assets, EditorState &state) {
+    if (!state.model_entity.is_nil()) {
+        world.kill(state.model_entity);
+        state.model_entity = fr::Thing::nil();
+    }
+
+    if (state.model_handle.is_valid()) {
+        assets.unload_mesh(state.model_handle);
+        state.model_handle = {};
+    }
+}
+
+/**
+ * @brief Unloads the current skybox texture asset.
+ */
+static void unload_skybox(fr::AssetManager &assets, EditorState &state) {
+    if (state.skybox_handle.is_valid()) {
+        assets.unload_texture(state.skybox_handle);
+        state.skybox_handle = {};
+    }
+}
+
+/**
+ * @brief Loads a cooked mesh and creates a model entity.
+ */
+static void load_cooked_model(fr::World &world, fr::AssetManager &assets, EditorState &state,
+                              fr::StringView path) {
+    fr::MeshAssetHandle mesh = assets.load_mesh(path);
+
+    if (!mesh.is_valid()) {
+        set_status_path(state, "Failed to load model: ", fr::String::from_view(path).data());
+        return;
+    }
+
+    unload_model(world, assets, state);
+
+    state.model_handle = mesh;
+    state.model_entity = world.handout();
+
+    fr::TransformPart &transform = world.emplace<fr::TransformPart>(state.model_entity);
+    transform.position = glm::vec3(0.0f);
+    transform.rotation = glm::quat(glm::vec3(0.0f));
+    transform.scale = glm::vec3(1.0f);
+
+    world.emplace<fr::MeshPart>(state.model_entity, state.model_handle);
+
+    fr::MaterialPart &material = world.emplace<fr::MaterialPart>(state.model_entity);
+    material.shading_model = state.shading_model;
+
+    set_status_path(state, "Loaded model: ", fr::String::from_view(path).data());
+}
+
+/**
+ * @brief Loads a cooked HDR skybox texture.
+ */
+static void load_cooked_skybox(fr::AssetManager &assets, EditorState &state, fr::StringView path) {
+    fr::TextureAssetHandle texture = assets.load_texture(path);
+
+    if (!texture.is_valid()) {
+        set_status_path(state, "Failed to load skybox: ", fr::String::from_view(path).data());
+        return;
+    }
+
+    unload_skybox(assets, state);
+
+    state.skybox_handle = texture;
+    set_status_path(state, "Loaded skybox: ", fr::String::from_view(path).data());
+}
+
+/**
+ * @brief Starts asynchronous GLTF cooking or loads an existing cooked mesh.
+ */
+static void start_model_job(EditorState &state, fr::World &world, fr::AssetManager &assets) {
+    if (state.job != EditorJob::None) {
+        return;
+    }
+
+    state.pending_model_path = cooked_path_from_source(state.gltf_path, ".fmesh");
+
+    if (fs::exists(state.pending_model_path.data())) {
+        load_cooked_model(world, assets, state, state.pending_model_path.view());
+        return;
+    }
+
+    fr::String input_path = fr::String::from_chars(state.gltf_path);
+    fr::String output_path = state.pending_model_path;
+
+    state.job = EditorJob::CookModel;
+    set_status_path(state, "Cooking model: ", input_path.data());
+
+    state.cook_future = std::async(std::launch::async, [input_path, output_path]() {
+        return fr::asscooker::cook_mesh(input_path.view(), output_path.view());
+    });
+}
+
+/**
+ * @brief Starts asynchronous HDR cooking or loads an existing cooked skybox texture.
+ * We will have to implement a better loading system but this for now will do.
+ */
+static void start_skybox_job(EditorState &state, fr::AssetManager &assets) {
+    if (state.job != EditorJob::None) {
+        return;
+    }
+
+    state.pending_skybox_path = cooked_path_from_source(state.hdr_path, ".ftex");
+
+    if (fs::exists(state.pending_skybox_path.data())) {
+        load_cooked_skybox(assets, state, state.pending_skybox_path.view());
+        return;
+    }
+
+    fr::String input_path = fr::String::from_chars(state.hdr_path);
+    fr::String output_path = state.pending_skybox_path;
+
+    state.job = EditorJob::CookSkybox;
+    set_status_path(state, "Cooking HDR: ", input_path.data());
+
+    state.cook_future = std::async(std::launch::async, [input_path, output_path]() {
+        return fr::asscooker::cook_texture(input_path.view(), output_path.view(), false);
+    });
+}
+
+/**
+ * @brief Finalizes an asynchronous cooking job if it has completed.
+ */
+static void poll_jobs(EditorState &state, fr::World &world, fr::AssetManager &assets) {
+    if (state.job == EditorJob::None || !state.cook_future.valid()) {
+        return;
+    }
+
+    if (state.cook_future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    const bool success = state.cook_future.get();
+
+    if (!success) {
+        set_status(state, "Cooking failed.");
+        state.job = EditorJob::None;
+        return;
+    }
+
+    if (state.job == EditorJob::CookModel) {
+        load_cooked_model(world, assets, state, state.pending_model_path.view());
+    } else if (state.job == EditorJob::CookSkybox) {
+        load_cooked_skybox(assets, state, state.pending_skybox_path.view());
+    }
+
+    state.job = EditorJob::None;
+}
+
+/**
+ * @brief Draws a render statistics block.
+ */
+static void draw_stats(const char *label, const fr::RenderStats &stats) {
+    ImGui::Text("%s Total: %u", label, stats.total_submeshes);
+    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s Visible: %u", label,
+                       stats.visible_submeshes);
+    ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s Culled/Skipped: %u", label,
+                       stats.culled_submeshes);
+
+    if (stats.total_submeshes > 0) {
+        const float percent = 100.0f * static_cast<float>(stats.culled_submeshes) /
+                              static_cast<float>(stats.total_submeshes);
+        ImGui::Text("Cull/Skip Ratio: %.2f%%", percent);
+    }
+}
+
+/**
+ * @brief Draws asset loading controls.
+ */
+static void draw_asset_panel(EditorState &state, fr::World &world, fr::AssetManager &assets) {
+    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(430, 260), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Asset Manager");
+
+    ImGui::Text("State: %s", job_name(state.job));
+    ImGui::TextWrapped("Status: %s", state.status);
+    ImGui::Separator();
+
+    const bool busy = state.job != EditorJob::None;
+    ImGui::BeginDisabled(busy);
+
+    ImGui::TextUnformatted("GLTF Model");
+    ImGui::InputText("##GLTF", state.gltf_path, sizeof(state.gltf_path));
+
+    if (ImGui::Button("Cook & Load GLTF", ImVec2(-1, 28))) {
+        start_model_job(state, world, assets);
+    }
+
+    ImGui::Separator();
+
+    ImGui::TextUnformatted("HDR Skybox");
+    ImGui::InputText("##HDR", state.hdr_path, sizeof(state.hdr_path));
+
+    if (ImGui::Button("Cook & Load HDR", ImVec2(-1, 28))) {
+        start_skybox_job(state, assets);
+    }
+
+    ImGui::EndDisabled();
+    ImGui::End();
+}
+
+/**
+ * @brief Draws renderer statistics and material controls.
+ */
+static void draw_renderer_panel(EditorState &state, fr::World &world) {
+    ImGui::SetNextWindowPos(ImVec2(10, 285), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(430, 390), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Renderer Diagnostics");
+
+    ImGui::Checkbox("Wireframe", &state.wireframe);
+
+    if (ImGui::CollapsingHeader("Debug View", ImGuiTreeNodeFlags_DefaultOpen)) {
+        fr::RenderDebugMode modes[] = {
+            fr::RenderDebugMode::Final,        fr::RenderDebugMode::Albedo,
+            fr::RenderDebugMode::Normal,       fr::RenderDebugMode::MetallicSpecular,
+            fr::RenderDebugMode::Roughness,    fr::RenderDebugMode::AmbientOcclusion,
+            fr::RenderDebugMode::ShadingModel, fr::RenderDebugMode::Shadow,
+            fr::RenderDebugMode::Hbao,
+        };
+
+        if (ImGui::BeginCombo("Mode", debug_mode_name(state.debug_mode))) {
+            for (fr::RenderDebugMode mode : modes) {
+                const bool selected = state.debug_mode == mode;
+
+                if (ImGui::Selectable(debug_mode_name(mode), selected)) {
+                    state.debug_mode = mode;
+                }
+
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Lighting Calibration", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::DragFloat("Exposure", &state.exposure, 0.01f, 0.0f, 10.0f, "%.2f");
+
+        ImGui::DragFloat("PBR Ambient", &state.pbr_ambient_strength, 0.001f, 0.0f, 1.0f, "%.3f");
+
+        ImGui::DragFloat("Standard Ambient", &state.standard_ambient_strength, 0.001f, 0.0f, 1.0f,
+                         "%.3f");
+
+        ImGui::DragFloat("Standard Specular", &state.standard_specular_default, 0.01f, 0.0f, 1.0f,
+                         "%.2f");
+
+        if (ImGui::Button("Reset Lighting Calibration", ImVec2(-1, 26))) {
+            state.exposure = 1.0f;
+            state.pbr_ambient_strength = 0.03f;
+            state.standard_ambient_strength = 0.035f;
+            state.standard_specular_default = 0.25f;
+        }
+    }
+
+    if (ImGui::CollapsingHeader("HBAO", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Checkbox("Enable HBAO", &state.enable_hbao);
+
+        ImGui::DragFloat("HBAO Radius", &state.hbao_radius, 0.05f, 0.05f, 10.0f, "%.2f");
+        ImGui::DragFloat("HBAO Intensity", &state.hbao_intensity, 0.05f, 0.0f, 5.0f, "%.2f");
+        ImGui::DragFloat("HBAO Bias", &state.hbao_bias, 0.005f, 0.0f, 1.0f, "%.3f");
+        ImGui::DragFloat("HBAO Power", &state.hbao_power, 0.05f, 0.1f, 5.0f, "%.2f");
+        ImGui::DragFloat("HBAO Thickness", &state.hbao_thickness, 0.05f, 0.01f, 5.0f, "%.2f");
+
+        if (ImGui::Button("Reset HBAO", ImVec2(-1, 26))) {
+            state.enable_hbao = false;
+            state.hbao_radius = 1.5f;
+            state.hbao_intensity = 1.2f;
+            state.hbao_bias = 0.05f;
+            state.hbao_power = 1.5f;
+            state.hbao_thickness = 1.0f;
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
+        draw_stats("Geometry", state.geometry_stats);
+    }
+
+    if (ImGui::CollapsingHeader("Shadow Casters", ImGuiTreeNodeFlags_DefaultOpen)) {
+        draw_stats("Shadow", state.shadow_stats);
+    }
+
+    if (ImGui::CollapsingHeader("Material Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
+        const int mode = static_cast<int>(state.shading_model);
+
+        if (ImGui::RadioButton("Unlit", mode == static_cast<int>(fr::ShadingModel::Unlit))) {
+            state.shading_model = fr::ShadingModel::Unlit;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::RadioButton("Standard", mode == static_cast<int>(fr::ShadingModel::Standard))) {
+            state.shading_model = fr::ShadingModel::Standard;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::RadioButton("PBR", mode == static_cast<int>(fr::ShadingModel::PBR))) {
+            state.shading_model = fr::ShadingModel::PBR;
+        }
+
+        fr::MaterialPart *material = world.try_get<fr::MaterialPart>(state.model_entity);
+        if (material) {
+            material->shading_model = state.shading_model;
+        }
+    }
+
+    ImGui::End();
+}
+
+/**
+ * @brief Draws directional light controls and CSM controls.
+ */
+static void draw_directional_light_controls(EditorState &state, fr::World &world) {
+    if (!ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    fr::DirectionalLightPart *light = world.try_get<fr::DirectionalLightPart>(state.sun_entity);
+    fr::TransformPart *transform = world.try_get<fr::TransformPart>(state.sun_entity);
+
+    if (!light || !transform) {
+        return;
+    }
+
+    ImGui::ColorEdit3("Sun Color", &light->color.x);
+    ImGui::DragFloat("Sun Intensity", &light->intensity, 0.05f, 0.0f, 50.0f);
+
+    if (ImGui::DragFloat3("Sun Rotation", &state.sun_rotation_deg.x, 0.5f, -360.0f, 360.0f)) {
+        transform->rotation = glm::quat(glm::radians(state.sun_rotation_deg));
+    }
+
+    ImGui::Separator();
+
+    if (ImGui::TreeNodeEx("Cascaded Shadows", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextWrapped(
+            "Cascade splits control cascade selection. Half extents control orthographic "
+            "coverage. Depth ranges control how far each cascade sees along the light direction.");
+
+        ImGui::DragFloat3("Cascade Splits", &state.shadow_settings.cascade_splits.x, 0.5f, 1.0f,
+                          1000.0f);
+
+        ImGui::DragFloat3("Cascade Half Extents", &state.shadow_settings.cascade_half_extents.x,
+                          0.5f, 1.0f, 1000.0f);
+
+        ImGui::DragFloat3("Cascade Depth Ranges", &state.shadow_settings.cascade_depth_ranges.x,
+                          0.5f, 1.0f, 2000.0f);
+
+        ImGui::Separator();
+        ImGui::TextUnformatted("Shadow Sampling");
+
+        ImGui::DragFloat("Min Bias", &state.shadow_settings.min_bias, 0.00001f, 0.0f, 0.01f,
+                         "%.6f");
+
+        ImGui::DragFloat("Slope Bias", &state.shadow_settings.slope_bias, 0.00005f, 0.0f, 0.05f,
+                         "%.6f");
+
+        ImGui::DragFloat("Cascade Bias Scale", &state.shadow_settings.cascade_bias_scale, 0.05f,
+                         0.0f, 10.0f, "%.3f");
+
+        ImGui::SliderFloat("Shadow Strength", &state.shadow_settings.shadow_strength, 0.0f, 1.0f,
+                           "%.2f");
+
+        ImGui::DragFloat("Filter Radius", &state.shadow_settings.filter_radius_texels, 0.05f, 0.0f,
+                         8.0f, "%.2f");
+
+        ImGui::DragFloat("Cascade Filter Scale", &state.shadow_settings.cascade_filter_scale, 0.05f,
+                         0.0f, 4.0f, "%.2f");
+
+        if (ImGui::Button("Reset CSM Settings", ImVec2(-1, 26))) {
+            state.shadow_settings = fr::DirectionalShadowSettings{};
+        }
+
+        ImGui::TreePop();
+    }
+}
+
+/**
+ * @brief Draws point light controls.
+ */
+static void draw_point_light_controls(EditorState &state, fr::World &world) {
+    if (!ImGui::CollapsingHeader("Point Light", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    fr::PointLightPart *light = world.try_get<fr::PointLightPart>(state.point_light_entity);
+    fr::TransformPart *transform = world.try_get<fr::TransformPart>(state.point_light_entity);
+
+    if (!light || !transform) {
+        return;
+    }
+
+    ImGui::ColorEdit3("Point Color", &light->color.x);
+    ImGui::DragFloat("Point Intensity", &light->intensity, 0.1f, 0.0f, 10000.0f);
+    ImGui::DragFloat("Point Radius", &light->radius, 0.1f, 0.0f, 1000.0f);
+
+    if (ImGui::DragFloat3("Point Position", &state.point_light_position.x, 0.1f)) {
+        transform->position = state.point_light_position;
+    }
+}
+
+/**
+ * @brief Draws light controls.
+ */
+static void draw_lighting_panel(EditorState &state, fr::World &world) {
+    ImGui::SetNextWindowPos(ImVec2(455, 10), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(420, 350), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Lighting");
+
+    draw_directional_light_controls(state, world);
+    draw_point_light_controls(state, world);
+
+    ImGui::End();
+}
+
+/**
+ * @brief Draws scene information and camera help.
+ */
+static void draw_scene_panel(const EditorState &state) {
+    ImGui::SetNextWindowPos(ImVec2(455, 380), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(420, 160), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Scene");
+
+    ImGui::Text("Model: %s", state.model_handle.is_valid() ? "Loaded" : "None");
+    ImGui::Text("Skybox: %s", state.skybox_handle.is_valid() ? "Loaded" : "None");
+    ImGui::TextWrapped("Hold RMB to look around. Use WASD + Space/LShift to move.");
+
+    ImGui::End();
+}
+
+/**
+ * @brief Draws all editor UI panels.
+ */
+static void draw_ui(EditorState &state, fr::World &world, fr::AssetManager &assets) {
+    draw_asset_panel(state, world, assets);
+    draw_renderer_panel(state, world);
+    draw_lighting_panel(state, world);
+    draw_scene_panel(state);
+}
+
+/**
+ * @brief Updates the editor FPS camera.
+ */
+static void update_camera(fr::Window &window, fr::World &world, fr::WindowInput &input,
+                          EditorState &state, float dt) {
+    ImGuiIO &io = ImGui::GetIO();
+    SDL_Window *sdl_window = static_cast<SDL_Window *>(window.get_native_window());
+
+    const bool mouse_look =
+        state.job == EditorJob::None && ImGui::IsMouseDown(ImGuiMouseButton_Right);
+
+    if (mouse_look) {
+        SDL_SetWindowRelativeMouseMode(sdl_window, true);
+
+        if (!io.WantCaptureKeyboard) {
+            fr::CameraSystem::update_fps_cameras(world, input, dt);
+        }
+
+        return;
+    }
+
+    SDL_SetWindowRelativeMouseMode(sdl_window, false);
+    input.mouse_delta_x = 0.0f;
+    input.mouse_delta_y = 0.0f;
+
+    if (state.job == EditorJob::None && !io.WantCaptureKeyboard && !io.WantCaptureMouse) {
+        fr::CameraSystem::update_fps_cameras(world, input, dt);
+    }
+}
+
+/**
+ * @brief Destroys editor-owned renderer objects and assets.
+ */
+static void cleanup(fr::RenderDevice *device, fr::World &world, fr::AssetManager &assets,
+                    EditorState &editor, fr::RenderPipelineHandle gbuffer_pipe,
+                    fr::RenderPipelineHandle gbuffer_wire_pipe,
+                    fr::RenderPipelineHandle lighting_pipe, fr::RenderPipelineHandle shadow_pipe,
+                    fr::ShaderHandle gbuffer_shader, fr::ShaderHandle lighting_shader,
+                    fr::ShaderHandle shadow_shader) {
+    if (editor.cook_future.valid()) {
+        editor.cook_future.wait();
+        (void)editor.cook_future.get();
+    }
+
+    unload_model(world, assets, editor);
+    unload_skybox(assets, editor);
+
+    device->destroy_pipeline(gbuffer_pipe);
+    device->destroy_pipeline(gbuffer_wire_pipe);
+    device->destroy_pipeline(lighting_pipe);
+    device->destroy_pipeline(shadow_pipe);
+
+    device->destroy_shader(gbuffer_shader);
+    device->destroy_shader(lighting_shader);
+    device->destroy_shader(shadow_shader);
+}
+
+/**
+ * @brief Editor entry point.
+ */
+int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    fr::init_core_ctx();
+
+    fr::Alloc *alloc = fr::get_ambient_ctx().alloc;
+
+    fr::Window window{};
+    fr::WindowProperties props{};
+    props.title = "Farfocel Engine Editor";
+    props.width = 1600;
+    props.height = 900;
+    props.vsync = true;
+    props.fullscreen = false;
+    props.api = fr::GRAPHICS_API::OPENGL;
+
+    if (!window.init(props)) {
+        fr::shutdown_core_ctx();
+        return EXIT_FAILURE;
+    }
+
+    window.set_event_callback(imgui_event_callback, nullptr);
+
+    fr::RenderDevice *device = fr::create_opengl_render_device(alloc);
+    if (!device) {
+        window.close();
+        fr::shutdown_core_ctx();
+        return EXIT_FAILURE;
+    }
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    ImGuiIO &io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplSDL3_InitForOpenGL(static_cast<SDL_Window *>(window.get_native_window()),
+                                 static_cast<SDL_GLContext>(window.get_native_context()));
+    ImGui_ImplOpenGL3_Init("#version 450 core");
+
+    fr::ShaderHandle gbuffer_shader = create_shader_from_files(
+        device, "engine/shaders/core/gbuffer.vert", "engine/shaders/core/gbuffer.frag");
+    fr::ShaderHandle lighting_shader = create_shader_from_files(
+        device, "engine/shaders/core/lighting.vert", "engine/shaders/core/lighting.frag");
+    fr::ShaderHandle shadow_shader = create_shader_from_files(
+        device, "engine/shaders/core/shadow.vert", "engine/shaders/core/shadow.frag");
+
+    fr::ShaderHandle hbao_shader = create_shader_from_files(
+        device, "engine/shaders/core/lighting.vert", "engine/shaders/core/hbao.frag");
+
+    FR_ASSERT(
+        gbuffer_shader.is_valid(),
+        "failed to create gbuffer shader, this is to be launched from the top farfocel directory");
+    FR_ASSERT(
+        lighting_shader.is_valid(),
+        "failed to create lighting shader, this is to be launched from the top farfocel directory");
+    FR_ASSERT(
+        shadow_shader.is_valid(),
+        "failed to create shadow shader, this is to be launched from the top farfocel directory");
+    FR_ASSERT(
+        hbao_shader.is_valid(),
+        "failed to create hbao shader, this is to be launched from the top farfocel directory");
+
+    fr::RenderPipelineHandle gbuffer_pipe =
+        create_pipeline(device, gbuffer_shader, fr::CullMode::Back, true, true, false);
+    fr::RenderPipelineHandle gbuffer_wire_pipe =
+        create_pipeline(device, gbuffer_shader, fr::CullMode::None, true, true, true);
+    fr::RenderPipelineHandle lighting_pipe =
+        create_pipeline(device, lighting_shader, fr::CullMode::None, false, false, false);
+    fr::RenderPipelineHandle shadow_pipe =
+        create_pipeline(device, shadow_shader, fr::CullMode::None, true, true, false);
+    fr::RenderPipelineHandle hbao_pipe =
+        create_pipeline(device, hbao_shader, fr::CullMode::None, false, false, false);
+
+    FR_ASSERT(gbuffer_pipe.is_valid(), "failed to create gbuffer pipeline");
+    FR_ASSERT(gbuffer_wire_pipe.is_valid(), "failed to create wireframe pipeline");
+    FR_ASSERT(lighting_pipe.is_valid(), "failed to create lighting pipeline");
+    FR_ASSERT(shadow_pipe.is_valid(), "failed to create shadow pipeline");
+    FR_ASSERT(hbao_pipe.is_valid(), "failed to create shadow pipeline");
+
+    fr::Renderer renderer(device);
+    fr::AssetManager assets(device, alloc);
+    fr::World world{};
+
+    fr::RenderQueue geom_queue(alloc);
+    fr::RenderQueue shadow_queue(alloc);
+
+    fr::WindowInput input{};
+    EditorState editor{};
+
+    create_camera(world, editor);
+    create_lights(world, editor);
+
+    U64 last_time = fr::time::get_steady_now_ms();
+
+    while (editor.running) {
+        poll_jobs(editor, world, assets);
+
+        U64 now = fr::time::get_steady_now_ms();
+        float dt = static_cast<float>(now - last_time) / 1000.0f;
+        last_time = now;
+
+        if (!window.poll_events(input) || input.is_key_pressed(fr::Key::Escape)) {
+            editor.running = false;
+            break;
+        }
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+
+        update_camera(window, world, input, editor, dt);
+        draw_ui(editor, world, assets);
+
+        if (!window.is_minimized() && window.get_width() > 0 && window.get_height() > 0) {
+            geom_queue.clear_leftover();
+            shadow_queue.clear_leftover();
+
+            const float aspect =
+                static_cast<float>(window.get_width()) / static_cast<float>(window.get_height());
+
+            fr::CamData cam = fr::RenderSystem::extract_cam_data(world, aspect);
+
+            fr::RenderPipelineHandle active_gbuffer =
+                editor.wireframe ? gbuffer_wire_pipe : gbuffer_pipe;
+
+            editor.geometry_stats = fr::RenderSystem::submit_meshes(world, geom_queue, assets,
+                                                                    active_gbuffer, cam.view_proj);
+
+            editor.shadow_stats =
+                fr::RenderSystem::submit_shadow_casters(world, shadow_queue, assets, shadow_pipe);
+
+            fr::RenderSystem::submit_lights(world, geom_queue);
+            fr::RenderSystem::submit_directional_lights(world, geom_queue, cam.pos, cam.dir,
+                                                        editor.shadow_settings);
+
+            geom_queue.sort();
+            shadow_queue.sort();
+
+            fr::TextureHandle skybox_texture = assets.get_texture_handle(editor.skybox_handle);
+
+            fr::RenderFrameDesc frame{};
+            frame.geom_queue = &geom_queue;
+            frame.shadow_queue = &shadow_queue;
+
+            frame.viewport.width = window.get_width();
+            frame.viewport.height = window.get_height();
+
+            frame.camera.view_proj = cam.view_proj;
+            frame.camera.position = cam.pos;
+            frame.camera.forward = cam.dir;
+
+            frame.pipelines.lighting = lighting_pipe;
+            frame.pipelines.shadow = shadow_pipe;
+
+            frame.skybox_map = skybox_texture;
+
+            frame.debug.mode = editor.debug_mode;
+            frame.debug.flags = 0;
+
+            frame.lighting.exposure = editor.exposure;
+            frame.lighting.pbr_ambient_strength = editor.pbr_ambient_strength;
+            frame.lighting.standard_ambient_strength = editor.standard_ambient_strength;
+            frame.lighting.standard_specular_default = editor.standard_specular_default;
+
+            renderer.render(frame);
+        }
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        window.swap_buffers();
+    }
+
+    cleanup(device, world, assets, editor, gbuffer_pipe, gbuffer_wire_pipe, lighting_pipe,
+            shadow_pipe, gbuffer_shader, lighting_shader, shadow_shader);
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
+    ImGui::DestroyContext();
+
+    fr::destroy_opengl_render_device(device);
+    window.close();
+
+    fr::shutdown_core_ctx();
+    return EXIT_SUCCESS;
+}

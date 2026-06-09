@@ -89,7 +89,7 @@ bool Window::init(const WindowProperties &properties) noexcept {
         SDL_GL_SetSwapInterval(properties.vsync ? 1 : 0);
     }
 
-    SDL_SetWindowRelativeMouseMode(m_state->window, true);
+    // SDL_SetWindowRelativeMouseMode(m_state->window, true);
 
     m_width = properties.width;
     m_height = properties.height;
@@ -119,8 +119,14 @@ bool Window::poll_events(WindowInput &out_input) noexcept {
 
     SDL_Event evnt;
     while (SDL_PollEvent(&evnt)) {
+        if (m_event_callback) {
+            m_event_callback(&evnt, m_event_data);
+        }
+
         switch (evnt.type) {
         case SDL_EVENT_QUIT:
+            return false;
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
             return false;
 
         // WINDOW STATE
@@ -176,5 +182,12 @@ void Window::swap_buffers() noexcept {
     FR_ASSERT(m_state && m_state->window, "Window must be initialized");
     if (m_state->gl_context)
         SDL_GL_SwapWindow(m_state->window);
+}
+
+void *Window::get_native_window() const noexcept {
+    return m_state ? m_state->window : nullptr;
+}
+void *Window::get_native_context() const noexcept {
+    return m_state ? m_state->gl_context : nullptr;
 }
 } // namespace fr

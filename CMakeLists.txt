@@ -105,6 +105,8 @@ endif()
 
 add_subdirectory(3rdparty)
 add_subdirectory(engine)
+add_subdirectory(asscooker)
+add_subdirectory(editor)
 add_subdirectory(examples)
 
 enable_testing()

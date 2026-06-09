@@ -15,6 +15,13 @@
 namespace fr {
 
 /**
+ * @brief Signature for the raw event callback function.
+ * @param event_data Raw pointer to the underlying OS event (e.g., SDL_Event).
+ * @param user_data Custom pointer passed back to the caller.
+ */
+using EventCallbackFun = void (*)(void *event_data, void *data);
+
+/**
  * @brief Supported graphics APIs for the window context.
  */
 enum class GRAPHICS_API : U8 { OPENGL };
@@ -62,6 +69,11 @@ public:
      */
     bool poll_events(WindowInput &event) noexcept;
 
+    void set_event_callback(EventCallbackFun callback, void *data = nullptr) noexcept {
+        m_event_callback = callback;
+        m_event_data = data;
+    }
+
     /**
      * @brief Swaps the front and back buffers, presenting the rendered frame to the screen.
      */
@@ -81,6 +93,20 @@ public:
     U32 get_height() const noexcept {
         return m_height;
     }
+
+    /**
+     * @brief Retrieves the underlying native window handle (e.g., SDL_Window*).
+     * Useful for integrating third-party tools like ImGui or Vulkan surfaces.
+     * @return Raw pointer to the native window.
+     */
+    [[nodiscard]] void *get_native_window() const noexcept;
+
+    /**
+     * @brief Retrieves the underlying native graphics context (e.g., SDL_GLContext).
+     * @return Raw pointer to the native context.
+     */
+    [[nodiscard]] void *get_native_context() const noexcept;
+
     /**
      * @brief Checks if the window is currently minimized.
      * * @return true if minimized.
@@ -103,5 +129,8 @@ private:
     bool m_minimized{false};
     bool m_focused{true};
     bool m_resized_this_frame{false};
+
+    EventCallbackFun m_event_callback{nullptr};
+    void *m_event_data{nullptr};
 };
 } // namespace fr

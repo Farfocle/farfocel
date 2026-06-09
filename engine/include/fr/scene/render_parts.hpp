@@ -23,6 +23,12 @@ enum class ShadingModel : U32 {
     PBR = 2       ///< Physically Based Cook-Torrance model.
 };
 
+enum class MaterialBlendMode : U8 {
+    Opaque = 0,
+    Masked = 1,
+    Alpha = 2,
+};
+
 /**
  * @brief Space properties of an entity.
  */
@@ -32,6 +38,7 @@ struct TransformPart {
 
     vec3_t position;
     quat_t rotation;
+
     vec3_t scale;
 
     TransformPart() noexcept
@@ -78,15 +85,28 @@ struct MeshPart {
 };
 
 /**
- * @brief Defines the surface visuals and light interactions of an entity.
+ * @brief Defines surface shading parameters used by the renderer.
+ *
+ * @details
+ * The optional extra texture uses a shared material-data layout:
+ *
+ * - R: metallic for PBR, reserved/specular parameter for Standard
+ * - G: roughness
+ * - B: ambient occlusion
+ * - A: unused in texture input; shading model is written separately to the G-Buffer
+ *
+ * If a mesh submesh already provides textures from the cooked asset, those textures take
+ * prioority. MaterialPart textures are used as a fallbacks.
  */
 struct MaterialPart {
     ShadingModel shading_model;
 
     TextureAssetHandle albedo_map;
     TextureAssetHandle normal_map;
-    /// Specular for Standard, metallic/Roughness for PBR
     TextureAssetHandle extra_map;
+
+    MaterialBlendMode blend_mode{MaterialBlendMode::Opaque};
+    F32 alpha{1.0f};
 
     MaterialPart() noexcept
         : shading_model(ShadingModel::PBR),
@@ -102,7 +122,27 @@ struct PointLightPart {
     F32 intensity{1.0f};
     F32 radius{10.0f};
 
+    bool casts_shadow{false};
+    F32 shadow_strength{1.0f};
+    F32 shadow_bias{0.005f};
+
     PointLightPart() noexcept = default;
+};
+
+/// @brief Spot light source component.
+struct SpotLightPart {
+    glm::vec3 color{1.0f, 1.0f, 1.0f};
+    F32 intensity{0.0f};
+    F32 radius{25.0f};
+
+    F32 inner_angle_deg{20.0f};
+    F32 outer_angle_deg{35.0f};
+
+    bool casts_shadow{false};
+    F32 shadow_strength{1.0f};
+    F32 shadow_bias{0.002f};
+
+    SpotLightPart() noexcept = default;
 };
 
 /// @brief Directional light source like the sun

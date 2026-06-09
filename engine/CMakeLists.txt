@@ -52,13 +52,19 @@ set(ENGINE_HEADERS
     "include/fr/platform/input.hpp"
 
 #### renderer
-    "include/fr/renderer/render_device.hpp"
-    "include/fr/renderer/mesh_loader.hpp"
+    "include/fr/renderer/frustum.hpp"
     "include/fr/renderer/mesh.hpp"
-    "include/fr/renderer/camera.hpp"
+    "include/fr/renderer/render_bindings.hpp"
+    "include/fr/renderer/render_device.hpp"
+    "include/fr/renderer/render_light_data.hpp"
     "include/fr/renderer/render_queue.hpp"
+    "include/fr/renderer/render_sort_key.hpp"
     "include/fr/renderer/renderer.hpp"
-    "include/fr/renderer/texture_loader.hpp"
+    "include/fr/renderer/renderer_constants.hpp"
+    "include/fr/renderer/renderer_desc.hpp"
+    "include/fr/renderer/renderer_frame_data.hpp"
+    "include/fr/renderer/renderer_resources.hpp"
+
 
 ### data
     "include/fr/data/part.hpp"
@@ -71,6 +77,7 @@ set(ENGINE_HEADERS
     "include/fr/data/typeidx.hpp"
     "include/fr/data/world.hpp"
     "include/fr/data/asset_manager.hpp"
+    "include/fr/data/asset_format.hpp"
 
 ### scene?
     "include/fr/scene/render_parts.hpp"
@@ -84,10 +91,9 @@ set(ENGINE_SOURCES
     "src/platform/sdl3/sdl_window.cpp"
     
 #### renderer
+    "src/renderer/renderer.cpp"
+    "src/renderer/renderer_passes.cpp"
     "src/renderer/opengl/opengl_render_device.cpp"
-    "src/renderer/mesh.cpp"
-    "src/renderer/mesh_loader.cpp"
-    "src/renderer/texture_loader.cpp"
 )
 
 
@@ -101,8 +107,6 @@ target_link_libraries(engine PUBLIC yyjson)
 target_link_libraries(engine PRIVATE glad)
 target_link_libraries(engine PUBLIC glm::glm)
 target_link_libraries(engine PUBLIC SDL3::SDL3-static)
-target_link_libraries(engine PRIVATE cgltf)
-target_link_libraries(engine PRIVATE stb)
 
 target_include_directories(engine
     PUBLIC "include"

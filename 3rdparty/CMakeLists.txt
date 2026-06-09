@@ -17,5 +17,8 @@ set(SDL_SHARED OFF CACHE BOOL "Do not build SDL as a shared library" FORCE)
 set(SDL_STATIC ON CACHE BOOL "Build SDL as a static library" FORCE)
 add_subdirectory(SDL)
 add_subdirectory(stb)
+add_subdirectory(bc7enc)
+add_subdirectory(mikktspace)
 
 add_subdirectory(cgltf)
+add_subdirectory(imgui)

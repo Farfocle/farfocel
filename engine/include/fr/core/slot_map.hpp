@@ -81,8 +81,10 @@ public:
     [[nodiscard]] T *get_data(SlotKey key) noexcept {
         if (key.index >= m_slots.size())
             return nullptr;
-
         if (m_slots[key.index].generation != key.generation)
+            return nullptr;
+
+        if (key.generation % 2 == 0)
             return nullptr;
 
         return reinterpret_cast<T *>(m_slots[key.index].data);
@@ -98,6 +100,9 @@ public:
             return nullptr;
 
         if (m_slots[key.index].generation != key.generation)
+            return nullptr;
+
+        if (key.generation % 2 == 0)
             return nullptr;
 
         return reinterpret_cast<const T *>(m_slots[key.index].data);
