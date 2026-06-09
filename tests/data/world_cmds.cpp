@@ -189,27 +189,27 @@ TEST_CASE("Cmds - deferred attach_child commits correctly") {
     World world;
     Thing parent = world.spawn();
     Thing child = world.spawn();
-    world.emplace_now<Relations>(parent);
-    world.emplace_now<Relations>(child);
+    world.emplace_now<RelationsPart>(parent);
+    world.emplace_now<RelationsPart>(child);
 
     world.attach_child(parent, child);
-    CHECK(world.get<Relations>(child).parent.is_nil());
+    CHECK(world.get<RelationsPart>(child).parent.is_nil());
     world.commit_attach_child();
-    CHECK(world.get<Relations>(child).parent == parent);
+    CHECK(world.get<RelationsPart>(child).parent == parent);
 }
 
 TEST_CASE("Cmds - deferred detach_child commits correctly") {
     World world;
     Thing parent = world.spawn();
     Thing child = world.spawn();
-    world.emplace_now<Relations>(parent);
-    world.emplace_now<Relations>(child);
+    world.emplace_now<RelationsPart>(parent);
+    world.emplace_now<RelationsPart>(child);
     world.attach_child_now(parent, child);
 
     world.detach_child(parent, child);
-    CHECK(world.get<Relations>(child).parent == parent);
+    CHECK(world.get<RelationsPart>(child).parent == parent);
     world.commit_detach_child();
-    CHECK(world.get<Relations>(child).parent.is_nil());
+    CHECK(world.get<RelationsPart>(child).parent.is_nil());
 }
 
 TEST_CASE("Cmds - commit_from applies commands from external batch") {

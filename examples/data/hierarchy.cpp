@@ -37,16 +37,16 @@ struct Game {
 
     void init() {
         player = world.spawn();
-        world.emplace_now<fr::Relations>(player);
+        world.emplace_now<fr::RelationsPart>(player);
 
         for (USize i = 0; i < 3; ++i) {
             fr::Thing child = world.spawn();
-            world.emplace_now<fr::Relations>(child);
+            world.emplace_now<fr::RelationsPart>(child);
             world.emplace_now<Pos>(child);
 
             for (USize j = 0; j < 3; ++j) {
                 fr::Thing more_so_a_child = world.spawn();
-                world.emplace_now<fr::Relations>(more_so_a_child);
+                world.emplace_now<fr::RelationsPart>(more_so_a_child);
                 world.emplace_now<Pos>(more_so_a_child);
                 world.attach_child_now(child, more_so_a_child);
             }
@@ -59,7 +59,7 @@ struct Game {
         world.sort_by_hierarchy_depth<Pos>();
 
         std::cout << "---- deep_query\n";
-        for (auto [thing, relations, pos] : world.deep_query<fr::Relations, Pos>(player)) {
+        for (auto [thing, relations, pos] : world.deep_query<fr::RelationsPart, Pos>(player)) {
             std::cout << "\n----\n";
             std::cout << fr::format("thing: {}\nrelations: {}\npos: {}\n", thing, relations, pos);
         }

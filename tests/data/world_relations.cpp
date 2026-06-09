@@ -7,7 +7,7 @@ namespace fr {
 
 static Thing make_node(World &world) {
     Thing t = world.spawn();
-    world.emplace_now<Relations>(t);
+    world.emplace_now<RelationsPart>(t);
     return t;
 }
 
@@ -19,8 +19,8 @@ TEST_CASE("Relations - attach_child_now links parent and child") {
     bool ok = world.attach_child_now(parent, child);
     CHECK(ok);
 
-    Relations &pr = world.get<Relations>(parent);
-    Relations &cr = world.get<Relations>(child);
+    RelationsPart &pr = world.get<RelationsPart>(parent);
+    RelationsPart &cr = world.get<RelationsPart>(child);
 
     CHECK(cr.parent == parent);
     CHECK(pr.first_child == child);
@@ -51,10 +51,10 @@ TEST_CASE("Relations - multiple children form a sibling chain") {
     world.attach_child_now(parent, c2);
     world.attach_child_now(parent, c3);
 
-    Relations &pr = world.get<Relations>(parent);
-    Relations &r1 = world.get<Relations>(c1);
-    Relations &r2 = world.get<Relations>(c2);
-    Relations &r3 = world.get<Relations>(c3);
+    RelationsPart &pr = world.get<RelationsPart>(parent);
+    RelationsPart &r1 = world.get<RelationsPart>(c1);
+    RelationsPart &r2 = world.get<RelationsPart>(c2);
+    RelationsPart &r3 = world.get<RelationsPart>(c3);
 
     CHECK(pr.first_child == c3);
     CHECK(r3.next_sibling == c2);
@@ -83,8 +83,8 @@ TEST_CASE("Relations - detach_child_now removes child from parent") {
     bool ok = world.detach_child_now(parent, child);
     CHECK(ok);
 
-    Relations &pr = world.get<Relations>(parent);
-    Relations &cr = world.get<Relations>(child);
+    RelationsPart &pr = world.get<RelationsPart>(parent);
+    RelationsPart &cr = world.get<RelationsPart>(child);
 
     CHECK(pr.first_child.is_nil());
     CHECK(cr.parent.is_nil());
@@ -109,9 +109,9 @@ TEST_CASE("Relations - detach middle child repairs sibling chain") {
 
     world.detach_child_now(parent, c2);
 
-    Relations &r3 = world.get<Relations>(c3);
-    Relations &r1 = world.get<Relations>(c1);
-    Relations &r2 = world.get<Relations>(c2);
+    RelationsPart &r3 = world.get<RelationsPart>(c3);
+    RelationsPart &r1 = world.get<RelationsPart>(c1);
+    RelationsPart &r2 = world.get<RelationsPart>(c2);
 
     CHECK(r3.next_sibling == c1);
     CHECK(r1.prev_sibling == c3);
@@ -130,9 +130,9 @@ TEST_CASE("Relations - update_hierarchy sets correct depths") {
     world.attach_child_now(child, grandchild);
     world.update_hierarchy(root);
 
-    CHECK(world.get<Relations>(root).depth == ROOT_HIERARCHY_DEPTH);
-    CHECK(world.get<Relations>(child).depth == 1u);
-    CHECK(world.get<Relations>(grandchild).depth == 2u);
+    CHECK(world.get<RelationsPart>(root).depth == ROOT_HIERARCHY_DEPTH);
+    CHECK(world.get<RelationsPart>(child).depth == 1u);
+    CHECK(world.get<RelationsPart>(grandchild).depth == 2u);
 }
 
 TEST_CASE("Relations - update_hierarchy on nil is no-op") {
@@ -146,7 +146,7 @@ TEST_CASE("Relations - newly attached child gets correct depth") {
     Thing child = make_node(world);
     world.attach_child_now(root, child);
 
-    CHECK(world.get<Relations>(child).depth == 1u);
+    CHECK(world.get<RelationsPart>(child).depth == 1u);
 }
 
 TEST_CASE("Relations - deferred attach_child applies on commit") {
@@ -155,12 +155,12 @@ TEST_CASE("Relations - deferred attach_child applies on commit") {
     Thing child = make_node(world);
 
     world.attach_child(parent, child);
-    CHECK(world.get<Relations>(child).parent.is_nil());
+    CHECK(world.get<RelationsPart>(child).parent.is_nil());
 
     world.commit_attach_child();
 
-    CHECK(world.get<Relations>(child).parent == parent);
-    CHECK(world.get<Relations>(parent).first_child == child);
+    CHECK(world.get<RelationsPart>(child).parent == parent);
+    CHECK(world.get<RelationsPart>(parent).first_child == child);
 }
 
 TEST_CASE("Relations - deferred detach_child applies on commit") {
@@ -170,12 +170,12 @@ TEST_CASE("Relations - deferred detach_child applies on commit") {
 
     world.attach_child_now(parent, child);
     world.detach_child(parent, child);
-    CHECK(world.get<Relations>(child).parent == parent);
+    CHECK(world.get<RelationsPart>(child).parent == parent);
 
     world.commit_detach_child();
 
-    CHECK(world.get<Relations>(child).parent.is_nil());
-    CHECK(world.get<Relations>(parent).first_child.is_nil());
+    CHECK(world.get<RelationsPart>(child).parent.is_nil());
+    CHECK(world.get<RelationsPart>(parent).first_child.is_nil());
 }
 
 TEST_CASE("Relations - Scope attach_child_now") {
@@ -185,7 +185,7 @@ TEST_CASE("Relations - Scope attach_child_now") {
     Thing child = make_node(world);
 
     CHECK(scope.attach_child_now(parent, child));
-    CHECK(world.get<Relations>(child).parent == parent);
+    CHECK(world.get<RelationsPart>(child).parent == parent);
 }
 
 TEST_CASE("Relations - Scope detach_child_now") {
@@ -196,7 +196,7 @@ TEST_CASE("Relations - Scope detach_child_now") {
 
     scope.attach_child_now(parent, child);
     CHECK(scope.detach_child_now(parent, child));
-    CHECK(world.get<Relations>(child).parent.is_nil());
+    CHECK(world.get<RelationsPart>(child).parent.is_nil());
 }
 
 TEST_CASE("Relations - sort_by_hierarchy_depth preserves all entries") {
@@ -210,10 +210,10 @@ TEST_CASE("Relations - sort_by_hierarchy_depth preserves all entries") {
     world.attach_child_now(root, c2);
     world.attach_child_now(c1, gc);
 
-    world.sort_by_hierarchy_depth<Relations>();
+    world.sort_by_hierarchy_depth<RelationsPart>();
 
     int count = 0;
-    for (auto [thing, rel] : world.query<Relations>()) {
+    for (auto [thing, rel] : world.query<RelationsPart>()) {
         (void)thing;
         (void)rel;
         ++count;

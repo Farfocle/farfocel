@@ -1190,7 +1190,7 @@ inline void World::sort_by_hierarchy_depth() noexcept {
     DynamicArray<HierarchyDepth> depths;
     depths.reserve(n);
     for (USize i = 0; i < n; ++i) {
-        Relations *rel = m_registry.get_checked<Relations>(part_to_thing[i]);
+        RelationsPart *rel = m_registry.get_checked<RelationsPart>(part_to_thing[i]);
         depths.push_back(rel ? rel->depth : ROOT_HIERARCHY_DEPTH);
     }
 
@@ -1535,8 +1535,8 @@ inline bool World::attach_child_now(Thing parent, Thing child) noexcept {
         return false;
     }
 
-    Relations &parent_rel = m_registry.get_unchecked<Relations>(parent);
-    Relations &child_rel = m_registry.get_unchecked<Relations>(child);
+    RelationsPart &parent_rel = m_registry.get_unchecked<RelationsPart>(parent);
+    RelationsPart &child_rel = m_registry.get_unchecked<RelationsPart>(child);
 
     if (child_rel.parent == parent) {
         return true;
@@ -1550,7 +1550,7 @@ inline bool World::attach_child_now(Thing parent, Thing child) noexcept {
     child_rel.next_sibling = parent_rel.first_child;
 
     if (!child_rel.next_sibling.is_nil()) {
-        Relations &next_rel = m_registry.get_unchecked<Relations>(child_rel.next_sibling);
+        RelationsPart &next_rel = m_registry.get_unchecked<RelationsPart>(child_rel.next_sibling);
         next_rel.prev_sibling = child;
     }
 
@@ -1571,7 +1571,7 @@ inline bool World::detach_child_now(Thing parent, Thing child) noexcept {
         return false;
     }
 
-    Relations &child_rel = m_registry.get_unchecked<Relations>(child);
+    RelationsPart &child_rel = m_registry.get_unchecked<RelationsPart>(child);
     if (child_rel.parent != parent) {
         return false;
     }
@@ -1593,11 +1593,11 @@ inline void World::update_hierarchy(Thing root) noexcept {
         return;
     }
 
-    Relations &root_rel = m_registry.get_unchecked<Relations>(root);
+    RelationsPart &root_rel = m_registry.get_unchecked<RelationsPart>(root);
     Thing curr = root_rel.first_child;
 
     while (!curr.is_nil()) {
-        Relations &rel = m_registry.get_unchecked<Relations>(curr);
+        RelationsPart &rel = m_registry.get_unchecked<RelationsPart>(curr);
         do_update_hierarchy(root_rel.depth, curr);
         curr = rel.next_sibling;
     }
@@ -1608,7 +1608,7 @@ inline void World::do_update_hierarchy(HierarchyDepth parent_depth, Thing child)
     HierarchyDepth curr_depth = parent_depth + 1;
 
     while (curr_depth > parent_depth) {
-        Relations &rel = m_registry.get_unchecked<Relations>(curr_thing);
+        RelationsPart &rel = m_registry.get_unchecked<RelationsPart>(curr_thing);
         if (rel.depth == curr_depth) {
             curr_thing = rel.parent;
             --curr_depth;
@@ -1636,19 +1636,19 @@ inline void World::do_update_hierarchy(HierarchyDepth parent_depth, Thing child)
 }
 
 inline void World::do_detach_from_hierarchy_unchecked(Thing thing) noexcept {
-    Relations &thing_rel = m_registry.get_unchecked<Relations>(thing);
+    RelationsPart &thing_rel = m_registry.get_unchecked<RelationsPart>(thing);
 
     if (thing_rel.parent.is_nil()) {
         return;
     }
 
-    Relations &parent_rel = m_registry.get_unchecked<Relations>(thing_rel.parent);
+    RelationsPart &parent_rel = m_registry.get_unchecked<RelationsPart>(thing_rel.parent);
     if (thing == parent_rel.first_child) {
         FR_ASSERT(thing_rel.prev_sibling.is_nil(), "previous sibling of a first child must be nil");
 
         parent_rel.first_child = thing_rel.next_sibling;
         if (!parent_rel.first_child.is_nil()) {
-            Relations &next_rel = m_registry.get_unchecked<Relations>(thing_rel.next_sibling);
+            RelationsPart &next_rel = m_registry.get_unchecked<RelationsPart>(thing_rel.next_sibling);
             next_rel.prev_sibling = Thing::nil();
             thing_rel.next_sibling = Thing::nil();
         }
@@ -1658,7 +1658,7 @@ inline void World::do_detach_from_hierarchy_unchecked(Thing thing) noexcept {
     }
 
     if (thing_rel.next_sibling.is_nil()) {
-        Relations &prev_rel = m_registry.get_unchecked<Relations>(thing_rel.prev_sibling);
+        RelationsPart &prev_rel = m_registry.get_unchecked<RelationsPart>(thing_rel.prev_sibling);
         prev_rel.next_sibling = Thing::nil();
         thing_rel.prev_sibling = Thing::nil();
         thing_rel.parent = Thing::nil();
@@ -1670,8 +1670,8 @@ inline void World::do_detach_from_hierarchy_unchecked(Thing thing) noexcept {
     FR_ASSERT(!thing_rel.prev_sibling.is_nil(),
               "in the final case the previous sibling must be non-nil");
 
-    Relations &prev_rel = m_registry.get_unchecked<Relations>(thing_rel.prev_sibling);
-    Relations &next_rel = m_registry.get_unchecked<Relations>(thing_rel.next_sibling);
+    RelationsPart &prev_rel = m_registry.get_unchecked<RelationsPart>(thing_rel.prev_sibling);
+    RelationsPart &next_rel = m_registry.get_unchecked<RelationsPart>(thing_rel.next_sibling);
 
     prev_rel.next_sibling = thing_rel.next_sibling;
     next_rel.prev_sibling = thing_rel.prev_sibling;
