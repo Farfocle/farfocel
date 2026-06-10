@@ -19,7 +19,7 @@ namespace fr {
 class CameraSystem {
 public:
     static void update_fps_cameras(World &world, const WindowInput &input, float dt) noexcept {
-        for (auto [thing, fps, trans] : world.query<FPSControllerPart, TransformPart>()) {
+        for (auto [thing, fps, trans] : world.query<FPSControllerPart, WorldTransformPart>()) {
 
             fps.yaw -= input.mouse_delta_x * fps.mouse_sensitivity;
             fps.pitch -= input.mouse_delta_y * fps.mouse_sensitivity;

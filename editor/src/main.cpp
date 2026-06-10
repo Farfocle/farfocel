@@ -475,7 +475,7 @@ static void destroy_gpu_resources() {
 static void create_camera(fr::World &world, EditorState &state) {
     state.camera_entity = world.spawn();
 
-    fr::TransformPart &transform = world.emplace_now<fr::TransformPart>(state.camera_entity);
+    fr::WorldTransformPart &transform = world.emplace_now<fr::WorldTransformPart>(state.camera_entity);
     transform.position = glm::vec3(0.0f, 2.0f, 0.0f);
     transform.rotation = glm::quat(glm::radians(glm::vec3(0.0f, -90.0f, 0.0f)));
     transform.scale = glm::vec3(1.0f);
@@ -496,7 +496,7 @@ static void create_camera(fr::World &world, EditorState &state) {
 static void create_lights(fr::World &world, EditorState &state) {
     state.sun_entity = world.spawn();
 
-    fr::TransformPart &sun_transform = world.emplace_now<fr::TransformPart>(state.sun_entity);
+    fr::WorldTransformPart &sun_transform = world.emplace_now<fr::WorldTransformPart>(state.sun_entity);
     sun_transform.position = glm::vec3(0.0f);
     sun_transform.rotation = glm::quat(glm::radians(state.sun_rotation_deg));
     sun_transform.scale = glm::vec3(1.0f);
@@ -507,7 +507,7 @@ static void create_lights(fr::World &world, EditorState &state) {
 
     state.point_light_entity = world.spawn();
 
-    fr::TransformPart &point_transform = world.emplace_now<fr::TransformPart>(state.point_light_entity);
+    fr::WorldTransformPart &point_transform = world.emplace_now<fr::WorldTransformPart>(state.point_light_entity);
     point_transform.position = state.point_light_position;
     point_transform.rotation = glm::quat(glm::vec3(0.0f));
     point_transform.scale = glm::vec3(1.0f);
@@ -522,7 +522,7 @@ static void create_lights(fr::World &world, EditorState &state) {
 
     state.spot_light_entity = world.spawn();
 
-    fr::TransformPart &spot_transform = world.emplace_now<fr::TransformPart>(state.spot_light_entity);
+    fr::WorldTransformPart &spot_transform = world.emplace_now<fr::WorldTransformPart>(state.spot_light_entity);
     spot_transform.position = state.spot_light_position;
     spot_transform.rotation = glm::quat(glm::radians(state.spot_light_rotation_deg));
     spot_transform.scale = glm::vec3(1.0f);
@@ -571,7 +571,7 @@ static void load_cooked_model(fr::World &world, fr::AssetManager &assets, Editor
     state.model_handle = mesh;
     state.model_entity = world.spawn();
 
-    fr::TransformPart &transform = world.emplace_now<fr::TransformPart>(state.model_entity);
+    fr::WorldTransformPart &transform = world.emplace_now<fr::WorldTransformPart>(state.model_entity);
     transform.position = glm::vec3(0.0f);
     transform.rotation = glm::quat(glm::vec3(0.0f));
     transform.scale = glm::vec3(1.0f);
@@ -860,7 +860,7 @@ static void draw_directional_light_controls(EditorState &state, fr::World &world
     }
 
     fr::DirectionalLightPart *light = world.try_get<fr::DirectionalLightPart>(state.sun_entity);
-    fr::TransformPart *transform = world.try_get<fr::TransformPart>(state.sun_entity);
+    fr::WorldTransformPart *transform = world.try_get<fr::WorldTransformPart>(state.sun_entity);
 
     if (!light || !transform) {
         return;
@@ -913,7 +913,7 @@ static void draw_point_light_controls(EditorState &state, fr::World &world) {
     }
 
     fr::PointLightPart *light = world.try_get<fr::PointLightPart>(state.point_light_entity);
-    fr::TransformPart *transform = world.try_get<fr::TransformPart>(state.point_light_entity);
+    fr::WorldTransformPart *transform = world.try_get<fr::WorldTransformPart>(state.point_light_entity);
 
     if (!light || !transform) {
         return;
@@ -941,7 +941,7 @@ static void draw_spot_light_controls(EditorState &state, fr::World &world) {
     }
 
     fr::SpotLightPart *light = world.try_get<fr::SpotLightPart>(state.spot_light_entity);
-    fr::TransformPart *transform = world.try_get<fr::TransformPart>(state.spot_light_entity);
+    fr::WorldTransformPart *transform = world.try_get<fr::WorldTransformPart>(state.spot_light_entity);
 
     if (!light || !transform) {
         return;

@@ -1,5 +1,6 @@
 /**
  * @file asset_format.hpp
+ * @author Tfoedy
  * @brief Binary on-disk They are written by asscooker and read by AssetManager. * @brief Binary
  * on-disk layout definitions for cooked Farfocel assets.
  *

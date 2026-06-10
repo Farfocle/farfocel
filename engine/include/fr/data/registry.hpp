@@ -16,7 +16,7 @@
 #include "fr/core/tuple.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/part.hpp"
-#include "fr/data/relations.hpp"
+#include "fr/data/parts.hpp"
 
 namespace fr {
 // ======================================================== Forward Declarations
@@ -30,7 +30,7 @@ struct QueryOptions {
     Signature without{};
 };
 
-// ================================================================== PartMeta
+// ==================================================================== PartMeta
 
 /// @brief Type-erased metadata for a single part type.
 struct PartMeta {
@@ -48,7 +48,8 @@ struct PartMeta {
     void (*commit_insert_move)(void *registry, Thing thing, void *part_ptr) noexcept {nullptr};
 
     /// Copy the part at `part_ptr` into the registry (emplace / insert by copy).
-    void (*commit_insert_copy)(void *registry, Thing thing, const void *part_ptr) noexcept {nullptr};
+    void (*commit_insert_copy)(void *registry, Thing thing,
+                               const void *part_ptr) noexcept {nullptr};
 
     /// Destroy the part owned by `thing` in the registry (checked).
     void (*commit_destroy)(void *registry, Thing thing) noexcept {nullptr};
@@ -63,12 +64,15 @@ struct PartMeta {
     void *(*get_raw)(void *registry, Thing thing) noexcept {nullptr};
 
     /// Move the part at `part_ptr` into the registry unchecked.
-    void (*commit_emplace_unchecked_move)(void *registry, Thing thing, void *part_ptr) noexcept {nullptr};
+    void (*commit_emplace_unchecked_move)(void *registry, Thing thing,
+                                          void *part_ptr) noexcept {nullptr};
 
     /// Copy the part at `part_ptr` into the registry unchecked.
-    void (*commit_emplace_unchecked_copy)(void *registry, Thing thing, const void *part_ptr) noexcept {nullptr};
+    void (*commit_emplace_unchecked_copy)(void *registry, Thing thing,
+                                          const void *part_ptr) noexcept {nullptr};
 
-    /// Return a raw pointer to the part owned by `thing` (unchecked — caller guarantees alive + has part).
+    /// Return a raw pointer to the part owned by `thing` (unchecked — caller guarantees alive + has
+    /// part).
     void *(*get_raw_unchecked)(void *registry, Thing thing) noexcept {nullptr};
 };
 
@@ -347,7 +351,7 @@ public:
     void emplace_unchecked_raw(TypeIdx tidx, Thing thing, void *part_ptr) noexcept {
         FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
         m_meta_registry.get(tidx).commit_emplace_unchecked_move(static_cast<void *>(this), thing,
-                                                                 part_ptr);
+                                                                part_ptr);
     }
 
     /**
@@ -357,7 +361,7 @@ public:
     void emplace_unchecked_raw(TypeIdx tidx, Thing thing, const void *part_ptr) noexcept {
         FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
         m_meta_registry.get(tidx).commit_emplace_unchecked_copy(static_cast<void *>(this), thing,
-                                                                 part_ptr);
+                                                                part_ptr);
     }
 
     /**
@@ -379,7 +383,7 @@ public:
         FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
         m_signature_pool.destroy(thing, tidx);
         m_meta_registry.get(tidx).pool_destroy(static_cast<void *>(&m_part_pools[tidx.idx()]),
-                                                thing);
+                                               thing);
     }
 
     /**
@@ -876,7 +880,7 @@ public:
         }
 
         Iter &operator++() noexcept {
-            m_current = m_registry->get_unchecked<Relations>(m_current).next_sibling;
+            m_current = m_registry->get_unchecked<RelationsPart>(m_current).next_sibling;
             do_find_next();
             return *this;
         }
@@ -896,7 +900,7 @@ public:
                     return;
                 }
 
-                m_current = m_registry->get_unchecked<Relations>(m_current).next_sibling;
+                m_current = m_registry->get_unchecked<RelationsPart>(m_current).next_sibling;
             }
         }
 
@@ -908,7 +912,7 @@ public:
 
     // -------------------------------------------------------- Iterator Methods
     Iter begin() noexcept {
-        const Relations *root_rel = m_registry->get_checked<Relations>(m_root);
+        const RelationsPart *root_rel = m_registry->get_checked<RelationsPart>(m_root);
         if (root_rel == nullptr) {
             return end();
         }
@@ -984,7 +988,7 @@ public:
 
     private:
         void do_advance() noexcept {
-            const Relations &cur_rel = m_registry->get_unchecked<Relations>(m_current);
+            const RelationsPart &cur_rel = m_registry->get_unchecked<RelationsPart>(m_current);
 
             if (!cur_rel.first_child.is_nil()) {
                 m_current = cur_rel.first_child;
@@ -998,7 +1002,7 @@ public:
 
             Thing up = cur_rel.parent;
             while (!up.is_nil() && up != m_root) {
-                const Relations &up_rel = m_registry->get_unchecked<Relations>(up);
+                const RelationsPart &up_rel = m_registry->get_unchecked<RelationsPart>(up);
                 if (!up_rel.next_sibling.is_nil()) {
                     m_current = up_rel.next_sibling;
                     return;
@@ -1030,7 +1034,7 @@ public:
 
     // ----------------------------------------------------------------- Methods
     Iter begin() noexcept {
-        const Relations *root_rel = m_registry->get_checked<Relations>(m_root);
+        const RelationsPart *root_rel = m_registry->get_checked<RelationsPart>(m_root);
         if (root_rel == nullptr) {
             return end();
         }
@@ -1242,8 +1246,7 @@ inline void PartMetaRegistry::ensure() noexcept {
     };
 
     pm.commit_insert_copy = +[](void *reg, Thing thing, const void *ptr) noexcept {
-        static_cast<impl::Registry *>(reg)->emplace_checked<T>(thing,
-                                                               *static_cast<const T *>(ptr));
+        static_cast<impl::Registry *>(reg)->emplace_checked<T>(thing, *static_cast<const T *>(ptr));
     };
 
     pm.commit_destroy = +[](void *reg, Thing thing) noexcept {
@@ -1269,12 +1272,12 @@ inline void PartMetaRegistry::ensure() noexcept {
 
     pm.commit_emplace_unchecked_move = +[](void *reg, Thing thing, void *ptr) noexcept {
         static_cast<impl::Registry *>(reg)->emplace_unchecked<T>(thing,
-                                                                  std::move(*static_cast<T *>(ptr)));
+                                                                 std::move(*static_cast<T *>(ptr)));
     };
 
     pm.commit_emplace_unchecked_copy = +[](void *reg, Thing thing, const void *ptr) noexcept {
         static_cast<impl::Registry *>(reg)->emplace_unchecked<T>(thing,
-                                                                  *static_cast<const T *>(ptr));
+                                                                 *static_cast<const T *>(ptr));
     };
 
     pm.get_raw_unchecked = +[](void *reg, Thing thing) noexcept -> void * {
