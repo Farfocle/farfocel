@@ -28,6 +28,7 @@ namespace fr {
 struct QueryOptions {
     Signature with{};
     Signature without{};
+    TypeIdx base{TypeIdx::nil()};
 };
 
 // ================================================================== PartMeta
@@ -708,7 +709,7 @@ public:
         : m_registry(registry),
           m_return(return_mask),
           m_options(options) {
-        m_iter_tidx = do_find_smallest_pool();
+        m_iter_tidx = do_get_base_pool();
     }
 
     // ---------------------------------------------------------------- Iterator
@@ -831,6 +832,13 @@ private:
         }
 
         return smallest;
+    }
+
+    TypeIdx do_get_base_pool() const noexcept {
+        if (!m_options.base.is_nil()) {
+            return m_options.base;
+        }
+        return do_find_smallest_pool();
     }
 
     // ----------------------------------------------------------------- Members
@@ -1070,8 +1078,7 @@ public:
         : m_registry(registry),
           m_return(return_mask),
           m_options(options) {
-        TypeIdx tids[] = {TypeIdx::from_type<Include>()...};
-        m_iter_tidx = tids[0];
+        m_iter_tidx = do_get_base_pool();
     }
 
     // ---------------------------------------------------------------- Iterator
@@ -1173,6 +1180,15 @@ public:
     }
 
 private:
+    // -------------------------------------------------------- Internal Helpers
+    TypeIdx do_get_base_pool() const noexcept {
+        if (!m_options.base.is_nil()) {
+            return m_options.base;
+        }
+        TypeIdx tids[] = {TypeIdx::from_type<Include>()...};
+        return tids[0];
+    }
+
     // ----------------------------------------------------------------- Members
     Registry *m_registry{};
     Signature m_return{};
