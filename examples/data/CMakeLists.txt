@@ -1,4 +1,5 @@
 set(BENCH_SOURCES
+    "async_query.cpp"
     "console_game_loop.cpp"
     "registry.cpp"
     "registry_commands.cpp"

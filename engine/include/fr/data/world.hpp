@@ -227,6 +227,14 @@ public:
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
 
+    /**
+     * @brief Runs `fn` on each matching thing in parallel across `options.threads` threads.
+     * @details Splits the base pool into equal chunks and processes them concurrently. Blocks
+     * until all threads finish. `fn` receives a `ChunkQuery<Include...>` to iterate over.
+     */
+    template <typename... Include, typename Fn>
+    void async_query(Fn &&fn, QueryOptions options = {}) noexcept;
+
     // ---------------------------------------------------------------- Resources
 
     /**
@@ -841,6 +849,14 @@ public:
      */
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Runs `fn` on each matching thing in parallel across `options.threads` threads.
+     * @details Splits the base pool into equal chunks and processes them concurrently. Blocks
+     * until all threads finish. `fn` receives a `ChunkQuery<Include...>` to iterate over.
+     */
+    template <typename... Include, typename Fn>
+    void async_query(Fn &&fn, QueryOptions options = {}) noexcept;
 
     /// @brief Returns a reference to the world's active command batch.
     CmdBatch &cmd_batch() noexcept {
@@ -1724,6 +1740,11 @@ inline auto World::bottom_up_query(QueryOptions options) noexcept {
     return BottomUpQuery<Include...>(&m_registry, Signature::from_parts<Include...>(), options);
 }
 
+template <typename... Include, typename Fn>
+inline void World::async_query(Fn &&fn, QueryOptions options) noexcept {
+    m_registry.async_query<Fn, Include...>(std::forward<Fn>(fn), options);
+}
+
 inline void World::schedule(Stage stage, const System &system) noexcept {
     m_system_pool.schedule(stage, system);
 }
@@ -1924,6 +1945,11 @@ inline auto Scope::top_down_query(QueryOptions options) noexcept {
 template <typename... Include>
 inline auto Scope::bottom_up_query(QueryOptions options) noexcept {
     return m_world->bottom_up_query<Include...>(options);
+}
+
+template <typename... Include, typename Fn>
+inline void Scope::async_query(Fn &&fn, QueryOptions options) noexcept {
+    m_world->async_query<Include...>(std::forward<Fn>(fn), options);
 }
 
 template <typename T>
