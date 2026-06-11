@@ -145,7 +145,7 @@ public:
     /**
      * @brief Attaches a child to the parent immediately. Updates hierarchy.
      * @return false if either thing is nil.
-     * @pre Both things must have `Relations` part.
+     * @note Emplaces a default `Relations` on parent or child if not already present.
      */
     bool attach_child_now(Thing parent, Thing child) noexcept;
 
@@ -158,14 +158,14 @@ public:
 
     /**
      * @brief Detaches a child from a parent immediately. Updates hierarchy.
-     * @return false if either thing is nil, or child is not actually a child of parent.
-     * @pre Both things must have `Relations` part.
+     * @return false if either thing is nil, parent or child lacks `Relations`, or child is not
+     * actually a child of parent.
      */
     bool detach_child_now(Thing parent, Thing child) noexcept;
 
     /**
      * @brief Emits a deferred `DetachChild` command.
-     * @pre Both things must have `Relations` part.
+     * @note If either thing does not have `Relations` part; does nothing.
      * @note If either thing is nil; does nothing.
      */
     void detach_child(Thing parent, Thing child) noexcept;
@@ -320,10 +320,12 @@ public:
 
     /// @brief Attaches `child` to self as a parent immediately. Updates hierarchy.
     /// @return false if either thing is nil.
+    /// @note Emplaces a default `Relations` on self or child if not already present.
     bool attach_child_now(Thing child) noexcept;
 
     /// @brief Detaches `child` from self immediately. Updates hierarchy.
-    /// @return false if `child` is not actually a child of self.
+    /// @return false if self or child lacks `Relations`, or `child` is not actually a child of
+    /// self.
     bool detach_child_now(Thing child) noexcept;
 
     // ------------------------------------------------------------------- Parts
@@ -631,7 +633,7 @@ public:
     /**
      * @brief Attaches a child to the parent immediately. Updates hierarchy.
      * @return false if either thing is nil.
-     * @pre Both things must have `Relations` part.
+     * @note Emplaces a default `Relations` on parent or child if not already present.
      */
     bool attach_child_now(Thing parent, Thing child) noexcept;
 
@@ -644,8 +646,8 @@ public:
 
     /**
      * @brief Detaches a child from a parent immediately. Updates hierarchy.
-     * @return false if either thing is nil, or child is not actually a child of parent.
-     * @pre Both things must have `Relations` part.
+     * @return false if either thing is nil, parent or child lacks `Relations`, or child is not
+     * actually a child of parent.
      */
     bool detach_child_now(Thing parent, Thing child) noexcept;
 
@@ -1535,6 +1537,13 @@ inline bool World::attach_child_now(Thing parent, Thing child) noexcept {
         return false;
     }
 
+    if (!m_registry.has<Relations>(parent)) {
+        m_registry.emplace_unchecked<Relations>(parent);
+    }
+    if (!m_registry.has<Relations>(child)) {
+        m_registry.emplace_unchecked<Relations>(child);
+    }
+
     Relations &parent_rel = m_registry.get_unchecked<Relations>(parent);
     Relations &child_rel = m_registry.get_unchecked<Relations>(child);
 
@@ -1568,6 +1577,10 @@ inline void World::attach_child(Thing parent, Thing child) noexcept {
 
 inline bool World::detach_child_now(Thing parent, Thing child) noexcept {
     if (parent.is_nil() || child.is_nil()) {
+        return false;
+    }
+
+    if (!has<Relations>(parent) || !has<Relations>(child)) {
         return false;
     }
 
