@@ -13,7 +13,6 @@
 #include "fr/renderer/renderer_constants.hpp"
 #include "fr/renderer/renderer_frame_data.hpp"
 
-
 namespace fr {
 namespace {
 

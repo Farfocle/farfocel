@@ -14,6 +14,7 @@
 #include <cmath>
 
 #include "fr/core/math.hpp"
+#include "fr/data/parts.hpp"
 #include "fr/data/world.hpp"
 #include "fr/physics/parts.hpp"
 #include "fr/physics/resources.hpp"
@@ -155,10 +156,10 @@ void broadphase_collision_detection_system(Scope scope) {
 
     for (auto [thing, wt, collider] : scope.query<WorldTransformPart, ColliderPart>()) {
         if (collider.kind == ColliderKind::AABB) {
-            const AABB ws = do_aabb_to_world(collider.aabb, collider.offset, wt.mat);
+            const AABB ws = do_aabb_to_world(collider.aabb, collider.offset, wt.matrix);
             do_push_aabb_cells(state.grid, thing, ws);
         } else {
-            const Sphere ws = do_sphere_to_world(collider.sphere, collider.offset, wt.mat);
+            const Sphere ws = do_sphere_to_world(collider.sphere, collider.offset, wt.matrix);
             do_push_sphere_cells(state.grid, thing, ws);
         }
     }
@@ -205,8 +206,8 @@ void narrowphase_collision_detection_system(Scope scope) {
                     continue;
                 }
 
-                const ColliderPart ws_a = do_collider_to_world(*col_a, wt_a->mat);
-                const ColliderPart ws_b = do_collider_to_world(*col_b, wt_b->mat);
+                const ColliderPart ws_a = do_collider_to_world(*col_a, wt_a->matrix);
+                const ColliderPart ws_b = do_collider_to_world(*col_b, wt_b->matrix);
 
                 if (!check_collision(ws_a, ws_b)) {
                     continue;
@@ -261,10 +262,10 @@ static Mat3 do_world_inertia_inv(const MassPart *mass, const Quat &rot) noexcept
 /// @brief Returns the world-space position of a body's center of mass.
 static Vec3 do_world_com(const MassPart *mass, const WorldTransformPart &wt) noexcept {
     if (!mass || mass->com == Vec3{0.0f}) {
-        return wt.pos;
+        return wt.position;
     }
 
-    return wt.pos + glm::mat3_cast(wt.rot) * mass->com;
+    return wt.position + glm::mat3_cast(wt.rotation) * mass->com;
 }
 
 // --------------------------------------------------------------------- Systems
@@ -281,20 +282,20 @@ void rigit_body_force_system(Scope scope) {
 
         rb.velocity += (rb.force * rb.inv_mass + gravity) * dt;
         rb.force = {0.0f, 0.0f, 0.0f};
-        lt.pos += rb.velocity * dt;
+        lt.position += rb.velocity * dt;
 
         const MassPart *mass = scope.try_get<MassPart>(thing);
         const WorldTransformPart *wt = scope.try_get<WorldTransformPart>(thing);
 
         if (mass && wt) {
-            const Mat3 I_world_inv = do_world_inertia_inv(mass, wt->rot);
+            const Mat3 I_world_inv = do_world_inertia_inv(mass, wt->rotation);
             rb.angular_velocity += I_world_inv * rb.torque * dt;
             rb.torque = {0.0f, 0.0f, 0.0f};
 
             const Quat omega_quat(0.0f, rb.angular_velocity.x, rb.angular_velocity.y,
                                   rb.angular_velocity.z);
 
-            lt.rot = glm::normalize(lt.rot + 0.5f * omega_quat * lt.rot * dt);
+            lt.rotation = glm::normalize(lt.rotation + 0.5f * omega_quat * lt.rotation * dt);
         }
     }
 }
@@ -323,8 +324,8 @@ void rigit_body_collision_resolution_system(Scope scope) {
         const WorldTransformPart *wt_a = scope.try_get<WorldTransformPart>(m.a);
         const WorldTransformPart *wt_b = scope.try_get<WorldTransformPart>(m.b);
 
-        const Mat3 I_inv_a = wt_a ? do_world_inertia_inv(mass_a, wt_a->rot) : Mat3(0.0f);
-        const Mat3 I_inv_b = wt_b ? do_world_inertia_inv(mass_b, wt_b->rot) : Mat3(0.0f);
+        const Mat3 I_inv_a = wt_a ? do_world_inertia_inv(mass_a, wt_a->rotation) : Mat3(0.0f);
+        const Mat3 I_inv_b = wt_b ? do_world_inertia_inv(mass_b, wt_b->rotation) : Mat3(0.0f);
 
         // Moment arms: from each body's COM to the contact point.
         const Vec3 com_a = wt_a ? do_world_com(mass_a, *wt_a) : Vec3{0.0f};
@@ -411,12 +412,12 @@ void rigit_body_collision_resolution_system(Scope scope) {
 
         if (rb_a && inv_a > 0.0f) {
             if (LocalTransformPart *lt = scope.try_get<LocalTransformPart>(m.a)) {
-                lt->pos += correction * inv_a;
+                lt->position += correction * inv_a;
             }
         }
         if (rb_b && inv_b > 0.0f) {
             if (LocalTransformPart *lt = scope.try_get<LocalTransformPart>(m.b)) {
-                lt->pos -= correction * inv_b;
+                lt->position -= correction * inv_b;
             }
         }
     }

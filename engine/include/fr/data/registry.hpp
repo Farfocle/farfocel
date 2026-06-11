@@ -17,7 +17,7 @@
 #include "fr/core/tuple.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/part.hpp"
-#include "fr/data/relations.hpp"
+#include "fr/data/parts.hpp"
 
 namespace fr {
 // ======================================================== Forward Declarations
@@ -35,7 +35,7 @@ struct QueryOptions {
     USize threads{1};
 };
 
-// ================================================================== PartMeta
+// ==================================================================== PartMeta
 
 /// @brief Type-erased metadata for a single part type.
 struct PartMeta {
@@ -906,7 +906,7 @@ public:
         }
 
         Iter &operator++() noexcept {
-            m_current = m_registry->get_unchecked<Relations>(m_current).next_sibling;
+            m_current = m_registry->get_unchecked<RelationsPart>(m_current).next_sibling;
             do_find_next();
             return *this;
         }
@@ -926,7 +926,7 @@ public:
                     return;
                 }
 
-                m_current = m_registry->get_unchecked<Relations>(m_current).next_sibling;
+                m_current = m_registry->get_unchecked<RelationsPart>(m_current).next_sibling;
             }
         }
 
@@ -938,7 +938,7 @@ public:
 
     // -------------------------------------------------------- Iterator Methods
     Iter begin() noexcept {
-        const Relations *root_rel = m_registry->get_checked<Relations>(m_root);
+        const RelationsPart *root_rel = m_registry->get_checked<RelationsPart>(m_root);
         if (root_rel == nullptr) {
             return end();
         }
@@ -1014,7 +1014,7 @@ public:
 
     private:
         void do_advance() noexcept {
-            const Relations &cur_rel = m_registry->get_unchecked<Relations>(m_current);
+            const RelationsPart &cur_rel = m_registry->get_unchecked<RelationsPart>(m_current);
 
             if (!cur_rel.first_child.is_nil()) {
                 m_current = cur_rel.first_child;
@@ -1028,7 +1028,7 @@ public:
 
             Thing up = cur_rel.parent;
             while (!up.is_nil() && up != m_root) {
-                const Relations &up_rel = m_registry->get_unchecked<Relations>(up);
+                const RelationsPart &up_rel = m_registry->get_unchecked<RelationsPart>(up);
                 if (!up_rel.next_sibling.is_nil()) {
                     m_current = up_rel.next_sibling;
                     return;
@@ -1060,7 +1060,7 @@ public:
 
     // ----------------------------------------------------------------- Methods
     Iter begin() noexcept {
-        const Relations *root_rel = m_registry->get_checked<Relations>(m_root);
+        const RelationsPart *root_rel = m_registry->get_checked<RelationsPart>(m_root);
         if (root_rel == nullptr) {
             return end();
         }

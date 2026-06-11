@@ -1,9 +1,10 @@
+#include <iostream>
+
 #include "fr/core/ctx.hpp"
 #include "fr/core/format.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/world.hpp"
-#include <iostream>
 
 struct GameState {
     F32 dt{0.1f};

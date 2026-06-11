@@ -1,6 +1,6 @@
 #include <doctest.h>
 
-#include "fr/data/relations.hpp"
+#include "fr/data/parts.hpp"
 #include "fr/data/world.hpp"
 
 namespace {
@@ -124,14 +124,16 @@ TEST_CASE("Query - reverse_query iterates in reverse order") {
     int fwd_count = 0;
     Thing fwd_first;
     for (auto [thing, tag] : world.query<QTag>()) {
-        if (fwd_count == 0) fwd_first = thing;
+        if (fwd_count == 0)
+            fwd_first = thing;
         ++fwd_count;
     }
 
     int rev_count = 0;
     Thing rev_first;
     for (auto [thing, tag] : world.reverse_query<QTag>()) {
-        if (rev_count == 0) rev_first = thing;
+        if (rev_count == 0)
+            rev_first = thing;
         ++rev_count;
     }
 
@@ -187,10 +189,10 @@ TEST_CASE("Query - shallow_query iterates direct children only") {
     Thing c2 = world.spawn();
     Thing gc = world.spawn();
 
-    world.emplace_now<Relations>(root);
-    world.emplace_now<Relations>(c1);
-    world.emplace_now<Relations>(c2);
-    world.emplace_now<Relations>(gc);
+    world.emplace_now<RelationsPart>(root);
+    world.emplace_now<RelationsPart>(c1);
+    world.emplace_now<RelationsPart>(c2);
+    world.emplace_now<RelationsPart>(gc);
     world.emplace_now<QPos>(c1);
     world.emplace_now<QPos>(c2);
     world.emplace_now<QPos>(gc);
@@ -215,10 +217,10 @@ TEST_CASE("Query - deep_query iterates all descendants") {
     Thing gc1 = world.spawn();
     Thing gc2 = world.spawn();
 
-    world.emplace_now<Relations>(root);
-    world.emplace_now<Relations>(c1);
-    world.emplace_now<Relations>(gc1);
-    world.emplace_now<Relations>(gc2);
+    world.emplace_now<RelationsPart>(root);
+    world.emplace_now<RelationsPart>(c1);
+    world.emplace_now<RelationsPart>(gc1);
+    world.emplace_now<RelationsPart>(gc2);
     world.emplace_now<QTag>(c1);
     world.emplace_now<QTag>(gc1);
     world.emplace_now<QTag>(gc2);
@@ -239,7 +241,7 @@ TEST_CASE("Query - deep_query iterates all descendants") {
 TEST_CASE("Query - deep_query on thing without children yields empty") {
     World world;
     Thing root = world.spawn();
-    world.emplace_now<Relations>(root);
+    world.emplace_now<RelationsPart>(root);
     world.emplace_now<QTag>(root);
 
     int count = 0;
@@ -257,9 +259,9 @@ TEST_CASE("Query - top_down_query yields parents before children") {
     Thing child = world.spawn();
     Thing grandchild = world.spawn();
 
-    world.emplace_now<Relations>(root);
-    world.emplace_now<Relations>(child);
-    world.emplace_now<Relations>(grandchild);
+    world.emplace_now<RelationsPart>(root);
+    world.emplace_now<RelationsPart>(child);
+    world.emplace_now<RelationsPart>(grandchild);
     world.emplace_now<QPos>(root, 0.0f, 0.0f);
     world.emplace_now<QPos>(child, 1.0f, 0.0f);
     world.emplace_now<QPos>(grandchild, 2.0f, 0.0f);
@@ -271,7 +273,7 @@ TEST_CASE("Query - top_down_query yields parents before children") {
     int count = 0;
     float prev_depth = -1.0f;
     for (auto [thing, pos] : world.top_down_query<QPos>()) {
-        float depth = static_cast<float>(world.get<Relations>(thing).depth);
+        float depth = static_cast<float>(world.get<RelationsPart>(thing).depth);
         CHECK(depth >= prev_depth);
         prev_depth = depth;
         ++count;
@@ -285,9 +287,9 @@ TEST_CASE("Query - bottom_up_query yields children before parents") {
     Thing child = world.spawn();
     Thing grandchild = world.spawn();
 
-    world.emplace_now<Relations>(root);
-    world.emplace_now<Relations>(child);
-    world.emplace_now<Relations>(grandchild);
+    world.emplace_now<RelationsPart>(root);
+    world.emplace_now<RelationsPart>(child);
+    world.emplace_now<RelationsPart>(grandchild);
     world.emplace_now<QPos>(root, 0.0f, 0.0f);
     world.emplace_now<QPos>(child, 1.0f, 0.0f);
     world.emplace_now<QPos>(grandchild, 2.0f, 0.0f);
@@ -299,7 +301,7 @@ TEST_CASE("Query - bottom_up_query yields children before parents") {
     int count = 0;
     float prev_depth = 999.0f;
     for (auto [thing, pos] : world.bottom_up_query<QPos>()) {
-        float depth = static_cast<float>(world.get<Relations>(thing).depth);
+        float depth = static_cast<float>(world.get<RelationsPart>(thing).depth);
         CHECK(depth <= prev_depth);
         prev_depth = depth;
         ++count;

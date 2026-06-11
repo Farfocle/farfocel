@@ -10,6 +10,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "fr/data/asset_manager.hpp"
+#include "fr/data/parts.hpp"
 #include "fr/data/world.hpp"
 #include "fr/renderer/frustum.hpp"
 #include "fr/renderer/render_queue.hpp"
@@ -91,7 +92,7 @@ public:
      * @return Camera data for the active main camera, or identity fallback if no camera exists.
      */
     static CamData extract_cam_data(World &world, F32 aspect_ratio) noexcept {
-        for (auto [thing, cam, trans] : world.query<CameraPart, TransformPart>()) {
+        for (auto [thing, cam, trans] : world.query<CameraPart, WorldTransformPart>()) {
             (void)thing;
 
             if (cam.is_main) {
@@ -138,7 +139,7 @@ public:
         Frustum frustum = Frustum::extract_from_matrix(view_proj);
 
         for (auto [thing, mesh_part, mat_part, trans_part] :
-             world.query<MeshPart, MaterialPart, TransformPart>()) {
+             world.query<MeshPart, MaterialPart, WorldTransformPart>()) {
             (void)thing;
 
             if (!mesh_part.handle.is_valid()) {
@@ -198,7 +199,7 @@ public:
         RenderStats stats{};
 
         for (auto [thing, mesh_part, mat_part, trans_part] :
-             world.query<MeshPart, MaterialPart, TransformPart>()) {
+             world.query<MeshPart, MaterialPart, WorldTransformPart>()) {
             (void)thing;
 
             if (!mesh_part.handle.is_valid()) {
@@ -254,7 +255,7 @@ public:
         RenderStats stats{};
 
         for (auto [thing, mesh_part, mat_part, trans_part] :
-             world.query<MeshPart, MaterialPart, TransformPart>()) {
+             world.query<MeshPart, MaterialPart, WorldTransformPart>()) {
             (void)thing;
 
             if (!mesh_part.handle.is_valid()) {
@@ -300,7 +301,7 @@ public:
         U32 point_shadow_count = 0;
         U32 spot_shadow_count = 0;
 
-        for (auto [thing, light, trans] : world.query<PointLightPart, TransformPart>()) {
+        for (auto [thing, light, trans] : world.query<PointLightPart, WorldTransformPart>()) {
             (void)thing;
 
             PointLightData data{};
@@ -326,7 +327,7 @@ public:
             queue.send_point_light(data);
         }
 
-        for (auto [thing, light, trans] : world.query<SpotLightPart, TransformPart>()) {
+        for (auto [thing, light, trans] : world.query<SpotLightPart, WorldTransformPart>()) {
             (void)thing;
 
             const F32 inner_angle = glm::clamp(light.inner_angle_deg, 0.1f, 89.0f);
@@ -420,7 +421,7 @@ public:
         glm::vec3 safe_cam_dir =
             glm::length(cam_dir) > 0.0001f ? glm::normalize(cam_dir) : glm::vec3(0.0f, 0.0f, -1.0f);
 
-        for (auto [thing, light, trans] : world.query<DirectionalLightPart, TransformPart>()) {
+        for (auto [thing, light, trans] : world.query<DirectionalLightPart, WorldTransformPart>()) {
             (void)thing;
 
             DirectionalLightData data{};
@@ -525,7 +526,7 @@ private:
      * @param transform ECS transform part.
      * @return World-space model matrix.
      */
-    static glm::mat4 build_model_matrix(const TransformPart &transform) noexcept {
+    static glm::mat4 build_model_matrix(const WorldTransformPart &transform) noexcept {
         return glm::translate(glm::mat4(1.0f), transform.position) *
                glm::mat4_cast(transform.rotation) * glm::scale(glm::mat4(1.0f), transform.scale);
     }
