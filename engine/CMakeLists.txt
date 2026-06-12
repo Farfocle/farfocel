@@ -19,6 +19,7 @@ set(ENGINE_HEADERS
     "include/fr/core/hash_map.hpp"
     "include/fr/core/hash_set.hpp"
     "include/fr/core/heap_alloc.hpp"
+    "include/fr/core/imgui_archive.hpp"
     "include/fr/core/inline_any.hpp"
     "include/fr/core/inline_function.hpp"
     "include/fr/core/json.hpp"
@@ -138,6 +139,7 @@ target_link_libraries(engine PUBLIC SDL3::SDL3-static)
 target_link_libraries(engine PRIVATE cgltf)
 target_link_libraries(engine PRIVATE stb)
 target_link_libraries(engine PUBLIC wyhash)
+target_link_libraries(engine PUBLIC imgui)
 
 target_include_directories(engine
     PUBLIC "include"

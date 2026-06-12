@@ -1,3 +1,5 @@
+add_subdirectory(imgui_archive)
+
 set(BENCH_SOURCES
     "array.cpp"
     "bitset.cpp"

@@ -859,6 +859,9 @@ public:
     /// @brief Deserializes the world from JSON. Call ensure<T>() for each part type first.
     void shape(JsonReaderArchive &archive) noexcept;
 
+    /// @brief Renders the world (things, parts, resources) via ImGui.
+    void shape(ImGuiWriterArchive &archive) noexcept;
+
     // ----------------------------------------------------------------- Systems
 
     /// @brief Schedules a system for synchronous execution in the given stage.
@@ -1726,6 +1729,11 @@ inline void World::shape(JsonWriterArchive &archive) noexcept {
 }
 
 inline void World::shape(JsonReaderArchive &archive) noexcept {
+    archive.prop("registry", m_registry);
+    archive.prop("resources", m_resource_pool);
+}
+
+inline void World::shape(ImGuiWriterArchive &archive) noexcept {
     archive.prop("registry", m_registry);
     archive.prop("resources", m_resource_pool);
 }

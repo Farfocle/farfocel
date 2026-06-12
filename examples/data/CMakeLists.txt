@@ -1,3 +1,16 @@
+add_executable(fr_example_data_imgui_inspector imgui_inspector.cpp)
+target_link_libraries(fr_example_data_imgui_inspector
+    PRIVATE
+        engine
+        imgui
+        glad
+        SDL3::SDL3-static
+        farfocel_compiler_options
+)
+target_include_directories(fr_example_data_imgui_inspector
+    PRIVATE "${CMAKE_SOURCE_DIR}/3rdparty/glad/include"
+)
+
 set(BENCH_SOURCES
     "console_game_loop.cpp"
     "registry.cpp"

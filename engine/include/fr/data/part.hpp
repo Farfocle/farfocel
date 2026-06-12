@@ -340,6 +340,23 @@ public:
         }
     }
 
+    void shape(ImGuiWriterArchive &archive) noexcept {
+        if constexpr (IsShape<ImGuiWriterArchive, T>) {
+            Slice<T> parts = parts_with_stub_mut();
+            Slice<const Thing> things = part_to_thing_with_stub();
+
+            archive.list("@items", [&](ImGuiWriterArchive &la) {
+                for (USize i = 1; i < parts.size(); ++i) {
+                    la.dict("", [&](ImGuiWriterArchive &ea) {
+                        ThingRaw raw = things[i].as_raw();
+                        ea.prop("@thing", raw);
+                        ea.prop("@part", parts[i]);
+                    });
+                }
+            });
+        }
+    }
+
     void shape(JsonReaderArchive &archive, SignaturePool &sig_pool, TypeIdx tidx) noexcept {
         if constexpr (IsShape<JsonReaderArchive, T>) {
             archive.list("@items", [&](JsonReaderArchive &la) {
