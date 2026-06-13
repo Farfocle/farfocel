@@ -61,6 +61,34 @@ enum class AssetLoadState : U8 {
 };
 
 /**
+ * @brief Runtime 2D texture creation descriptor.
+ */
+struct RuntimeTextureDesc {
+    U32 width{0};
+    U32 height{0};
+    U32 mip_levels{1};
+
+    TextureFormat format{TextureFormat::R8G8B8A8_UNorm};
+
+    Slice<const Byte> pixels{};
+};
+
+/**
+ * @brief Runtime material creation descriptor.
+ *
+ * @details
+ * Texture handles have priority over texture AssetIds stored in data. If a handle is invalid and
+ * the corresponding AssetId is valid, AssetManager loads the texture through the cooked asset path.
+ */
+struct RuntimeMaterialDesc {
+    MaterialAssetData data{};
+
+    TextureAssetHandle albedo_texture{};
+    TextureAssetHandle normal_texture{};
+    TextureAssetHandle extra_texture{};
+};
+
+/**
  * @brief Runtime mesh asset record.
  */
 struct MeshAsset {
@@ -69,6 +97,8 @@ struct MeshAsset {
 
     U32 ref_count{0};
     U64 cache_key{0};
+
+    bool runtime_asset{false};
 };
 
 /**
@@ -79,6 +109,8 @@ struct TextureAsset {
 
     U32 ref_count{0};
     U64 cache_key{0};
+
+    bool runtime_asset{false};
 };
 
 /**
@@ -93,6 +125,8 @@ struct MaterialAsset {
 
     U32 ref_count{0};
     U64 cache_key{0};
+
+    bool runtime_asset{false};
 };
 
 /**
@@ -109,7 +143,8 @@ struct ShaderAsset {
  * @brief Loads cooked assets and owns their runtime GPU resources.
  *
  * @details
- * Synchronous load_* methods are kept for simple code paths.
+ * Synchronous load_* methods are kept for simple code paths. Runtime creation methods create
+ * resources directly from memory and use the same handles as cooked assets.
  */
 class AssetManager {
 public:
@@ -157,6 +192,222 @@ public:
     void set_storage(AssetStorage *storage) noexcept {
         FR_ASSERT(storage, "AssetStorage must be non-null");
         m_storage = storage;
+    }
+
+    /**
+     * @brief Creates a renderer mesh directly from runtime geometry.
+     */
+    MeshAssetHandle create_runtime_mesh(const RuntimeMeshDesc &desc) noexcept {
+        return create_runtime_mesh(desc, {});
+    }
+
+    /**
+     * @brief Creates a renderer mesh directly from runtime geometry and material handles.
+     *
+     * @details
+     * material_handles may be empty. If not empty, it must have the same size as desc.submeshes.
+     * A valid handle overrides RuntimeSubMeshDesc::material_id for that submesh.
+     */
+    MeshAssetHandle
+    create_runtime_mesh(const RuntimeMeshDesc &desc,
+                        Slice<const MaterialAssetHandle> material_handles) noexcept {
+        if (!validate_runtime_mesh_desc(desc)) {
+            FR_LOG_ERR("Invalid runtime mesh descriptor.");
+            return {};
+        }
+
+        if (!material_handles.is_empty() && material_handles.size() != desc.submeshes.size()) {
+            FR_LOG_ERR("Runtime mesh material handle count does not match submesh count.");
+            return {};
+        }
+
+        USize vertex_data_size = 0;
+        USize index_data_size = 0;
+
+        if (!checked_mul_u_size(desc.vertices.size(), sizeof(RenderVertex), vertex_data_size) ||
+            !checked_mul_u_size(desc.indices.size(), sizeof(U32), index_data_size)) {
+            FR_LOG_ERR("Runtime mesh buffer size overflow.");
+            return {};
+        }
+
+        RenderMeshData mesh_data(m_alloc);
+
+        mesh_data.vbo = m_device->create_buffer(
+            Slice<const Byte>(reinterpret_cast<const Byte *>(desc.vertices.data()),
+                              vertex_data_size),
+            desc.dynamic);
+
+        mesh_data.ibo = m_device->create_buffer(
+            Slice<const Byte>(reinterpret_cast<const Byte *>(desc.indices.data()), index_data_size),
+            desc.dynamic);
+
+        mesh_data.aabb_min = desc.aabb_min;
+        mesh_data.aabb_max = desc.aabb_max;
+
+        if (!mesh_data.vbo.is_valid() || !mesh_data.ibo.is_valid()) {
+            if (mesh_data.vbo.is_valid()) {
+                m_device->destroy_buffer(mesh_data.vbo);
+                mesh_data.vbo = {};
+            }
+
+            if (mesh_data.ibo.is_valid()) {
+                m_device->destroy_buffer(mesh_data.ibo);
+                mesh_data.ibo = {};
+            }
+
+            FR_LOG_ERR("Failed to create GPU buffers for runtime mesh.");
+            return {};
+        }
+
+        mesh_data.submeshes.reserve(desc.submeshes.size());
+
+        DynamicArray<MaterialAssetHandle> material_deps(m_alloc);
+        material_deps.reserve(desc.submeshes.size());
+
+        for (USize i = 0; i < desc.submeshes.size(); ++i) {
+            const RuntimeSubMeshDesc &runtime_submesh = desc.submeshes[i];
+
+            RenderSubMesh submesh{};
+            submesh.index_count = runtime_submesh.index_count;
+            submesh.index_offset = runtime_submesh.index_offset;
+            submesh.vertex_offset = runtime_submesh.vertex_offset;
+            submesh.transform = runtime_submesh.transform;
+            submesh.pass_type = runtime_submesh.pass_type;
+            submesh.material_id = runtime_submesh.material_id;
+            submesh.material_index = INVALID_RENDER_SUBMESH_MATERIAL_INDEX;
+            submesh.aabb_min = runtime_submesh.aabb_min;
+            submesh.aabb_max = runtime_submesh.aabb_max;
+
+            MaterialAssetHandle explicit_material{};
+            if (!material_handles.is_empty()) {
+                explicit_material = material_handles[i];
+            }
+
+            if (explicit_material.is_valid()) {
+                U32 material_index =
+                    find_material_dependency_handle_index(material_deps, explicit_material);
+
+                if (material_index == INVALID_RENDER_SUBMESH_MATERIAL_INDEX &&
+                    retain_material(explicit_material)) {
+                    material_index = static_cast<U32>(material_deps.size());
+                    material_deps.push_back(explicit_material);
+                }
+
+                submesh.material_index = material_index;
+            } else if (runtime_submesh.material_id.is_valid()) {
+                U32 material_index = find_material_dependency_asset_index(
+                    material_deps, runtime_submesh.material_id);
+
+                if (material_index == INVALID_RENDER_SUBMESH_MATERIAL_INDEX) {
+                    MaterialAssetHandle material = load_material(runtime_submesh.material_id);
+
+                    if (material.is_valid()) {
+                        material_index = static_cast<U32>(material_deps.size());
+                        material_deps.push_back(material);
+                    }
+                }
+
+                submesh.material_index = material_index;
+            }
+
+            mesh_data.submeshes.push_back(submesh);
+        }
+
+        const U64 cache_key = allocate_runtime_mesh_cache_key();
+
+        MeshAsset new_asset{};
+        new_asset.data = std::move(mesh_data);
+        new_asset.material_deps = std::move(material_deps);
+        new_asset.ref_count = 1;
+        new_asset.cache_key = cache_key;
+        new_asset.runtime_asset = true;
+
+        MeshAssetHandle handle{m_meshes.add(std::move(new_asset))};
+        m_mesh_cache.insert(cache_key, handle);
+
+        return handle;
+    }
+
+    /**
+     * @brief Creates a runtime 2D texture from memory.
+     */
+    TextureAssetHandle create_runtime_texture_2d(const RuntimeTextureDesc &desc) noexcept {
+        if (!validate_runtime_texture_desc(desc)) {
+            FR_LOG_ERR("Invalid runtime texture descriptor.");
+            return {};
+        }
+
+        TextureHandle gpu_handle = m_device->create_texture_2d(
+            desc.width, desc.height, desc.mip_levels, desc.format, desc.pixels);
+
+        if (!gpu_handle.is_valid()) {
+            FR_LOG_ERR("Failed to create GPU texture for runtime texture.");
+            return {};
+        }
+
+        const U64 cache_key = allocate_runtime_texture_cache_key();
+
+        TextureAsset new_asset{};
+        new_asset.handle = gpu_handle;
+        new_asset.ref_count = 1;
+        new_asset.cache_key = cache_key;
+        new_asset.runtime_asset = true;
+
+        TextureAssetHandle handle{m_textures.add(new_asset)};
+        m_texture_cache.insert(cache_key, handle);
+
+        return handle;
+    }
+
+    /**
+     * @brief Creates a runtime material.
+     *
+     * @details
+     * Runtime material can reference runtime textures through handles or cooked textures through
+     * AssetIds stored in RuntimeMaterialDesc::data.
+     */
+    MaterialAssetHandle create_runtime_material(const RuntimeMaterialDesc &desc) noexcept {
+        if (!validate_runtime_material_desc(desc)) {
+            FR_LOG_ERR("Invalid runtime material descriptor.");
+            return {};
+        }
+
+        MaterialAsset new_asset{};
+        new_asset.data = desc.data;
+        new_asset.ref_count = 1;
+        new_asset.cache_key = allocate_runtime_material_cache_key();
+        new_asset.runtime_asset = true;
+
+        if (desc.albedo_texture.is_valid()) {
+            if (retain_texture(desc.albedo_texture)) {
+                new_asset.albedo_texture = desc.albedo_texture;
+            }
+        } else if (desc.data.albedo_texture.is_valid()) {
+            new_asset.albedo_texture = load_texture(desc.data.albedo_texture);
+        }
+
+        if (desc.normal_texture.is_valid()) {
+            if (retain_texture(desc.normal_texture)) {
+                new_asset.normal_texture = desc.normal_texture;
+            }
+        } else if (desc.data.normal_texture.is_valid()) {
+            new_asset.normal_texture = load_texture(desc.data.normal_texture);
+        }
+
+        if (desc.extra_texture.is_valid()) {
+            if (retain_texture(desc.extra_texture)) {
+                new_asset.extra_texture = desc.extra_texture;
+            }
+        } else if (desc.data.extra_texture.is_valid()) {
+            new_asset.extra_texture = load_texture(desc.data.extra_texture);
+        }
+
+        const U64 cache_key = new_asset.cache_key;
+
+        MaterialAssetHandle handle{m_materials.add(std::move(new_asset))};
+        m_material_cache.insert(cache_key, handle);
+
+        return handle;
     }
 
     // ============================================================ Sync Loading
@@ -617,7 +868,10 @@ public:
             unload_material(record->material_deps[i]);
         }
 
-        m_mesh_async_state.remove(record->cache_key);
+        if (!record->runtime_asset) {
+            m_mesh_async_state.remove(record->cache_key);
+        }
+
         m_mesh_cache.remove(record->cache_key);
         m_meshes.erase(handle.key);
     }
@@ -643,7 +897,10 @@ public:
             record->handle = {};
         }
 
-        m_texture_async_state.remove(record->cache_key);
+        if (!record->runtime_asset) {
+            m_texture_async_state.remove(record->cache_key);
+        }
+
         m_texture_cache.remove(record->cache_key);
         m_textures.erase(handle.key);
     }
@@ -668,7 +925,10 @@ public:
         unload_texture(record->normal_texture);
         unload_texture(record->extra_texture);
 
-        m_material_async_state.remove(record->cache_key);
+        if (!record->runtime_asset) {
+            m_material_async_state.remove(record->cache_key);
+        }
+
         m_material_cache.remove(record->cache_key);
         m_materials.erase(handle.key);
     }
@@ -768,6 +1028,281 @@ public:
     }
 
 private:
+    [[nodiscard]] static bool checked_mul_u_size(USize a, USize b, USize &out) noexcept {
+        if (a != 0 && b > static_cast<USize>(-1) / a) {
+            return false;
+        }
+
+        out = a * b;
+        return true;
+    }
+
+    [[nodiscard]] static bool is_supported_runtime_pass(RenderPass pass) noexcept {
+        return pass == RenderPass::Opaque || pass == RenderPass::Masked ||
+               pass == RenderPass::Transparent;
+    }
+
+    [[nodiscard]] bool validate_runtime_mesh_desc(const RuntimeMeshDesc &desc) const noexcept {
+        if (desc.vertices.is_empty()) {
+            FR_LOG_ERR("Runtime mesh has no vertices.");
+            return false;
+        }
+
+        if (desc.indices.is_empty()) {
+            FR_LOG_ERR("Runtime mesh has no indices.");
+            return false;
+        }
+
+        if (desc.submeshes.is_empty()) {
+            FR_LOG_ERR("Runtime mesh has no submeshes.");
+            return false;
+        }
+
+        for (USize i = 0; i < desc.submeshes.size(); ++i) {
+            const RuntimeSubMeshDesc &submesh = desc.submeshes[i];
+
+            if (submesh.index_count == 0) {
+                FR_LOG_ERR("Runtime mesh submesh {} has zero index count.", i);
+                return false;
+            }
+
+            if (!is_supported_runtime_pass(submesh.pass_type)) {
+                FR_LOG_ERR("Runtime mesh submesh {} has unsupported render pass.", i);
+                return false;
+            }
+
+            const USize index_begin = static_cast<USize>(submesh.index_offset);
+            const USize index_count = static_cast<USize>(submesh.index_count);
+
+            if (index_begin >= desc.indices.size()) {
+                FR_LOG_ERR("Runtime mesh submesh {} index offset is out of bounds.", i);
+                return false;
+            }
+
+            if (index_count > desc.indices.size() - index_begin) {
+                FR_LOG_ERR("Runtime mesh submesh {} index range is out of bounds.", i);
+                return false;
+            }
+
+            const USize vertex_offset = static_cast<USize>(submesh.vertex_offset);
+            if (vertex_offset >= desc.vertices.size()) {
+                FR_LOG_ERR("Runtime mesh submesh {} vertex offset is out of bounds.", i);
+                return false;
+            }
+
+            const USize local_vertex_count = desc.vertices.size() - vertex_offset;
+            const USize index_end = index_begin + index_count;
+
+            for (USize index = index_begin; index < index_end; ++index) {
+                const USize local_index = static_cast<USize>(desc.indices[index]);
+
+                if (local_index >= local_vertex_count) {
+                    FR_LOG_ERR("Runtime mesh submesh {} references vertex out of bounds.", i);
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    [[nodiscard]] static USize
+    runtime_texture_format_bytes_per_pixel(TextureFormat format) noexcept {
+        switch (format) {
+        case TextureFormat::R8G8B8A8_UNorm:
+        case TextureFormat::R8G8B8A8_SRGB:
+            return 4;
+
+        case TextureFormat::R16G16_Float:
+            return sizeof(U16) * 2;
+
+        case TextureFormat::R16G16B16A16_Float:
+            return sizeof(U16) * 4;
+
+        case TextureFormat::R32G32B32A32_Float:
+            return sizeof(F32) * 4;
+
+        default:
+            return 0;
+        }
+    }
+
+    [[nodiscard]] static bool
+    validate_runtime_texture_desc(const RuntimeTextureDesc &desc) noexcept {
+        if (desc.width == 0 || desc.height == 0 || desc.mip_levels == 0) {
+            FR_LOG_ERR("Runtime texture has invalid dimensions.");
+            return false;
+        }
+
+        const USize bytes_per_pixel = runtime_texture_format_bytes_per_pixel(desc.format);
+        if (bytes_per_pixel == 0) {
+            FR_LOG_ERR("Runtime texture has unsupported format.");
+            return false;
+        }
+
+        if (!desc.pixels.is_empty()) {
+            USize pixel_count = 0;
+            USize expected_size = 0;
+
+            if (!checked_mul_u_size(static_cast<USize>(desc.width), static_cast<USize>(desc.height),
+                                    pixel_count) ||
+                !checked_mul_u_size(pixel_count, bytes_per_pixel, expected_size)) {
+                FR_LOG_ERR("Runtime texture data size overflow.");
+                return false;
+            }
+
+            if (desc.pixels.size() < expected_size) {
+                FR_LOG_ERR("Runtime texture initial data is smaller than base mip size.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    [[nodiscard]] static bool
+    validate_runtime_material_desc(const RuntimeMaterialDesc &desc) noexcept {
+        if (desc.data.metallic_factor < 0.0f || desc.data.metallic_factor > 1.0f) {
+            FR_LOG_ERR("Runtime material metallic factor is out of range.");
+            return false;
+        }
+
+        if (desc.data.roughness_factor < 0.0f || desc.data.roughness_factor > 1.0f) {
+            FR_LOG_ERR("Runtime material roughness factor is out of range.");
+            return false;
+        }
+
+        if (desc.data.alpha < 0.0f || desc.data.alpha > 1.0f) {
+            FR_LOG_ERR("Runtime material alpha is out of range.");
+            return false;
+        }
+
+        if (desc.data.alpha_cutoff < 0.0f || desc.data.alpha_cutoff > 1.0f) {
+            FR_LOG_ERR("Runtime material alpha cutoff is out of range.");
+            return false;
+        }
+
+        const MaterialShadingModel shading = desc.data.shading_model;
+        if (shading != MaterialShadingModel::Unlit && shading != MaterialShadingModel::Standard &&
+            shading != MaterialShadingModel::PBR) {
+            FR_LOG_ERR("Runtime material has invalid shading model.");
+            return false;
+        }
+
+        const MaterialBlendMode blend = desc.data.blend_mode;
+        if (blend != MaterialBlendMode::Opaque && blend != MaterialBlendMode::Masked &&
+            blend != MaterialBlendMode::Transparent) {
+            FR_LOG_ERR("Runtime material has invalid blend mode.");
+            return false;
+        }
+
+        return true;
+    }
+
+    [[nodiscard]] U64 allocate_runtime_mesh_cache_key() noexcept {
+        U64 key = m_next_runtime_mesh_cache_key;
+
+        do {
+            key = m_next_runtime_mesh_cache_key++;
+            if (m_next_runtime_mesh_cache_key == 0) {
+                m_next_runtime_mesh_cache_key = 0x8000000000000000ull;
+            }
+        } while (m_mesh_cache.find(key).is_some());
+
+        return key;
+    }
+
+    [[nodiscard]] U64 allocate_runtime_texture_cache_key() noexcept {
+        U64 key = m_next_runtime_texture_cache_key;
+
+        do {
+            key = m_next_runtime_texture_cache_key++;
+            if (m_next_runtime_texture_cache_key == 0) {
+                m_next_runtime_texture_cache_key = 0x9000000000000000ull;
+            }
+        } while (m_texture_cache.find(key).is_some());
+
+        return key;
+    }
+
+    [[nodiscard]] U64 allocate_runtime_material_cache_key() noexcept {
+        U64 key = m_next_runtime_material_cache_key;
+
+        do {
+            key = m_next_runtime_material_cache_key++;
+            if (m_next_runtime_material_cache_key == 0) {
+                m_next_runtime_material_cache_key = 0xA000000000000000ull;
+            }
+        } while (m_material_cache.find(key).is_some());
+
+        return key;
+    }
+
+    [[nodiscard]] static U32
+    find_material_dependency_handle_index(const DynamicArray<MaterialAssetHandle> &materials,
+                                          MaterialAssetHandle handle) noexcept {
+        if (!handle.is_valid()) {
+            return INVALID_RENDER_SUBMESH_MATERIAL_INDEX;
+        }
+
+        for (USize i = 0; i < materials.size(); ++i) {
+            if (materials[i].key == handle.key) {
+                return static_cast<U32>(i);
+            }
+        }
+
+        return INVALID_RENDER_SUBMESH_MATERIAL_INDEX;
+    }
+
+    [[nodiscard]] U32
+    find_material_dependency_asset_index(const DynamicArray<MaterialAssetHandle> &materials,
+                                         AssetId id) const noexcept {
+        if (!id.is_valid()) {
+            return INVALID_RENDER_SUBMESH_MATERIAL_INDEX;
+        }
+
+        for (USize i = 0; i < materials.size(); ++i) {
+            const MaterialAsset *record = m_materials.get_data(materials[i].key);
+            if (!record) {
+                continue;
+            }
+
+            if (!record->runtime_asset && record->cache_key == id.value) {
+                return static_cast<U32>(i);
+            }
+        }
+
+        return INVALID_RENDER_SUBMESH_MATERIAL_INDEX;
+    }
+
+    [[nodiscard]] bool retain_texture(TextureAssetHandle handle) noexcept {
+        if (!handle.is_valid()) {
+            return false;
+        }
+
+        TextureAsset *record = m_textures.get_data(handle.key);
+        if (!record) {
+            return false;
+        }
+
+        ++record->ref_count;
+        return true;
+    }
+
+    [[nodiscard]] bool retain_material(MaterialAssetHandle handle) noexcept {
+        if (!handle.is_valid()) {
+            return false;
+        }
+
+        MaterialAsset *record = m_materials.get_data(handle.key);
+        if (!record) {
+            return false;
+        }
+
+        ++record->ref_count;
+        return true;
+    }
+
     struct ByteReader {
         Slice<const Byte> bytes{};
         USize cursor{0};
@@ -1141,6 +1676,7 @@ private:
         new_asset.material_deps = std::move(material_deps);
         new_asset.ref_count = 1;
         new_asset.cache_key = cache_key;
+        new_asset.runtime_asset = false;
 
         MeshAssetHandle handle{m_meshes.add(std::move(new_asset))};
         m_mesh_cache.insert(cache_key, handle);
@@ -1170,6 +1706,7 @@ private:
         new_asset.handle = gpu_handle;
         new_asset.ref_count = 1;
         new_asset.cache_key = cache_key;
+        new_asset.runtime_asset = false;
 
         TextureAssetHandle handle{m_textures.add(new_asset)};
         m_texture_cache.insert(cache_key, handle);
@@ -1191,6 +1728,7 @@ private:
         new_asset.data = data;
         new_asset.ref_count = 1;
         new_asset.cache_key = cache_key;
+        new_asset.runtime_asset = false;
 
         if (data.albedo_texture.is_valid()) {
             new_asset.albedo_texture = load_texture(data.albedo_texture);
@@ -1280,12 +1818,6 @@ private:
         set_shader_state_thread_unsafe_hint(pending.cache_key, AssetLoadState::ReadyForGpu);
     }
 
-    /*
-        These hints intentionally only write a HashMap when worker threads finish. The current
-        HashMap is not a synchronization primitive, so main-thread code must still call
-        process_async_uploads() to observe and finalize results. If this becomes an issue, replace
-        these maps with an atomic side table or keep all state transitions on the main thread.
-    */
     void set_mesh_state_thread_unsafe_hint(U64, AssetLoadState) noexcept {
     }
 
@@ -1737,6 +2269,10 @@ private:
     DynamicArray<PendingTextureLoad> m_pending_texture_loads;
     DynamicArray<PendingMaterialLoad> m_pending_material_loads;
     DynamicArray<PendingShaderLoad> m_pending_shader_loads;
+
+    U64 m_next_runtime_mesh_cache_key{0x8000000000000000ull};
+    U64 m_next_runtime_texture_cache_key{0x9000000000000000ull};
+    U64 m_next_runtime_material_cache_key{0xA000000000000000ull};
 };
 
 } // namespace fr
