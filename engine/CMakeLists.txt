@@ -138,6 +138,7 @@ target_link_libraries(engine PUBLIC SDL3::SDL3-static)
 target_link_libraries(engine PRIVATE cgltf)
 target_link_libraries(engine PRIVATE stb)
 target_link_libraries(engine PUBLIC wyhash)
+target_link_libraries(engine PUBLIC imgui)
 
 target_include_directories(engine
     PUBLIC "include"

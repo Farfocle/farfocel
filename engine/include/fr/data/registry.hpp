@@ -119,6 +119,7 @@ struct PoolSerializeFns {
     const char *name{nullptr};
     void (*write)(void *pool, JsonWriterArchive &archive) noexcept {nullptr};
     void (*read)(void *registry, TypeIdx tidx, JsonReaderArchive &archive) noexcept {nullptr};
+    void (*imgui)(void *pool, ImGuiWriterArchive &archive) noexcept {nullptr};
 };
 
 template <bool IsReverse, typename... Include>
@@ -310,6 +311,9 @@ public:
      * function are silently skipped.
      */
     void shape(JsonReaderArchive &archive) noexcept;
+
+    /// @brief Renders the registry (things + all part pools that have ImGui shape) via ImGui.
+    void shape(ImGuiWriterArchive &archive) noexcept;
 
     /**
      * @brief Ensures the part pool and PartMeta for part `T` both exist.
@@ -663,6 +667,12 @@ inline void Registry::do_create_part_pool(TypeIdx tidx) noexcept {
             Registry *registry = static_cast<Registry *>(reg_v);
             PartPool<T> &pool = registry->ensure<T>();
             pool.shape(archive, registry->signature_pool_mut(), tidx);
+        };
+    }
+
+    if constexpr (IsShape<ImGuiWriterArchive, T>) {
+        fns.imgui = +[](void *pool_v, ImGuiWriterArchive &archive) noexcept {
+            static_cast<AnyPartPool *>(pool_v)->cast_ref<PartPool<T>>().shape(archive);
         };
     }
 }
@@ -1512,6 +1522,28 @@ inline void Registry::shape(JsonReaderArchive &archive) noexcept {
                 }
 
                 fns.read(static_cast<void *>(this), tidx, ea);
+            });
+        }
+    });
+}
+
+inline void Registry::shape(ImGuiWriterArchive &archive) noexcept {
+    archive.prop("@things", m_thing_pool);
+    archive.dict("@parts", [&](ImGuiWriterArchive &da) {
+        for (USize i = 0; i < MAX_PARTS; ++i) {
+            if (m_part_pools[i].is_nil()) {
+                continue;
+            }
+
+            const PoolSerializeFns &fns = m_pool_serialize_fns[i];
+            if (!fns.imgui) {
+                continue;
+            }
+
+            da.dict(fns.name, [&](ImGuiWriterArchive &ea) {
+                U32 tidx_val = static_cast<U32>(i);
+                ea.prop("@tidx", tidx_val);
+                fns.imgui(static_cast<void *>(&m_part_pools[i]), ea);
             });
         }
     });

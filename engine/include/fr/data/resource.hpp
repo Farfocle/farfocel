@@ -258,6 +258,28 @@ public:
 
     // --------------------------------------------------------------- Shape
 
+    void shape(ImGuiWriterArchive &archive) noexcept {
+        archive.dict("@resources", [&](ImGuiWriterArchive &da) {
+            for (TypeIdx::IDX i = 0; i < MAX_PARTS; ++i) {
+                if (!m_resources[i]) {
+                    continue;
+                }
+
+                TypeIdx tidx = TypeIdx::from_idx(i);
+                const TypeMeta &meta = tidx.meta();
+                if (!meta.imgui_writer_shape) {
+                    continue;
+                }
+
+                da.dict(meta.name, [&](ImGuiWriterArchive &ea) {
+                    U32 tidx_val = static_cast<U32>(i);
+                    ea.prop("@tidx", tidx_val);
+                    meta.imgui_writer_shape(ea, m_resources[i]);
+                });
+            }
+        });
+    }
+
     void shape(JsonWriterArchive &archive) noexcept {
         USize n = count();
 

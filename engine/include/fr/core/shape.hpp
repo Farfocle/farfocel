@@ -26,7 +26,6 @@ namespace fr {
 
 enum class ArchiveKind : U8 { Json };
 
-
 enum class ArchiveAction : U8 { Write, Read };
 
 template <typename T>
@@ -109,15 +108,12 @@ void call_shape(A &archive, V &value) noexcept {
 #define FR_PROP_GET_MACRO(_1, _2, NAME, ...) NAME
 #define FR_PROP(...) FR_PROP_GET_MACRO(__VA_ARGS__, FR_PROP_2, FR_PROP_1)(__VA_ARGS__)
 
-
-#define FR_SHAPE(...)                                                                           \
-    template <typename Archive>                                                                  \
-    void shape(Archive &archive) {                                                               \
-        __VA_ARGS__;                                                                             \
-    }                                                                                            \
-    template <typename Archive>                                                                  \
-    void shape(Archive &archive) const {                                                         \
-        __VA_ARGS__;                                                                             \
+#define FR_SHAPE(...)                                                                              \
+    template <typename Archive>                                                                    \
+    void shape(Archive &archive) {                                                                 \
+        __VA_ARGS__;                                                                               \
+    }                                                                                              \
+    template <typename Archive>                                                                    \
+    void shape(Archive &archive) const {                                                           \
+        __VA_ARGS__;                                                                               \
     }
-
-

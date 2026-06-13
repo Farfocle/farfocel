@@ -12,10 +12,12 @@
 
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <type_traits>
 
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
+#include "fr/renderer/imgui_archive.hpp"
 #include "fr/core/json.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/shape.hpp"
@@ -127,6 +129,9 @@ struct TypeMeta {
     /// @brief Shape reader hook (JSON).
     void (*json_reader_shape)(JsonReaderArchive &, void *) noexcept {nullptr};
 
+    /// @brief Shape writer hook (ImGui).
+    void (*imgui_writer_shape)(ImGuiWriterArchive &, void *) noexcept {nullptr};
+
     /// @brief Shape protocol for serialization.
     FR_SHAPE(FR_PROP(tidx); FR_PROP(size); FR_PROP(alignment); FR_PROP(name);)
 };
@@ -187,6 +192,14 @@ struct TypeInfo {
             call_shape(archive, *(static_cast<T *>(ptr)));
         } else {
             FR_ASSERT(false, "T has to implement shape protocol");
+        }
+    }
+
+    /// @brief Render T via shape protocol (ImGui). No-op if T has no ImGui shape.
+    static void imgui_writer_shape(ImGuiWriterArchive &archive, void *ptr) noexcept {
+        if constexpr (impl::HasMemberShape<ImGuiWriterArchive, T> ||
+                      impl::HasADLShape<ImGuiWriterArchive, T>) {
+            call_shape(archive, *(static_cast<T *>(ptr)));
         }
     }
 };
@@ -278,6 +291,7 @@ TypeIdx lookup_tidx_from_registry(TypeRegistry &registry) noexcept {
             std::is_nothrow_copy_constructible_v<T> ? &TypeInfo<T>::copy_construct : nullptr,
         .json_writer_shape = TypeInfo<T>::json_writer_shape,
         .json_reader_shape = TypeInfo<T>::json_reader_shape,
+        .imgui_writer_shape = TypeInfo<T>::imgui_writer_shape,
     });
 }
 } // namespace impl
@@ -312,7 +326,7 @@ inline const TypeMeta &TypeIdx::meta() const noexcept {
             new (ptr) T();                                                                         \
         }                                                                                          \
         static void destroy(void *ptr) noexcept {                                                  \
-            static_cast<T *>(ptr)->~T();                                                           \
+            std::destroy_at(static_cast<T *>(ptr));                                                \
         }                                                                                          \
         static void move_construct(void *dst, void *src) noexcept {                                \
             new (dst) T(std::move(*static_cast<T *>(src)));                                        \
@@ -327,5 +341,11 @@ inline const TypeMeta &TypeIdx::meta() const noexcept {
         }                                                                                          \
         static void json_reader_shape(fr::JsonReaderArchive &archive, void *ptr) noexcept {        \
             call_shape(archive, *(static_cast<T *>(ptr)));                                         \
+        }                                                                                          \
+        static void imgui_writer_shape(fr::ImGuiWriterArchive &archive, void *ptr) noexcept {     \
+            if constexpr (fr::impl::HasMemberShape<fr::ImGuiWriterArchive, T> ||                  \
+                          fr::impl::HasADLShape<fr::ImGuiWriterArchive, T>) {                     \
+                call_shape(archive, *(static_cast<T *>(ptr)));                                    \
+            }                                                                                      \
         }                                                                                          \
     }
