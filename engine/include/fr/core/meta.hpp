@@ -12,11 +12,12 @@
 
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <type_traits>
 
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
-#include "fr/core/imgui_archive.hpp"
+#include "fr/renderer/imgui_archive.hpp"
 #include "fr/core/json.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/shape.hpp"
@@ -325,7 +326,7 @@ inline const TypeMeta &TypeIdx::meta() const noexcept {
             new (ptr) T();                                                                         \
         }                                                                                          \
         static void destroy(void *ptr) noexcept {                                                  \
-            static_cast<T *>(ptr)->~T();                                                           \
+            std::destroy_at(static_cast<T *>(ptr));                                                \
         }                                                                                          \
         static void move_construct(void *dst, void *src) noexcept {                                \
             new (dst) T(std::move(*static_cast<T *>(src)));                                        \

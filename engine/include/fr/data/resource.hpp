@@ -259,7 +259,7 @@ public:
     // --------------------------------------------------------------- Shape
 
     void shape(ImGuiWriterArchive &archive) noexcept {
-        archive.list("@items", [&](ImGuiWriterArchive &la) {
+        archive.dict("@resources", [&](ImGuiWriterArchive &da) {
             for (TypeIdx::IDX i = 0; i < MAX_PARTS; ++i) {
                 if (!m_resources[i]) {
                     continue;
@@ -271,9 +271,9 @@ public:
                     continue;
                 }
 
-                const char *type_name = meta.name;
-                la.dict("", [&](ImGuiWriterArchive &ea) {
-                    ea.prop("@typename", type_name);
+                da.dict(meta.name, [&](ImGuiWriterArchive &ea) {
+                    U32 tidx_val = static_cast<U32>(i);
+                    ea.prop("@tidx", tidx_val);
                     meta.imgui_writer_shape(ea, m_resources[i]);
                 });
             }

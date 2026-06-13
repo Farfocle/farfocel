@@ -19,7 +19,6 @@ set(ENGINE_HEADERS
     "include/fr/core/hash_map.hpp"
     "include/fr/core/hash_set.hpp"
     "include/fr/core/heap_alloc.hpp"
-    "include/fr/core/imgui_archive.hpp"
     "include/fr/core/inline_any.hpp"
     "include/fr/core/inline_function.hpp"
     "include/fr/core/json.hpp"

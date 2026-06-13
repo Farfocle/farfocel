@@ -1350,7 +1350,7 @@ inline void Registry::shape(JsonReaderArchive &archive) noexcept {
 
 inline void Registry::shape(ImGuiWriterArchive &archive) noexcept {
     archive.prop("@things", m_thing_pool);
-    archive.list("@parts", [&](ImGuiWriterArchive &la) {
+    archive.dict("@parts", [&](ImGuiWriterArchive &da) {
         for (USize i = 0; i < MAX_PARTS; ++i) {
             if (m_part_pools[i].is_nil()) {
                 continue;
@@ -1361,8 +1361,9 @@ inline void Registry::shape(ImGuiWriterArchive &archive) noexcept {
                 continue;
             }
 
-            la.dict("", [&](ImGuiWriterArchive &ea) {
-                ea.prop("@typename", fns.name);
+            da.dict(fns.name, [&](ImGuiWriterArchive &ea) {
+                U32 tidx_val = static_cast<U32>(i);
+                ea.prop("@tidx", tidx_val);
                 fns.imgui(static_cast<void *>(&m_part_pools[i]), ea);
             });
         }
