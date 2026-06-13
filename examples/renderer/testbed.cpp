@@ -1,9 +1,13 @@
 /**
  * @file testbed.cpp
  * @brief Renderer testbed.
+ * WARNING: for rapid purposes, this is all AI GEN, as right now work on the engine is more
+ * important than work on boilerplate code that is used to see if the engine is working. but this
+ * will be changed
  */
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -29,6 +33,7 @@
 #include "fr/asset/material_format.hpp"
 
 #include "fr/core/ctx.hpp"
+#include "fr/core/dynamic_array.hpp"
 #include "fr/core/file.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/mem.hpp"
@@ -49,6 +54,7 @@
 #include "fr/platform/window.hpp"
 
 #include "fr/renderer/default_renderer_setup.hpp"
+#include "fr/renderer/primitive_meshes.hpp"
 #include "fr/renderer/render_device.hpp"
 #include "fr/renderer/render_pipeline_cache.hpp"
 #include "fr/renderer/renderer.hpp"
@@ -76,11 +82,50 @@ enum class TestbedShadingMode : U8 {
     PBR,
 };
 
+enum class TestbedPrimitiveKind : U8 {
+    Cube,
+    Plane,
+    Grid,
+};
+
 struct DefaultShaderCookInput {
     fr::AssetId id{};
     fr::StringView vertex_path{};
     fr::StringView fragment_path{};
     fr::StringView output_path{};
+};
+
+struct TestbedPrimitiveMaterialSettings {
+    bool use_runtime_material{true};
+
+    F32 base_color[4]{0.8f, 0.8f, 0.8f, 1.0f};
+
+    F32 metallic{0.0f};
+    F32 roughness{0.65f};
+    F32 alpha{1.0f};
+    F32 alpha_cutoff{0.5f};
+
+    S32 shading_model{static_cast<S32>(fr::MaterialShadingModel::PBR)};
+    S32 blend_mode{static_cast<S32>(fr::MaterialBlendMode::Opaque)};
+
+    char albedo_path[TESTBED_PATH_BUFFER_SIZE]{};
+    char normal_path[TESTBED_PATH_BUFFER_SIZE]{};
+    char extra_path[TESTBED_PATH_BUFFER_SIZE]{};
+
+    bool albedo_srgb{true};
+    bool normal_srgb{false};
+    bool extra_srgb{false};
+
+    bool dirty{false};
+};
+
+struct TestbedPrimitiveEntity {
+    fr::Thing entity{fr::Thing::nil()};
+    TestbedPrimitiveKind kind{TestbedPrimitiveKind::Cube};
+    U32 serial{0};
+
+    TestbedPrimitiveMaterialSettings material{};
+    fr::MaterialAssetHandle material_handle{};
 };
 
 struct TestbedRuntimeState {
@@ -95,6 +140,8 @@ struct TestbedRuntimeState {
     bool camera_active{false};
     bool show_imgui_demo{false};
     bool show_debug_window{true};
+    bool show_primitives_window{true};
+    bool show_lights_window{true};
 
     TestbedShadingMode shading_mode{TestbedShadingMode::PBR};
 
@@ -115,6 +162,10 @@ struct TestbedRuntimeState {
     F32 ibl_occlusion_power{2.0f};
     F32 ibl_sky_visibility_strength{0.75f};
 
+    F32 primitive_size{1.0f};
+    S32 primitive_grid_segments{16};
+    bool primitive_casts_shadow{true};
+
     bool request_reload_model{false};
     bool request_reload_environment{false};
     bool request_reload_all{false};
@@ -128,6 +179,8 @@ struct TestbedSceneState {
     fr::Thing point_light_entity{fr::Thing::nil()};
     fr::Thing spot_light_entity{fr::Thing::nil()};
 
+    fr::DynamicArray<TestbedPrimitiveEntity> test_entities;
+
     fr::AssetId model_id{};
     fr::AssetId environment_id{};
 
@@ -138,6 +191,14 @@ struct TestbedSceneState {
 
     bool environment_loading{false};
     bool environment_loaded{false};
+
+    U32 next_primitive_serial{1};
+
+    explicit TestbedSceneState(fr::Alloc *alloc) noexcept
+        : test_entities(alloc) {
+        FR_ASSERT(alloc, "allocator must be non-null");
+        test_entities.reserve(128);
+    }
 };
 
 struct TestbedFrameStats {
@@ -165,6 +226,19 @@ struct TestbedFrameStats {
         return "failed";
     default:
         return "unknown";
+    }
+}
+
+[[nodiscard]] const char *primitive_kind_name(TestbedPrimitiveKind kind) noexcept {
+    switch (kind) {
+    case TestbedPrimitiveKind::Cube:
+        return "Cube";
+    case TestbedPrimitiveKind::Plane:
+        return "Plane";
+    case TestbedPrimitiveKind::Grid:
+        return "Grid";
+    default:
+        return "Unknown";
     }
 }
 
@@ -209,6 +283,55 @@ void apply_shading_mode(fr::RenderFrameSubmission &submission, TestbedShadingMod
     }
 
     return fr::String::from_chars(alloc, buffer);
+}
+
+void copy_path_buffer(const char *src, char (&dst)[TESTBED_PATH_BUFFER_SIZE]) noexcept {
+    fr::mem::set_raw_range(reinterpret_cast<Byte *>(dst), 0, TESTBED_PATH_BUFFER_SIZE);
+
+    if (!src) {
+        return;
+    }
+
+    USize length = 0;
+    while (length < TESTBED_PATH_BUFFER_SIZE - 1 && src[length] != '\0') {
+        ++length;
+    }
+
+    if (length > 0) {
+        fr::mem::copy_raw_range(reinterpret_cast<const Byte *>(src), length,
+                                reinterpret_cast<Byte *>(dst));
+    }
+
+    dst[length] = '\0';
+}
+
+void copy_material_settings(const TestbedPrimitiveMaterialSettings &src,
+                            TestbedPrimitiveMaterialSettings &dst) noexcept {
+    dst = src;
+
+    copy_path_buffer(src.albedo_path, dst.albedo_path);
+    copy_path_buffer(src.normal_path, dst.normal_path);
+    copy_path_buffer(src.extra_path, dst.extra_path);
+}
+
+[[nodiscard]] TestbedPrimitiveMaterialSettings make_default_primitive_material_settings() noexcept {
+    TestbedPrimitiveMaterialSettings settings{};
+    settings.use_runtime_material = true;
+    settings.base_color[0] = 0.8f;
+    settings.base_color[1] = 0.8f;
+    settings.base_color[2] = 0.8f;
+    settings.base_color[3] = 1.0f;
+    settings.metallic = 0.0f;
+    settings.roughness = 0.65f;
+    settings.alpha = 1.0f;
+    settings.alpha_cutoff = 0.5f;
+    settings.shading_model = static_cast<S32>(fr::MaterialShadingModel::PBR);
+    settings.blend_mode = static_cast<S32>(fr::MaterialBlendMode::Opaque);
+    settings.albedo_srgb = true;
+    settings.normal_srgb = false;
+    settings.extra_srgb = false;
+    settings.dirty = false;
+    return settings;
 }
 
 void setup_logger() {
@@ -459,6 +582,10 @@ void sync_transform_matrices(fr::World &world, const TestbedSceneState &state) n
     sync_entity_transform_matrix(world, state.directional_light_entity);
     sync_entity_transform_matrix(world, state.point_light_entity);
     sync_entity_transform_matrix(world, state.spot_light_entity);
+
+    for (USize i = 0; i < state.test_entities.size(); ++i) {
+        sync_entity_transform_matrix(world, state.test_entities[i].entity);
+    }
 }
 
 fr::Thing create_test_camera(fr::World &world) {
@@ -544,6 +671,436 @@ void create_test_lights(fr::World &world, TestbedSceneState &state) {
         light.shadow_strength = 1.0f;
         light.shadow_bias = 0.002f;
     }
+}
+
+[[nodiscard]] glm::vec3 next_test_entity_position(const TestbedSceneState &state,
+                                                  F32 y_offset) noexcept {
+    const USize index = state.test_entities.size();
+
+    const S32 column = static_cast<S32>(index % 5) - 2;
+    const S32 row = static_cast<S32>(index / 5);
+
+    constexpr F32 spacing = 2.75f;
+
+    return glm::vec3(static_cast<F32>(column) * spacing, y_offset,
+                     -static_cast<F32>(row) * spacing);
+}
+
+[[nodiscard]] fr::MaterialShadingModel
+primitive_shading_model(const TestbedPrimitiveMaterialSettings &settings) noexcept {
+    if (settings.shading_model == static_cast<S32>(fr::MaterialShadingModel::Unlit)) {
+        return fr::MaterialShadingModel::Unlit;
+    }
+
+    if (settings.shading_model == static_cast<S32>(fr::MaterialShadingModel::Standard)) {
+        return fr::MaterialShadingModel::Standard;
+    }
+
+    return fr::MaterialShadingModel::PBR;
+}
+
+[[nodiscard]] fr::MaterialBlendMode
+primitive_blend_mode(const TestbedPrimitiveMaterialSettings &settings) noexcept {
+    if (settings.blend_mode == static_cast<S32>(fr::MaterialBlendMode::Masked)) {
+        return fr::MaterialBlendMode::Masked;
+    }
+
+    if (settings.blend_mode == static_cast<S32>(fr::MaterialBlendMode::Transparent)) {
+        return fr::MaterialBlendMode::Transparent;
+    }
+
+    return fr::MaterialBlendMode::Opaque;
+}
+
+[[nodiscard]] fr::RenderPass
+primitive_render_pass(const TestbedPrimitiveMaterialSettings &settings) noexcept {
+    const fr::MaterialBlendMode blend = primitive_blend_mode(settings);
+    return blend == fr::MaterialBlendMode::Transparent ? fr::RenderPass::Transparent
+                                                       : fr::RenderPass::Opaque;
+}
+
+[[nodiscard]] bool cook_texture_for_runtime_material(fr::Alloc *alloc, fr::AssetRegistry &registry,
+                                                     fr::StringView source_path, bool srgb,
+                                                     bool force, fr::AssetId &out_id) noexcept {
+    FR_ASSERT(alloc, "allocator must be non-null");
+
+    out_id = {};
+
+    if (source_path.is_empty()) {
+        return true;
+    }
+
+    fr::String output_path = cooked_path_from_source(alloc, source_path, ".ftex");
+    if (output_path.size() == 0) {
+        FR_LOG_ERR("[Testbed] Failed to build runtime material texture cooked path.");
+        return false;
+    }
+
+    if (!ensure_directory_for_path(output_path.view())) {
+        return false;
+    }
+
+    fr::DynamicArray<fr::asscooker::CookedAssetOutput> outputs(alloc);
+
+    fr::asscooker::CookOptions options{};
+    options.force = force;
+
+    FR_LOG("[Testbed] Cooking runtime material texture: {} -> {}", source_path, output_path.view());
+
+    if (!fr::asscooker::cook_texture_ex(source_path, output_path.view(), srgb, &outputs, options)) {
+        FR_LOG_ERR("[Testbed] Failed to cook runtime material texture: {}", source_path);
+        return false;
+    }
+
+    if (!register_cooked_outputs(registry, outputs.slice())) {
+        return false;
+    }
+
+    out_id = fr::asscooker::resolve_output_asset_id(output_path.view(), options);
+    return out_id.is_valid();
+}
+
+[[nodiscard]] fr::MaterialAssetHandle create_runtime_material_from_settings(
+    fr::Alloc *alloc, fr::AssetRegistry &registry, fr::AssetManager &assets,
+    const TestbedPrimitiveMaterialSettings &settings, bool force_recook) noexcept {
+    FR_ASSERT(alloc, "allocator must be non-null");
+
+    if (!settings.use_runtime_material) {
+        return {};
+    }
+
+    fr::RuntimeMaterialDesc desc{};
+
+    desc.data.base_color_factor = fr::Vec4(settings.base_color[0], settings.base_color[1],
+                                           settings.base_color[2], settings.base_color[3]);
+
+    desc.data.metallic_factor = glm::clamp(settings.metallic, 0.0f, 1.0f);
+    desc.data.roughness_factor = glm::clamp(settings.roughness, 0.0f, 1.0f);
+    desc.data.alpha = glm::clamp(settings.alpha, 0.0f, 1.0f);
+    desc.data.alpha_cutoff = glm::clamp(settings.alpha_cutoff, 0.0f, 1.0f);
+
+    desc.data.shading_model = primitive_shading_model(settings);
+    desc.data.blend_mode = primitive_blend_mode(settings);
+
+    fr::String albedo_path = path_buffer_to_string(alloc, settings.albedo_path);
+    fr::String normal_path = path_buffer_to_string(alloc, settings.normal_path);
+    fr::String extra_path = path_buffer_to_string(alloc, settings.extra_path);
+
+    if (albedo_path.size() != 0) {
+        if (!cook_texture_for_runtime_material(alloc, registry, albedo_path.view(),
+                                               settings.albedo_srgb, force_recook,
+                                               desc.data.albedo_texture)) {
+            return {};
+        }
+    }
+
+    if (normal_path.size() != 0) {
+        if (!cook_texture_for_runtime_material(alloc, registry, normal_path.view(),
+                                               settings.normal_srgb, force_recook,
+                                               desc.data.normal_texture)) {
+            return {};
+        }
+    }
+
+    if (extra_path.size() != 0) {
+        if (!cook_texture_for_runtime_material(alloc, registry, extra_path.view(),
+                                               settings.extra_srgb, force_recook,
+                                               desc.data.extra_texture)) {
+            return {};
+        }
+    }
+
+    fr::MaterialAssetHandle material = assets.create_runtime_material(desc);
+    if (!material.is_valid()) {
+        FR_LOG_ERR("[Testbed] Failed to create runtime primitive material.");
+        return {};
+    }
+
+    return material;
+}
+
+void bind_entity_material_override(fr::World &world, fr::Thing entity,
+                                   fr::MaterialAssetHandle material) noexcept {
+    fr::MaterialOverridePart *override_part = world.try_get<fr::MaterialOverridePart>(entity);
+
+    if (!override_part) {
+        if (!material.is_valid()) {
+            return;
+        }
+
+        override_part = &world.emplace_now<fr::MaterialOverridePart>(entity);
+    }
+
+    override_part->material_id = {};
+    override_part->resolved_material_id = {};
+    override_part->material_handle = material;
+}
+
+bool rebuild_primitive_entity_material(fr::Alloc *alloc, fr::AssetRegistry &registry,
+                                       fr::AssetManager &assets, fr::World &world,
+                                       bool force_recook, TestbedPrimitiveEntity &entry) noexcept {
+    FR_ASSERT(alloc, "allocator must be non-null");
+
+    fr::MaterialAssetHandle new_material = create_runtime_material_from_settings(
+        alloc, registry, assets, entry.material, force_recook);
+
+    if (entry.material.use_runtime_material && !new_material.is_valid()) {
+        FR_LOG_ERR("[Testbed] Failed to rebuild primitive material.");
+        return false;
+    }
+
+    fr::MaterialAssetHandle old_material = entry.material_handle;
+    entry.material_handle = new_material;
+
+    bind_entity_material_override(world, entry.entity, new_material);
+
+    if (old_material.is_valid()) {
+        assets.unload_material(old_material);
+    }
+
+    return true;
+}
+
+[[nodiscard]] fr::primitive_mesh::PrimitiveMeshCreateDesc
+make_primitive_create_desc(const TestbedPrimitiveMaterialSettings &settings, F32 size) noexcept {
+    fr::primitive_mesh::PrimitiveMeshCreateDesc desc{};
+    desc.size = size > 0.001f ? size : 0.001f;
+    desc.pass_type = primitive_render_pass(settings);
+
+    return desc;
+}
+
+[[nodiscard]] fr::primitive_mesh::GridMeshCreateDesc
+make_grid_create_desc(const TestbedPrimitiveMaterialSettings &settings, F32 size,
+                      S32 grid_segments) noexcept {
+    S32 segments = grid_segments;
+
+    if (segments < 1) {
+        segments = 1;
+    }
+
+    if (segments > 512) {
+        segments = 512;
+    }
+
+    fr::primitive_mesh::GridMeshCreateDesc desc{};
+    desc.size = size > 0.001f ? size : 0.001f;
+    desc.x_segments = static_cast<U32>(segments);
+    desc.z_segments = static_cast<U32>(segments);
+    desc.pass_type = primitive_render_pass(settings);
+
+    return desc;
+}
+
+bool spawn_runtime_mesh_entity(fr::World &world, TestbedSceneState &state,
+                               fr::MeshAssetHandle mesh_handle,
+                               fr::MaterialAssetHandle material_handle,
+                               const TestbedPrimitiveMaterialSettings &settings,
+                               TestbedPrimitiveKind kind, const glm::vec3 &position,
+                               bool casts_shadow) noexcept {
+    if (!mesh_handle.is_valid()) {
+        return false;
+    }
+
+    fr::Thing entity = world.spawn();
+
+    fr::WorldTransformPart &transform = world.emplace_now<fr::WorldTransformPart>(entity);
+    transform.position = position;
+    transform.rotation = glm::quat(glm::vec3(0.0f));
+    transform.scale = glm::vec3(1.0f);
+    update_transform_matrix(transform);
+
+    fr::MeshRendererPart &mesh = world.emplace_now<fr::MeshRendererPart>(entity);
+    mesh.mesh_id = {};
+    mesh.resolved_mesh_id = {};
+    mesh.mesh_handle = mesh_handle;
+    mesh.visible = true;
+    mesh.casts_shadow = casts_shadow;
+
+    if (material_handle.is_valid()) {
+        fr::MaterialOverridePart &override_part =
+            world.emplace_now<fr::MaterialOverridePart>(entity);
+
+        override_part.material_id = {};
+        override_part.resolved_material_id = {};
+        override_part.material_handle = material_handle;
+    }
+
+    TestbedPrimitiveEntity record{};
+    record.entity = entity;
+    record.kind = kind;
+    record.serial = state.next_primitive_serial++;
+    record.material_handle = material_handle;
+    copy_material_settings(settings, record.material);
+
+    state.test_entities.push_back(record);
+    return true;
+}
+
+void spawn_test_cube(fr::Alloc *alloc, fr::AssetRegistry &registry, fr::World &world,
+                     fr::AssetManager &assets, TestbedRuntimeState &runtime,
+                     TestbedSceneState &state) noexcept {
+    FR_ASSERT(alloc, "allocator must be non-null");
+
+    const F32 size = runtime.primitive_size > 0.001f ? runtime.primitive_size : 0.001f;
+    TestbedPrimitiveMaterialSettings material_settings = make_default_primitive_material_settings();
+
+    fr::MaterialAssetHandle material = create_runtime_material_from_settings(
+        alloc, registry, assets, material_settings, runtime.force_recook);
+
+    if (material_settings.use_runtime_material && !material.is_valid()) {
+        FR_LOG_ERR("[Testbed] Failed to create primitive material for cube.");
+        return;
+    }
+
+    fr::primitive_mesh::PrimitiveMeshCreateDesc desc =
+        make_primitive_create_desc(material_settings, size);
+
+    fr::MeshAssetHandle mesh = fr::primitive_mesh::create_cube(assets, desc);
+
+    if (!mesh.is_valid()) {
+        if (material.is_valid()) {
+            assets.unload_material(material);
+        }
+
+        FR_LOG_ERR("[Testbed] Failed to create runtime cube mesh.");
+        return;
+    }
+
+    const glm::vec3 position = next_test_entity_position(state, size * 0.5f);
+    if (!spawn_runtime_mesh_entity(world, state, mesh, material, material_settings,
+                                   TestbedPrimitiveKind::Cube, position,
+                                   runtime.primitive_casts_shadow)) {
+        assets.unload_mesh(mesh);
+
+        if (material.is_valid()) {
+            assets.unload_material(material);
+        }
+
+        FR_LOG_ERR("[Testbed] Failed to spawn runtime cube entity.");
+        return;
+    }
+
+    FR_LOG_OK("[Testbed] Spawned runtime cube.");
+}
+
+void spawn_test_plane(fr::Alloc *alloc, fr::AssetRegistry &registry, fr::World &world,
+                      fr::AssetManager &assets, TestbedRuntimeState &runtime,
+                      TestbedSceneState &state) noexcept {
+    FR_ASSERT(alloc, "allocator must be non-null");
+
+    const F32 size = runtime.primitive_size > 0.001f ? runtime.primitive_size : 0.001f;
+    TestbedPrimitiveMaterialSettings material_settings = make_default_primitive_material_settings();
+
+    fr::MaterialAssetHandle material = create_runtime_material_from_settings(
+        alloc, registry, assets, material_settings, runtime.force_recook);
+
+    if (material_settings.use_runtime_material && !material.is_valid()) {
+        FR_LOG_ERR("[Testbed] Failed to create primitive material for plane.");
+        return;
+    }
+
+    fr::primitive_mesh::PrimitiveMeshCreateDesc desc =
+        make_primitive_create_desc(material_settings, size);
+
+    fr::MeshAssetHandle mesh = fr::primitive_mesh::create_plane(assets, desc);
+
+    if (!mesh.is_valid()) {
+        if (material.is_valid()) {
+            assets.unload_material(material);
+        }
+
+        FR_LOG_ERR("[Testbed] Failed to create runtime plane mesh.");
+        return;
+    }
+
+    const glm::vec3 position = next_test_entity_position(state, 0.0f);
+    if (!spawn_runtime_mesh_entity(world, state, mesh, material, material_settings,
+                                   TestbedPrimitiveKind::Plane, position,
+                                   runtime.primitive_casts_shadow)) {
+        assets.unload_mesh(mesh);
+
+        if (material.is_valid()) {
+            assets.unload_material(material);
+        }
+
+        FR_LOG_ERR("[Testbed] Failed to spawn runtime plane entity.");
+        return;
+    }
+
+    FR_LOG_OK("[Testbed] Spawned runtime plane.");
+}
+
+void spawn_test_grid(fr::Alloc *alloc, fr::AssetRegistry &registry, fr::World &world,
+                     fr::AssetManager &assets, TestbedRuntimeState &runtime,
+                     TestbedSceneState &state) noexcept {
+    FR_ASSERT(alloc, "allocator must be non-null");
+
+    const F32 size = runtime.primitive_size > 0.001f ? runtime.primitive_size : 0.001f;
+    TestbedPrimitiveMaterialSettings material_settings = make_default_primitive_material_settings();
+
+    fr::MaterialAssetHandle material = create_runtime_material_from_settings(
+        alloc, registry, assets, material_settings, runtime.force_recook);
+
+    if (material_settings.use_runtime_material && !material.is_valid()) {
+        FR_LOG_ERR("[Testbed] Failed to create primitive material for grid.");
+        return;
+    }
+
+    fr::primitive_mesh::GridMeshCreateDesc desc =
+        make_grid_create_desc(material_settings, size, runtime.primitive_grid_segments);
+
+    fr::MeshAssetHandle mesh = fr::primitive_mesh::create_grid(assets, alloc, desc);
+
+    if (!mesh.is_valid()) {
+        if (material.is_valid()) {
+            assets.unload_material(material);
+        }
+
+        FR_LOG_ERR("[Testbed] Failed to create runtime grid mesh.");
+        return;
+    }
+
+    const glm::vec3 position = next_test_entity_position(state, 0.0f);
+    if (!spawn_runtime_mesh_entity(world, state, mesh, material, material_settings,
+                                   TestbedPrimitiveKind::Grid, position,
+                                   runtime.primitive_casts_shadow)) {
+        assets.unload_mesh(mesh);
+
+        if (material.is_valid()) {
+            assets.unload_material(material);
+        }
+
+        FR_LOG_ERR("[Testbed] Failed to spawn runtime grid entity.");
+        return;
+    }
+
+    FR_LOG_OK("[Testbed] Spawned runtime grid: segments={} size={}", desc.x_segments, desc.size);
+}
+
+void unload_test_entities(fr::World &world, fr::AssetManager &assets,
+                          TestbedSceneState &state) noexcept {
+    for (USize i = 0; i < state.test_entities.size(); ++i) {
+        TestbedPrimitiveEntity &entry = state.test_entities[i];
+        const fr::Thing entity = entry.entity;
+
+        if (fr::MeshRendererPart *mesh = world.try_get<fr::MeshRendererPart>(entity)) {
+            if (mesh->mesh_handle.is_valid()) {
+                assets.unload_mesh(mesh->mesh_handle);
+                mesh->mesh_handle = {};
+                mesh->resolved_mesh_id = {};
+            }
+        }
+
+        if (entry.material_handle.is_valid()) {
+            assets.unload_material(entry.material_handle);
+            entry.material_handle = {};
+        }
+
+        world.kill(entity);
+    }
+
+    state.test_entities.clear();
 }
 
 void unload_model(fr::World &world, fr::AssetManager &assets, TestbedSceneState &state) noexcept {
@@ -747,22 +1304,19 @@ void complete_async_asset_loads(fr::World &world, fr::AssetManager &assets,
     }
 }
 
+void clamp_material_settings(TestbedPrimitiveMaterialSettings &settings) noexcept {
+    settings.metallic = glm::clamp(settings.metallic, 0.0f, 1.0f);
+    settings.roughness = glm::clamp(settings.roughness, 0.0f, 1.0f);
+    settings.alpha = glm::clamp(settings.alpha, 0.0f, 1.0f);
+    settings.alpha_cutoff = glm::clamp(settings.alpha_cutoff, 0.0f, 1.0f);
+    settings.shading_model = glm::clamp(settings.shading_model, 0, 2);
+    settings.blend_mode = glm::clamp(settings.blend_mode, 0, 2);
+}
+
 void clamp_runtime_state(TestbedRuntimeState &state) noexcept {
-    if (state.exposure < 0.05f) {
-        state.exposure = 0.05f;
-    }
-
-    if (state.exposure > 16.0f) {
-        state.exposure = 16.0f;
-    }
-
-    if (state.ibl_diffuse_strength < 0.0f) {
-        state.ibl_diffuse_strength = 0.0f;
-    }
-
-    if (state.ibl_specular_strength < 0.0f) {
-        state.ibl_specular_strength = 0.0f;
-    }
+    state.exposure = glm::clamp(state.exposure, 0.05f, 16.0f);
+    state.ibl_diffuse_strength = glm::max(state.ibl_diffuse_strength, 0.0f);
+    state.ibl_specular_strength = glm::max(state.ibl_specular_strength, 0.0f);
 }
 
 void draw_transform_debug(fr::World &world, fr::Thing entity) {
@@ -879,23 +1433,212 @@ void draw_light_debug(fr::World &world, TestbedSceneState &state) {
     }
 }
 
+void draw_lights_window(fr::World &world, TestbedRuntimeState &runtime, TestbedSceneState &state) {
+    if (!runtime.show_lights_window) {
+        return;
+    }
+
+    ImGui::Begin("Lights", &runtime.show_lights_window);
+    draw_light_debug(world, state);
+    ImGui::End();
+}
+
 void draw_shading_mode_selector(TestbedRuntimeState &runtime) {
     const char *items[] = {"UNLIT", "STANDARD", "PBR"};
     S32 selected = static_cast<S32>(runtime.shading_mode);
 
     if (ImGui::Combo("Material shading", &selected, items, 3)) {
-        if (selected < 0) {
-            selected = 0;
-        }
-
-        if (selected > 2) {
-            selected = 2;
-        }
-
+        selected = glm::clamp(selected, 0, 2);
         runtime.shading_mode = static_cast<TestbedShadingMode>(selected);
     }
 
     ImGui::TextDisabled("Overrides material shading model in the extracted frame.");
+}
+
+bool draw_material_settings_editor(TestbedPrimitiveMaterialSettings &settings) {
+    bool request_rebuild = false;
+
+    auto mark_after_edit = [&]() noexcept {
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            request_rebuild = true;
+        }
+    };
+
+    ImGui::Checkbox("Use runtime material", &settings.use_runtime_material);
+    mark_after_edit();
+
+    ImGui::ColorEdit4("Base color", settings.base_color);
+    mark_after_edit();
+
+    const char *shading_items[] = {"UNLIT", "STANDARD", "PBR"};
+    if (ImGui::Combo("Shading model", &settings.shading_model, shading_items, 3)) {
+        request_rebuild = true;
+    }
+
+    const char *blend_items[] = {"OPAQUE", "MASKED", "TRANSPARENT"};
+    if (ImGui::Combo("Blend mode", &settings.blend_mode, blend_items, 3)) {
+        request_rebuild = true;
+    }
+
+    if (settings.blend_mode == static_cast<S32>(fr::MaterialBlendMode::Transparent)) {
+        ImGui::TextDisabled(
+            "Transparent primitives are skipped until forward pass is implemented.");
+    }
+
+    ImGui::DragFloat("Metallic", &settings.metallic, 0.01f, 0.0f, 1.0f);
+    mark_after_edit();
+
+    ImGui::DragFloat("Roughness", &settings.roughness, 0.01f, 0.0f, 1.0f);
+    mark_after_edit();
+
+    ImGui::DragFloat("Alpha", &settings.alpha, 0.01f, 0.0f, 1.0f);
+    mark_after_edit();
+
+    ImGui::DragFloat("Alpha cutoff", &settings.alpha_cutoff, 0.01f, 0.0f, 1.0f);
+    mark_after_edit();
+
+    ImGui::SeparatorText("Texture Sources");
+
+    constexpr ImGuiInputTextFlags path_flags = ImGuiInputTextFlags_EnterReturnsTrue;
+
+    if (ImGui::InputText("Albedo path", settings.albedo_path, TESTBED_PATH_BUFFER_SIZE,
+                         path_flags)) {
+        request_rebuild = true;
+    }
+
+    ImGui::Checkbox("Albedo SRGB", &settings.albedo_srgb);
+    mark_after_edit();
+
+    if (ImGui::InputText("Normal path", settings.normal_path, TESTBED_PATH_BUFFER_SIZE,
+                         path_flags)) {
+        request_rebuild = true;
+    }
+
+    ImGui::Checkbox("Normal SRGB", &settings.normal_srgb);
+    mark_after_edit();
+
+    if (ImGui::InputText("Extra/PBR path", settings.extra_path, TESTBED_PATH_BUFFER_SIZE,
+                         path_flags)) {
+        request_rebuild = true;
+    }
+
+    ImGui::Checkbox("Extra/PBR SRGB", &settings.extra_srgb);
+    mark_after_edit();
+
+    ImGui::TextDisabled("Texture paths apply on Enter or with Rebuild Material.");
+
+    clamp_material_settings(settings);
+
+    if (request_rebuild) {
+        settings.dirty = true;
+    }
+
+    return request_rebuild;
+}
+
+void draw_primitive_entity_debug(fr::Alloc *alloc, fr::AssetRegistry &registry, fr::World &world,
+                                 fr::AssetManager &assets, TestbedRuntimeState &runtime,
+                                 TestbedPrimitiveEntity &entry) {
+    char label[64]{};
+    std::snprintf(label, sizeof(label), "%s #%u", primitive_kind_name(entry.kind), entry.serial);
+
+    if (!ImGui::TreeNode(label)) {
+        return;
+    }
+
+    draw_transform_debug(world, entry.entity);
+
+    fr::MeshRendererPart *mesh = world.try_get<fr::MeshRendererPart>(entry.entity);
+    if (mesh) {
+        ImGui::Checkbox("Visible", &mesh->visible);
+        ImGui::Checkbox("Casts shadow", &mesh->casts_shadow);
+        ImGui::Text("Mesh handle: %s", mesh->mesh_handle.is_valid() ? "valid" : "invalid");
+    } else {
+        ImGui::TextDisabled("No MeshRendererPart.");
+    }
+
+    ImGui::SeparatorText("Material");
+
+    const bool changed = draw_material_settings_editor(entry.material);
+
+    if (entry.material.dirty) {
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.25f, 1.0f), "Material changed.");
+    }
+
+    bool apply = changed;
+
+    if (ImGui::Button("Rebuild Material")) {
+        apply = true;
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Reset Material")) {
+        entry.material = make_default_primitive_material_settings();
+        apply = true;
+    }
+
+    if (apply) {
+        if (rebuild_primitive_entity_material(alloc, registry, assets, world, runtime.force_recook,
+                                              entry)) {
+            entry.material.dirty = false;
+        }
+    }
+
+    ImGui::TreePop();
+}
+
+void draw_runtime_mesh_window(fr::Alloc *alloc, fr::AssetRegistry &registry, fr::World &world,
+                              fr::AssetManager &assets, TestbedRuntimeState &runtime,
+                              TestbedSceneState &scene_state) {
+    FR_ASSERT(alloc, "allocator must be non-null");
+
+    if (!runtime.show_primitives_window) {
+        return;
+    }
+
+    ImGui::Begin("Runtime Primitives", &runtime.show_primitives_window);
+
+    ImGui::SeparatorText("Spawn Geometry");
+    ImGui::DragFloat("Primitive size", &runtime.primitive_size, 0.05f, 0.001f, 1000.0f);
+    ImGui::DragInt("Grid segments", &runtime.primitive_grid_segments, 1.0f, 1, 512);
+    ImGui::Checkbox("Primitive casts shadow", &runtime.primitive_casts_shadow);
+
+    ImGui::SeparatorText("Spawn");
+
+    if (ImGui::Button("Spawn Cube")) {
+        spawn_test_cube(alloc, registry, world, assets, runtime, scene_state);
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Spawn Plane")) {
+        spawn_test_plane(alloc, registry, world, assets, runtime, scene_state);
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Spawn Grid")) {
+        spawn_test_grid(alloc, registry, world, assets, runtime, scene_state);
+    }
+
+    if (ImGui::Button("Clear spawned")) {
+        unload_test_entities(world, assets, scene_state);
+    }
+
+    ImGui::Text("Spawned runtime meshes: %llu",
+                static_cast<unsigned long long>(scene_state.test_entities.size()));
+
+    if (ImGui::CollapsingHeader("Spawned primitives", ImGuiTreeNodeFlags_DefaultOpen)) {
+        for (USize i = 0; i < scene_state.test_entities.size(); ++i) {
+            ImGui::PushID(static_cast<int>(scene_state.test_entities[i].serial));
+            draw_primitive_entity_debug(alloc, registry, world, assets, runtime,
+                                        scene_state.test_entities[i]);
+            ImGui::PopID();
+        }
+    }
+
+    ImGui::End();
 }
 
 void draw_renderer_debug(TestbedRuntimeState &runtime) {
@@ -993,6 +1736,8 @@ void draw_debug_ui(fr::Window &window, fr::AssetManager &assets, fr::World &worl
     ImGui::TextDisabled("Hold Right Mouse to control camera. Hold LShift for precision movement.");
 
     ImGui::Checkbox("Show ImGui demo", &runtime.show_imgui_demo);
+    ImGui::Checkbox("Runtime Primitives window", &runtime.show_primitives_window);
+    ImGui::Checkbox("Lights window", &runtime.show_lights_window);
 
     if (ImGui::CollapsingHeader("Assets", ImGuiTreeNodeFlags_DefaultOpen)) {
         draw_asset_debug(assets, runtime, scene_state);
@@ -1004,10 +1749,6 @@ void draw_debug_ui(fr::Window &window, fr::AssetManager &assets, fr::World &worl
 
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         draw_camera_debug(world, scene_state);
-    }
-
-    if (ImGui::CollapsingHeader("Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
-        draw_light_debug(world, scene_state);
     }
 
     ImGui::End();
@@ -1225,7 +1966,7 @@ S32 main(S32 argc, char **argv) {
                         if (exit_code == EXIT_SUCCESS) {
                             fr::World world{};
 
-                            TestbedSceneState scene_state{};
+                            TestbedSceneState scene_state(alloc);
                             scene_state.camera_entity = create_test_camera(world);
                             create_test_lights(world, scene_state);
 
@@ -1270,6 +2011,9 @@ S32 main(S32 argc, char **argv) {
                                 stats.height = window.get_height();
 
                                 draw_debug_ui(window, assets, world, runtime, scene_state, stats);
+                                draw_runtime_mesh_window(alloc, registry, world, assets, runtime,
+                                                         scene_state);
+                                draw_lights_window(world, runtime, scene_state);
 
                                 ImGuiIO &io = ImGui::GetIO();
 
@@ -1345,6 +2089,8 @@ S32 main(S32 argc, char **argv) {
                             asset_pool.wait();
                             assets.process_async_uploads(static_cast<USize>(-1));
                             complete_async_asset_loads(world, assets, scene_state);
+
+                            unload_test_entities(world, assets, scene_state);
 
                             for (auto [thing, mesh] : world.query<fr::MeshRendererPart>()) {
                                 (void)thing;
