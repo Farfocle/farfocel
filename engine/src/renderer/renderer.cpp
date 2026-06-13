@@ -151,6 +151,10 @@ bool validate_frame_submission(const RenderFrameSubmission &submission,
 
     ok = validate_draw_list(submission.draws.opaque.slice(), submission, limits, "opaque") && ok;
     ok = validate_draw_list(submission.draws.masked.slice(), submission, limits, "masked") && ok;
+    ok = validate_draw_list(submission.draws.transparent.slice(), submission, limits,
+                            "transparent") &&
+         ok;
+    // japipapi co tutaj sie z clang formaterem stalo
     ok = validate_draw_list(submission.draws.shadow.slice(), submission, limits, "shadow") && ok;
 
     return ok;
@@ -519,6 +523,13 @@ void Renderer::render(const RenderFrameDesc &desc) noexcept {
     lighting_desc.frame = &desc;
     lighting_desc.limits = m_limits;
     render_pass::execute_lighting(cmd, lighting_desc);
+
+    render_pass::ForwardTransparentPassDesc forward_desc{};
+    forward_desc.resources = &m_resources;
+    forward_desc.pipelines = &m_pipelines;
+    forward_desc.frame = &desc;
+    forward_desc.limits = m_limits;
+    render_pass::execute_forward_transparent(cmd, forward_desc);
 
     render_pass::PresentPassDesc present_desc{};
     present_desc.resources = &m_resources;

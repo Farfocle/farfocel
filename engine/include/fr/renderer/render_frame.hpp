@@ -30,10 +30,6 @@ constexpr U32 RENDER_MATERIAL_HAS_EXTRA = 1u << 2;
 
 /**
  * @brief Frame-local material data resolved for one draw.
- *
- * @details
- * Texture handles are used by passes for binding. Scalar values are uploaded to the material SSBO
- * and indexed through DrawCall::material_index.
  */
 struct RenderMaterialPacket {
     TextureHandle albedo{};
@@ -81,22 +77,26 @@ struct alignas(8) DrawCall {
 struct RenderDrawLists {
     DynamicArray<DrawCall> opaque;
     DynamicArray<DrawCall> masked;
+    DynamicArray<DrawCall> transparent;
     DynamicArray<DrawCall> shadow;
 
     explicit RenderDrawLists(Alloc *alloc) noexcept
         : opaque(alloc),
           masked(alloc),
+          transparent(alloc),
           shadow(alloc) {
         FR_ASSERT(alloc, "allocator must be non-null");
 
         opaque.reserve(4096);
         masked.reserve(1024);
+        transparent.reserve(1024);
         shadow.reserve(4096);
     }
 
     void clear() noexcept {
         opaque.clear();
         masked.clear();
+        transparent.clear();
         shadow.clear();
     }
 
@@ -107,6 +107,14 @@ struct RenderDrawLists {
         radix_sort_key(masked.slice_mut(),
                        [](const DrawCall &call) noexcept -> U64 { return call.key.value; });
 
+        /*
+            Transparent depth is encoded inverted by the extractor, so regular ascending radix sort
+            gives back-to-front ordering while still preserving pipeline/VBO/texture grouping in the
+            high bits.
+        */
+        radix_sort_key(transparent.slice_mut(),
+                       [](const DrawCall &call) noexcept -> U64 { return call.key.value; });
+
         radix_sort_key(shadow.slice_mut(),
                        [](const DrawCall &call) noexcept -> U64 { return call.key.value; });
     }
@@ -114,10 +122,6 @@ struct RenderDrawLists {
 
 /**
  * @brief Renderer-facing frame submission.
- *
- * @details
- * Built by render extraction and consumed by Renderer for exactly one frame. This data is
- * runtime-only and must not be serialized.
  */
 struct RenderFrameSubmission {
     Alloc *alloc{nullptr};
@@ -194,6 +198,10 @@ struct RenderFrameSubmission {
 
         case RenderPass::Masked:
             draws.masked.push_back(draw);
+            return;
+
+        case RenderPass::Transparent:
+            draws.transparent.push_back(draw);
             return;
 
         default:

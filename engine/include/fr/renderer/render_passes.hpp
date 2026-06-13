@@ -16,9 +16,6 @@
 
 namespace fr::render_pass {
 
-/**
- * @brief Equirectangular texture to environment cubemap pass input.
- */
 struct IblEnvironmentPassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
@@ -26,42 +23,27 @@ struct IblEnvironmentPassDesc {
     TextureHandle source{};
 };
 
-/**
- * @brief Irradiance convolution pass input.
- */
 struct IblIrradiancePassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
 };
 
-/**
- * @brief Environment prefilter pass input.
- */
 struct IblPrefilterPassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
 };
 
-/**
- * @brief BRDF LUT generation pass input.
- */
 struct IblBrdfLutPassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
 };
 
-/**
- * @brief Cascaded directional shadow atlas pass input.
- */
 struct DirectionalShadowPassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
     const RenderFrameSubmission *submission{nullptr};
 };
 
-/**
- * @brief Point light shadow cubemap pass input.
- */
 struct PointShadowPassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
@@ -70,9 +52,6 @@ struct PointShadowPassDesc {
     RendererLimits limits{};
 };
 
-/**
- * @brief Spot light shadow atlas pass input.
- */
 struct SpotShadowPassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
@@ -81,9 +60,6 @@ struct SpotShadowPassDesc {
     RendererLimits limits{};
 };
 
-/**
- * @brief Deferred geometry pass input.
- */
 struct GeometryPassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
@@ -93,9 +69,6 @@ struct GeometryPassDesc {
     U32 height{0};
 };
 
-/**
- * @brief HBAO pass input.
- */
 struct HbaoPassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
@@ -103,9 +76,6 @@ struct HbaoPassDesc {
     const RenderFrameDesc *frame{nullptr};
 };
 
-/**
- * @brief Deferred lighting pass input.
- */
 struct LightingPassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
@@ -115,8 +85,16 @@ struct LightingPassDesc {
 };
 
 /**
- * @brief Final backbuffer present pass input.
+ * @brief Forward transparent pass input.
  */
+struct ForwardTransparentPassDesc {
+    RendererResources *resources{nullptr};
+    const RendererPipelineSet *pipelines{nullptr};
+
+    const RenderFrameDesc *frame{nullptr};
+    RendererLimits limits{};
+};
+
 struct PresentPassDesc {
     RendererResources *resources{nullptr};
     const RendererPipelineSet *pipelines{nullptr};
@@ -141,6 +119,9 @@ void execute_geometry(CommandBuffer *cmd, const GeometryPassDesc &desc) noexcept
 void execute_hbao(CommandBuffer *cmd, const HbaoPassDesc &desc) noexcept;
 
 void execute_lighting(CommandBuffer *cmd, const LightingPassDesc &desc) noexcept;
+
+void execute_forward_transparent(CommandBuffer *cmd,
+                                 const ForwardTransparentPassDesc &desc) noexcept;
 
 void execute_present(CommandBuffer *cmd, const PresentPassDesc &desc) noexcept;
 

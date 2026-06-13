@@ -6,7 +6,8 @@ layout(location = 2) in vec2 a_uv;
 layout(location = 3) in vec4 a_tangent;
 
 out vec2 v_uv;
-out vec4 v_clip_pos;
+out vec3 v_world_pos;
+out mat3 v_tbn;
 
 layout(std140, binding = 0) buffer TransformSSBO {
     mat4 u_transforms[];
@@ -34,12 +35,21 @@ layout(location = 0) uniform uint u_transform_idx;
 
 void main() {
     mat4 model = u_transforms[u_transform_idx];
+    mat3 normal_matrix = transpose(inverse(mat3(model)));
+
+    vec3 N = normalize(normal_matrix * a_normal);
+
+    vec3 T = normalize(normal_matrix * a_tangent.xyz);
+    T = normalize(T - dot(T, N) * N);
+
+    float hand = a_tangent.w != 0.0 ? a_tangent.w : 1.0;
+    vec3 B = cross(N, T) * hand;
 
     vec4 world_pos = model * vec4(a_pos, 1.0);
-    vec4 clip_pos = u_view_proj * world_pos;
 
     v_uv = a_uv;
-    v_clip_pos = clip_pos;
+    v_world_pos = world_pos.xyz;
+    v_tbn = mat3(T, B, N);
 
-    gl_Position = clip_pos;
+    gl_Position = u_view_proj * world_pos;
 }

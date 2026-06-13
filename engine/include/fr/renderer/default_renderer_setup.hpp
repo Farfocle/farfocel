@@ -19,6 +19,7 @@ namespace fr {
  */
 struct DefaultRendererShaderIds {
     AssetId gbuffer_shader{FR_ASSET_ID("renderer.shader.gbuffer")};
+    AssetId forward_transparent_shader{FR_ASSET_ID("renderer.shader.forward_transparent")};
     AssetId lighting_shader{FR_ASSET_ID("renderer.shader.lighting")};
 
     AssetId shadow_shader{FR_ASSET_ID("renderer.shader.shadow")};
@@ -40,6 +41,7 @@ struct DefaultRendererShaderIds {
  */
 struct DefaultRendererShaders {
     ShaderAssetHandle gbuffer{};
+    ShaderAssetHandle forward_transparent{};
     ShaderAssetHandle lighting{};
 
     ShaderAssetHandle shadow{};
@@ -56,10 +58,10 @@ struct DefaultRendererShaders {
     ShaderAssetHandle present{};
 
     [[nodiscard]] bool is_valid() const noexcept {
-        return gbuffer.is_valid() && lighting.is_valid() && shadow.is_valid() &&
-               point_shadow.is_valid() && spot_shadow.is_valid() && hbao.is_valid() &&
-               equirect_to_cube.is_valid() && irradiance.is_valid() && prefilter_env.is_valid() &&
-               brdf_lut.is_valid() && present.is_valid();
+        return gbuffer.is_valid() && forward_transparent.is_valid() && lighting.is_valid() &&
+               shadow.is_valid() && point_shadow.is_valid() && spot_shadow.is_valid() &&
+               hbao.is_valid() && equirect_to_cube.is_valid() && irradiance.is_valid() &&
+               prefilter_env.is_valid() && brdf_lut.is_valid() && present.is_valid();
     }
 };
 
@@ -78,6 +80,7 @@ inline void unload_default_renderer_shaders(AssetManager &assets,
     assets.unload_shader(shaders.point_shadow);
     assets.unload_shader(shaders.shadow);
     assets.unload_shader(shaders.lighting);
+    assets.unload_shader(shaders.forward_transparent);
     assets.unload_shader(shaders.gbuffer);
 
     shaders = {};
@@ -91,6 +94,7 @@ inline bool load_default_renderer_shaders(AssetManager &assets, const DefaultRen
     out_shaders = {};
 
     out_shaders.gbuffer = assets.load_shader(ids.gbuffer_shader);
+    out_shaders.forward_transparent = assets.load_shader(ids.forward_transparent_shader);
     out_shaders.lighting = assets.load_shader(ids.lighting_shader);
 
     out_shaders.shadow = assets.load_shader(ids.shadow_shader);
@@ -145,6 +149,15 @@ inline bool create_default_renderer_pipelines(RenderPipelineCache &pipeline_cach
         .depth_test = true,
         .depth_write = true,
         .wireframe = true,
+    });
+
+    out_pipelines.forward_transparent = pipeline_cache.get_or_create({
+        .shader = shaders.forward_transparent,
+        .cull_mode = CullMode::Back,
+        .blend_mode = BlendMode::Alpha,
+        .depth_test = true,
+        .depth_write = false,
+        .wireframe = false,
     });
 
     out_pipelines.lighting = pipeline_cache.get_or_create({

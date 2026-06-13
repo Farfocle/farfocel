@@ -23,14 +23,12 @@ namespace fr {
 
 /**
  * @brief Runtime settings required to extract one render frame.
- *
- * @details
- * This descriptor only references pipelines. It does not own GPU resources.
  */
 struct RenderExtractDesc {
     F32 aspect_ratio{1.0f};
 
     RenderPipelineHandle geometry_pipeline{};
+    RenderPipelineHandle forward_transparent_pipeline{};
     RenderPipelineHandle shadow_pipeline{};
 
     RenderDirectionalShadowSettings directional_shadow_settings{};
@@ -50,10 +48,6 @@ struct RenderExtractResult {
 
 /**
  * @brief Extracts one renderer-facing frame from ECS scene data.
- *
- * @details
- * Asset handles should be resolved before calling this function. Extraction clears and fills
- * out_submission.
  */
 inline RenderExtractResult extract_render_frame(World &world, const AssetManager &assets,
                                                 const RenderExtractDesc &desc,
@@ -74,13 +68,17 @@ inline RenderExtractResult extract_render_frame(World &world, const AssetManager
     result.has_main_camera = cam.found;
 
     const RenderPipelineHandle geometry_pipeline = desc.geometry_pipeline;
+    const RenderPipelineHandle forward_transparent_pipeline = desc.forward_transparent_pipeline;
     const RenderPipelineHandle shadow_pipeline = desc.shadow_pipeline;
 
     FR_ASSERT(geometry_pipeline.is_valid(), "RenderExtractDesc::geometry_pipeline must be valid");
+    FR_ASSERT(forward_transparent_pipeline.is_valid(),
+              "RenderExtractDesc::forward_transparent_pipeline must be valid");
     FR_ASSERT(shadow_pipeline.is_valid(), "RenderExtractDesc::shadow_pipeline must be valid");
 
-    result.geometry_stats = RenderSceneExtractor::submit_meshes(world, out_submission, assets,
-                                                                geometry_pipeline, cam.view_proj);
+    result.geometry_stats = RenderSceneExtractor::submit_meshes(
+        world, out_submission, assets, geometry_pipeline, forward_transparent_pipeline,
+        cam.view_proj, cam.position, cam.forward);
 
     result.shadow_stats =
         RenderSceneExtractor::submit_shadow_casters(world, out_submission, assets, shadow_pipeline);

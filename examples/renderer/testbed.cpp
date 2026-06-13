@@ -1,9 +1,6 @@
 /**
  * @file testbed.cpp
  * @brief Renderer testbed.
- * WARNING: for rapid purposes, this is all AI GEN, as right now work on the engine is more
- * important than work on boilerplate code that is used to see if the engine is working. but this
- * will be changed
  */
 
 #include <chrono>
@@ -462,6 +459,10 @@ bool cook_default_renderer_shaders(fr::Alloc *alloc, fr::AssetRegistry &registry
     const DefaultShaderCookInput shaders[] = {
         {FR_ASSET_ID("renderer.shader.gbuffer"), "engine/shaders/core/gbuffer.vert",
          "engine/shaders/core/gbuffer.frag", "assets/shaders/core/gbuffer.fshader"},
+        {FR_ASSET_ID("renderer.shader.forward_transparent"),
+         "engine/shaders/core/forward_transparent.vert",
+         "engine/shaders/core/forward_transparent.frag",
+         "assets/shaders/core/forward_transparent.fshader"},
         {FR_ASSET_ID("renderer.shader.lighting"), "engine/shaders/core/lighting.vert",
          "engine/shaders/core/lighting.frag", "assets/shaders/core/lighting.fshader"},
         {FR_ASSET_ID("renderer.shader.shadow"), "engine/shaders/core/shadow.vert",
@@ -1481,8 +1482,7 @@ bool draw_material_settings_editor(TestbedPrimitiveMaterialSettings &settings) {
     }
 
     if (settings.blend_mode == static_cast<S32>(fr::MaterialBlendMode::Transparent)) {
-        ImGui::TextDisabled(
-            "Transparent primitives are skipped until forward pass is implemented.");
+        ImGui::TextDisabled("Transparent primitives are rendered by the forward pass.");
     }
 
     ImGui::DragFloat("Metallic", &settings.metallic, 0.01f, 0.0f, 1.0f);
@@ -2060,6 +2060,8 @@ S32 main(S32 argc, char **argv) {
                                     extract_desc.aspect_ratio = aspect;
                                     extract_desc.geometry_pipeline =
                                         renderer.geometry_pipeline(runtime.wireframe);
+                                    extract_desc.forward_transparent_pipeline =
+                                        renderer.forward_transparent_pipeline();
                                     extract_desc.shadow_pipeline = renderer.shadow_pipeline();
 
                                     fr::RenderExtractResult extract_result =

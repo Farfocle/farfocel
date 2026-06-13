@@ -56,6 +56,10 @@ public:
         return wireframe ? m_pipelines.geometry_wire : m_pipelines.geometry;
     }
 
+    [[nodiscard]] RenderPipelineHandle forward_transparent_pipeline() const noexcept {
+        return m_pipelines.forward_transparent;
+    }
+
     [[nodiscard]] RenderPipelineHandle shadow_pipeline() const noexcept {
         return m_pipelines.shadow;
     }

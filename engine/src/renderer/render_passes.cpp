@@ -660,6 +660,159 @@ void execute_lighting(CommandBuffer *cmd, const LightingPassDesc &desc) noexcept
     cmd->end_render_pass();
 }
 
+void execute_forward_transparent(CommandBuffer *cmd,
+                                 const ForwardTransparentPassDesc &desc) noexcept {
+    FR_ASSERT(cmd, "CommandBuffer must be non-null");
+    FR_ASSERT(desc.resources, "ForwardTransparentPassDesc::resources must be non-null");
+    FR_ASSERT(desc.pipelines, "ForwardTransparentPassDesc::pipelines must be non-null");
+    FR_ASSERT(desc.frame, "ForwardTransparentPassDesc::frame must be non-null");
+
+    RendererGlobalBuffers &global = desc.resources->global;
+    RendererFallbackTextures &fallback = desc.resources->fallback;
+
+    GBufferTargets &gbuffer = desc.resources->gbuffer;
+    FinalColorTarget &final = desc.resources->final;
+
+    DirectionalShadowResources &shadow = desc.resources->shadow;
+    PointShadowResources &point_shadows = desc.resources->point_shadows;
+    SpotShadowResources &spot_shadows = desc.resources->spot_shadows;
+    IblResources &ibl = desc.resources->ibl;
+
+    const RendererPipelineSet &pipelines = *desc.pipelines;
+    const RenderFrameDesc &frame = *desc.frame;
+    const RenderFrameSubmission &submission = *frame.submission;
+
+    if (submission.draws.transparent.is_empty() || !final.color.is_valid() ||
+        !gbuffer.depth.is_valid() || !pipelines.forward_transparent.is_valid()) {
+        return;
+    }
+
+    RenderAttachment color_attachment{};
+    color_attachment.texture = final.color;
+    color_attachment.layer = 0;
+    color_attachment.mip_level = 0;
+    color_attachment.load_op = RenderLoadOp::Load;
+
+    RenderAttachment depth_attachment{};
+    depth_attachment.texture = gbuffer.depth;
+    depth_attachment.layer = 0;
+    depth_attachment.mip_level = 0;
+    depth_attachment.load_op = RenderLoadOp::Load;
+
+    RenderAttachment color_targets[] = {
+        color_attachment,
+    };
+
+    cmd->begin_render_pass_ex(Slice<const RenderAttachment>(color_targets, 1), depth_attachment);
+
+    cmd->set_viewport(0, 0, frame.viewport.width, frame.viewport.height);
+
+    cmd->bind_storage_buffer(global.transform_ssbo, fr::bindings::SSBO_TRANSFORMS);
+    cmd->bind_storage_buffer(global.camera_ssbo, fr::bindings::SSBO_CAMERA);
+    cmd->bind_storage_buffer(global.materials_ssbo, fr::bindings::SSBO_MATERIALS);
+
+    cmd->bind_storage_buffer(global.point_lights_ssbo, fr::bindings::SSBO_POINT_LIGHTS);
+    cmd->bind_storage_buffer(global.dir_lights_ssbo, fr::bindings::SSBO_DIR_LIGHTS);
+    cmd->bind_storage_buffer(global.point_shadows_ssbo, fr::bindings::SSBO_POINT_SHADOWS);
+    cmd->bind_storage_buffer(global.spot_lights_ssbo, fr::bindings::SSBO_SPOT_LIGHTS);
+    cmd->bind_storage_buffer(global.spot_shadows_ssbo, fr::bindings::SSBO_SPOT_SHADOWS);
+
+    if (shadow.map.is_valid()) {
+        cmd->bind_texture(shadow.map, fr::bindings::SHADOW_MAP);
+    }
+
+    for (USize i = 0; i < desc.limits.max_point_shadows; ++i) {
+        if (point_shadows.cube_maps[i].is_valid()) {
+            cmd->bind_texture(point_shadows.cube_maps[i],
+                              fr::bindings::POINT_SHADOW_MAP_BASE + static_cast<U32>(i));
+        }
+    }
+
+    if (spot_shadows.atlas.is_valid()) {
+        cmd->bind_texture(spot_shadows.atlas, fr::bindings::SPOT_SHADOW_MAP);
+    }
+
+    if (ibl.environment.is_valid()) {
+        cmd->bind_texture(ibl.environment, fr::bindings::IBL_ENVIRONMENT);
+    }
+
+    if (ibl.irradiance.is_valid()) {
+        cmd->bind_texture(ibl.irradiance, fr::bindings::IBL_IRRADIANCE);
+    }
+
+    if (ibl.prefiltered.is_valid()) {
+        cmd->bind_texture(ibl.prefiltered, fr::bindings::IBL_PREFILTERED);
+    }
+
+    if (ibl.brdf_lut.is_valid()) {
+        cmd->bind_texture(ibl.brdf_lut, fr::bindings::IBL_BRDF_LUT);
+    }
+
+    RenderPipelineHandle curr_pipe{};
+    BufferHandle curr_vbo{};
+    BufferHandle curr_ibo{};
+    TextureHandle curr_textures[3]{};
+
+    for (const DrawCall &call : submission.draws.transparent) {
+        const RenderMaterialPacket &material = submission.materials[call.material_index];
+
+        if (call.pipe.key != curr_pipe.key) {
+            cmd->set_pipeline(call.pipe);
+            curr_pipe = call.pipe;
+        }
+
+        if (call.vbo.key != curr_vbo.key) {
+            cmd->bind_vertex_buffer(call.vbo, call.vbo_stride);
+            curr_vbo = call.vbo;
+        }
+
+        if (call.ibo.key != curr_ibo.key) {
+            cmd->bind_index_buffer(call.ibo);
+            curr_ibo = call.ibo;
+        }
+
+        TextureHandle albedo = material.albedo.is_valid() ? material.albedo : fallback.white;
+        TextureHandle normal = material.normal.is_valid() ? material.normal : fallback.normal;
+        TextureHandle extra = material.extra.is_valid() ? material.extra : fallback.material;
+
+        if (albedo.key != curr_textures[0].key) {
+            cmd->bind_texture(albedo, fr::bindings::TEX_ALBEDO);
+            curr_textures[0] = albedo;
+        }
+
+        if (normal.key != curr_textures[1].key) {
+            cmd->bind_texture(normal, fr::bindings::TEX_NORMAL);
+            curr_textures[1] = normal;
+        }
+
+        if (extra.key != curr_textures[2].key) {
+            cmd->bind_texture(extra, fr::bindings::TEX_EXTRA);
+            curr_textures[2] = extra;
+        }
+
+        struct DrawPushConstants {
+            U32 transform_index;
+            U32 material_index;
+            U32 cascade_idx;
+            U32 shadow_idx;
+        };
+
+        DrawPushConstants push_data{
+            call.transform_index,
+            call.material_index,
+            0,
+            0,
+        };
+
+        cmd->set_push_constants(
+            Slice<const Byte>(reinterpret_cast<const Byte *>(&push_data), sizeof(push_data)));
+
+        cmd->draw_indexed(call.index_count, call.index_offset, call.vertex_offset);
+    }
+
+    cmd->end_render_pass();
+}
+
 void execute_present(CommandBuffer *cmd, const PresentPassDesc &desc) noexcept {
     FR_ASSERT(cmd, "CommandBuffer must be non-null");
     FR_ASSERT(desc.resources, "PresentPassDesc::resources must be non-null");

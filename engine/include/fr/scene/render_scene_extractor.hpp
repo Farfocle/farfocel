@@ -104,10 +104,16 @@ public:
      */
     static RenderSubmitStats submit_meshes(World &world, RenderFrameSubmission &submission,
                                            const AssetManager &assets,
-                                           RenderPipelineHandle default_pipe,
-                                           const Mat4 &view_proj) noexcept {
+                                           RenderPipelineHandle geometry_pipe,
+                                           RenderPipelineHandle forward_transparent_pipe,
+                                           const Mat4 &view_proj, const Vec3 &camera_position,
+                                           const Vec3 &camera_forward) noexcept {
         RenderSubmitStats stats{};
         Frustum frustum = Frustum::extract_from_matrix(view_proj);
+
+        const Vec3 safe_camera_forward = glm::length(camera_forward) > 0.0001f
+                                             ? glm::normalize(camera_forward)
+                                             : Vec3(0.0f, 0.0f, -1.0f);
 
         for (auto [thing, mesh_part, trans_part] :
              world.query<MeshRendererPart, WorldTransformPart>()) {
@@ -137,7 +143,7 @@ public:
                 RenderMaterialPacket material = build_material_packet(material_handle, assets);
                 const RenderPass pass = resolve_render_pass(submesh, material);
 
-                if (!should_submit_to_geometry_pass(pass)) {
+                if (!should_submit_to_main_pass(pass)) {
                     ++stats.skipped_submeshes;
                     continue;
                 }
@@ -152,8 +158,17 @@ public:
                 const U32 transform_index = submission.push_transform(model);
                 const U32 material_index = submission.push_material(material);
 
+                const RenderPipelineHandle pipeline =
+                    pass == RenderPass::Transparent ? forward_transparent_pipe : geometry_pipe;
+
+                const U32 depth_key =
+                    pass == RenderPass::Transparent
+                        ? build_transparent_depth_key(submesh, model, camera_position,
+                                                      safe_camera_forward)
+                        : 0;
+
                 DrawCall call =
-                    build_draw_call(*mesh_data, submesh, default_pipe, material.albedo, 0);
+                    build_draw_call(*mesh_data, submesh, pipeline, material.albedo, depth_key);
 
                 call.transform_index = transform_index;
                 call.material_index = material_index;
@@ -171,8 +186,15 @@ public:
      */
     static RenderSubmitStats submit_meshes_no_cull(World &world, RenderFrameSubmission &submission,
                                                    const AssetManager &assets,
-                                                   RenderPipelineHandle default_pipe) noexcept {
+                                                   RenderPipelineHandle geometry_pipe,
+                                                   RenderPipelineHandle forward_transparent_pipe,
+                                                   const Vec3 &camera_position,
+                                                   const Vec3 &camera_forward) noexcept {
         RenderSubmitStats stats{};
+
+        const Vec3 safe_camera_forward = glm::length(camera_forward) > 0.0001f
+                                             ? glm::normalize(camera_forward)
+                                             : Vec3(0.0f, 0.0f, -1.0f);
 
         for (auto [thing, mesh_part, trans_part] :
              world.query<MeshRendererPart, WorldTransformPart>()) {
@@ -202,7 +224,7 @@ public:
                 RenderMaterialPacket material = build_material_packet(material_handle, assets);
                 const RenderPass pass = resolve_render_pass(submesh, material);
 
-                if (!should_submit_to_geometry_pass(pass)) {
+                if (!should_submit_to_main_pass(pass)) {
                     ++stats.skipped_submeshes;
                     continue;
                 }
@@ -212,8 +234,17 @@ public:
                 const U32 transform_index = submission.push_transform(model);
                 const U32 material_index = submission.push_material(material);
 
+                const RenderPipelineHandle pipeline =
+                    pass == RenderPass::Transparent ? forward_transparent_pipe : geometry_pipe;
+
+                const U32 depth_key =
+                    pass == RenderPass::Transparent
+                        ? build_transparent_depth_key(submesh, model, camera_position,
+                                                      safe_camera_forward)
+                        : 0;
+
                 DrawCall call =
-                    build_draw_call(*mesh_data, submesh, default_pipe, material.albedo, 0);
+                    build_draw_call(*mesh_data, submesh, pipeline, material.albedo, depth_key);
 
                 call.transform_index = transform_index;
                 call.material_index = material_index;
@@ -481,8 +512,9 @@ public:
 private:
     static constexpr U32 VERTEX_STRIDE = 48;
 
-    static bool should_submit_to_geometry_pass(RenderPass pass) noexcept {
-        return pass == RenderPass::Opaque || pass == RenderPass::Masked;
+    static bool should_submit_to_main_pass(RenderPass pass) noexcept {
+        return pass == RenderPass::Opaque || pass == RenderPass::Masked ||
+               pass == RenderPass::Transparent;
     }
 
     static bool should_submit_to_shadow_pass(RenderPass pass) noexcept {
@@ -646,6 +678,28 @@ private:
 
         return frustum.is_aabb_visible(transformed_center - transformed_extents,
                                        transformed_center + transformed_extents);
+    }
+
+    static U32 build_transparent_depth_key(const RenderSubMesh &submesh, const Mat4 &model,
+                                           const Vec3 &camera_position,
+                                           const Vec3 &camera_forward) noexcept {
+        constexpr U32 MAX_DEPTH_KEY = 0xFFFFFu;
+        constexpr F32 DEPTH_SCALE = 1024.0f;
+
+        const Vec3 local_center = (submesh.aabb_min + submesh.aabb_max) * 0.5f;
+        const Vec3 world_center = Vec3(model * Vec4(local_center, 1.0f));
+
+        const F32 view_depth =
+            glm::max(glm::dot(world_center - camera_position, camera_forward), 0.0f);
+
+        const U32 quantized = static_cast<U32>(
+            glm::clamp(view_depth * DEPTH_SCALE, 0.0f, static_cast<F32>(MAX_DEPTH_KEY)));
+
+        /*
+            Transparent draws must be rendered back-to-front. RenderSortKey sorts ascending, so
+           invert quantized depth: farther objects receive smaller keys.
+        */
+        return MAX_DEPTH_KEY - quantized;
     }
 
     static DrawCall build_draw_call(const RenderMeshData &mesh, const RenderSubMesh &submesh,
