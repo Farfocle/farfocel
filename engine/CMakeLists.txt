@@ -1,6 +1,5 @@
 project(farfocel_engine)
 
-
 set(ENGINE_HEADERS
 #### core
     "include/fr/core/algo.hpp"
@@ -48,9 +47,23 @@ set(ENGINE_HEADERS
     "include/fr/core/typetraits.hpp"
     "include/fr/core/unique_ptr.hpp"
 
-### data
-    "include/fr/data/asset_format.hpp"
-    "include/fr/data/asset_manager.hpp"
+#### asset
+    "include/fr/asset/asset_format.hpp"
+    "include/fr/asset/asset_id.hpp"
+    "include/fr/asset/asset_kind.hpp"
+    "include/fr/asset/asset_manager.hpp"
+    "include/fr/asset/asset_manifest.hpp"
+    "include/fr/asset/asset_manifest_format.hpp"
+    "include/fr/asset/asset_pack.hpp"
+    "include/fr/asset/asset_pack_format.hpp"
+    "include/fr/asset/asset_registry.hpp"
+    "include/fr/asset/asset_storage.hpp"
+    "include/fr/asset/material_asset.hpp"
+    "include/fr/asset/material_format.hpp"
+    "include/fr/asset/shader_asset.hpp"
+    "include/fr/asset/shader_format.hpp"
+
+#### data
     "include/fr/data/cmd.hpp"
     "include/fr/data/part.hpp"
     "include/fr/data/parts.hpp"
@@ -59,7 +72,7 @@ set(ENGINE_HEADERS
     "include/fr/data/thing.hpp"
     "include/fr/data/world.hpp"
 
-### logger
+#### logger
     "include/fr/logger/sinks/pretty_sink.hpp"
     "include/fr/logger/sinks/standard_sink.hpp"
     "include/fr/logger/log.hpp"
@@ -79,23 +92,30 @@ set(ENGINE_HEADERS
     "include/fr/platform/window.hpp"
 
 #### renderer
+    "include/fr/renderer/default_renderer_assets.hpp"
+    "include/fr/renderer/default_renderer_setup.hpp"
     "include/fr/renderer/frustum.hpp"
-    "include/fr/renderer/mesh.hpp"
     "include/fr/renderer/render_bindings.hpp"
     "include/fr/renderer/render_device.hpp"
-    "include/fr/renderer/render_light_data.hpp"
-    "include/fr/renderer/render_queue.hpp"
+    "include/fr/renderer/render_frame.hpp"
+    "include/fr/renderer/render_gpu_frame.hpp"
+    "include/fr/renderer/render_lights.hpp"
+    "include/fr/renderer/render_mesh.hpp"
+    "include/fr/renderer/render_passes.hpp"
+    "include/fr/renderer/render_pipeline_cache.hpp"
     "include/fr/renderer/render_sort_key.hpp"
     "include/fr/renderer/renderer.hpp"
-    "include/fr/renderer/renderer_constants.hpp"
     "include/fr/renderer/renderer_desc.hpp"
-    "include/fr/renderer/renderer_frame_data.hpp"
+    "include/fr/renderer/renderer_limits.hpp"
+    "include/fr/renderer/renderer_pipelines.hpp"
     "include/fr/renderer/renderer_resources.hpp"
 
-### scene
+#### scene
     "include/fr/scene/camera_system.hpp"
+    "include/fr/scene/render_asset_system.hpp"
+    "include/fr/scene/render_extractor.hpp"
     "include/fr/scene/render_parts.hpp"
-    "include/fr/scene/render_system.hpp"
+    "include/fr/scene/render_scene_extractor.hpp"
 )
 
 set(ENGINE_SOURCES
@@ -119,35 +139,37 @@ set(ENGINE_SOURCES
 
 #### renderer
     "src/renderer/opengl/opengl_render_device.cpp"
+    "src/renderer/render_passes.cpp"
     "src/renderer/renderer.cpp"
-    "src/renderer/renderer_passes.cpp"
 )
-
 
 add_library(engine ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
 set_target_properties(engine PROPERTIES LINKER_LANGUAGE CXX)
-target_link_libraries(engine PRIVATE farfocel_compiler_options)
 
-# should this be public?
-target_link_libraries(engine PUBLIC yyjson)
+target_link_libraries(engine
+    PRIVATE
+        farfocel_compiler_options
+        glad
 
-target_link_libraries(engine PRIVATE glad)
-target_link_libraries(engine PUBLIC glm::glm)
-target_link_libraries(engine PUBLIC SDL3::SDL3-static)
-target_link_libraries(engine PRIVATE cgltf)
-target_link_libraries(engine PRIVATE stb)
-target_link_libraries(engine PUBLIC wyhash)
+    PUBLIC
+        yyjson
+        glm::glm
+        SDL3::SDL3-static
+        wyhash
+)
 
 target_include_directories(engine
-    PUBLIC "include"
-    PRIVATE "src"
-    # this is quite ugly, but i couldn't get aliases to work properly
-    "${CMAKE_SOURCE_DIR}/3rdparty/glad/include"
+    PUBLIC
+        "include"
+
+    PRIVATE
+        "src"
+        "${CMAKE_SOURCE_DIR}/3rdparty/glad/include"
 )
 
 if(BUILD_SHARED_LIBS)
-  target_compile_definitions(engine PRIVATE FR_STL_EXPORT)
+    target_compile_definitions(engine PRIVATE FR_STL_EXPORT)
 else()
-  target_compile_definitions(engine PUBLIC FR_STL_STATIC)
+    target_compile_definitions(engine PUBLIC FR_STL_STATIC)
 endif()

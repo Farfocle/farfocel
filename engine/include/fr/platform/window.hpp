@@ -3,7 +3,6 @@
  * @author Tfoedy
  *
  * @brief Represents an OS level window.
- * * Manages the graphics context and transforms OS messages (e.g., clicks, resizing)
  */
 
 #pragma once
@@ -15,16 +14,47 @@
 namespace fr {
 
 /**
- * @brief Signature for the raw event callback function.
- * @param event_data Raw pointer to the underlying OS event (e.g., SDL_Event).
- * @param user_data Custom pointer passed back to the caller.
+ * @brief Signature for raw platform event callbacks.
+ *
+ * @param event_data Raw pointer to the underlying OS event.
+ * @param data Custom user pointer.
  */
 using EventCallbackFun = void (*)(void *event_data, void *data);
 
 /**
  * @brief Supported graphics APIs for the window context.
  */
-enum class GRAPHICS_API : U8 { OPENGL };
+enum class GRAPHICS_API : U8 {
+    OPENGL,
+};
+
+/**
+ * @brief Mouse/cursor handling mode for the window.
+ */
+enum class MouseMode : U8 {
+    /**
+     * @brief Cursor visible, free, absolute motion.
+     */
+    Normal,
+
+    /**
+     * @brief Cursor hidden, free, absolute motion.
+     */
+    Hidden,
+
+    /**
+     * @brief Cursor visible and captured by the application.
+     */
+    Captured,
+
+    /**
+     * @brief Cursor hidden and relative mouse motion enabled.
+     *
+     * @details
+     * Preferred mode for FPS/free camera controls.
+     */
+    Relative,
+};
 
 struct WindowState;
 
@@ -52,22 +82,21 @@ public:
     Window &operator=(Window &&other) noexcept;
 
     /**
-     * @brief Initializes subsystems, creates the window and the API context.
-     * * @param props Configuration settings for the window.
-     * @return true if the window was created successfully, false otherwise.
+     * @brief Initializes subsystems, creates the window and the graphics context.
      */
     bool init(const WindowProperties &props) noexcept;
+
     /**
-     * @brief Closes the window and cleans up memory resources allocated by the engine.
+     * @brief Closes the window and releases platform resources.
      */
     void close() noexcept;
 
     /**
-     * @brief Polls the OS event queue, updating the window state and input state.
-     * * @param event Reference to the WindowInput structure to be populated.
-     * @return false if the OS received a quit request (e.g., closing the window).
+     * @brief Polls OS events and updates input state.
+     *
+     * @return false if the OS received a quit or close request.
      */
-    bool poll_events(WindowInput &event) noexcept;
+    bool poll_events(WindowInput &input) noexcept;
 
     void set_event_callback(EventCallbackFun callback, void *data = nullptr) noexcept {
         m_event_callback = callback;
@@ -75,62 +104,72 @@ public:
     }
 
     /**
-     * @brief Swaps the front and back buffers, presenting the rendered frame to the screen.
+     * @brief Swaps front and back buffers.
      */
     void swap_buffers() noexcept;
 
     /**
-     * @brief Retrieves the current window width.
-     * * @return Width in pixels.
+     * @brief Sets mouse/cursor behavior.
+     *
+     * @return true if the platform accepted the requested mode.
      */
+    bool set_mouse_mode(MouseMode mode) noexcept;
+
+    /**
+     * @brief Returns currently requested mouse mode.
+     */
+    [[nodiscard]] MouseMode get_mouse_mode() const noexcept {
+        return m_mouse_mode;
+    }
+
+    /**
+     * @brief Shows or hides the cursor without changing capture/relative state.
+     */
+    void set_cursor_visible(bool visible) noexcept;
+
+    /**
+     * @brief Moves the cursor to a window-local position.
+     */
+    void set_mouse_position(F32 x, F32 y) noexcept;
+
     U32 get_width() const noexcept {
         return m_width;
     }
-    /**
-     * @brief Retrieves the current window height.
-     * * @return Height in pixels.
-     */
+
     U32 get_height() const noexcept {
         return m_height;
     }
 
-    /**
-     * @brief Retrieves the underlying native window handle (e.g., SDL_Window*).
-     * Useful for integrating third-party tools like ImGui or Vulkan surfaces.
-     * @return Raw pointer to the native window.
-     */
     [[nodiscard]] void *get_native_window() const noexcept;
-
-    /**
-     * @brief Retrieves the underlying native graphics context (e.g., SDL_GLContext).
-     * @return Raw pointer to the native context.
-     */
     [[nodiscard]] void *get_native_context() const noexcept;
 
-    /**
-     * @brief Checks if the window is currently minimized.
-     * * @return true if minimized.
-     */
     bool is_minimized() const noexcept {
         return m_minimized;
     }
-    /**
-     * @brief Checks if the application currently has input focus.
-     * * @return true if focused.
-     */
+
     bool is_focused() const noexcept {
         return m_focused;
     }
 
+    bool was_resized_this_frame() const noexcept {
+        return m_resized_this_frame;
+    }
+
 private:
     WindowState *m_state{nullptr};
+
     U32 m_width{0};
     U32 m_height{0};
+
     bool m_minimized{false};
     bool m_focused{true};
     bool m_resized_this_frame{false};
 
+    MouseMode m_mouse_mode{MouseMode::Normal};
+    bool m_ignore_next_mouse_motion{false};
+
     EventCallbackFun m_event_callback{nullptr};
     void *m_event_data{nullptr};
 };
+
 } // namespace fr

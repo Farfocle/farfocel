@@ -1,20 +1,25 @@
 /**
  * @file renderer_desc.hpp
  * @author Tfoedy
- * @brief Per-frame renderer input descriptions.
+ * @brief Renderer setup and per-frame input descriptions.
  */
 
 #pragma once
 
-#include <glm/glm.hpp>
-
+#include "fr/core/alloc.hpp"
+#include "fr/core/math.hpp"
 #include "fr/core/typedefs.hpp"
+
 #include "fr/renderer/render_device.hpp"
-#include "fr/renderer/render_queue.hpp"
-#include "fr/renderer/renderer_constants.hpp"
+#include "fr/renderer/render_frame.hpp"
+#include "fr/renderer/renderer_limits.hpp"
+#include "fr/renderer/renderer_pipelines.hpp"
 
 namespace fr {
 
+/**
+ * @brief Built-in renderer debug output mode.
+ */
 enum class RenderDebugMode : U32 {
     Final = 0,
     Albedo = 1,
@@ -27,8 +32,12 @@ enum class RenderDebugMode : U32 {
     Hbao = 8,
 };
 
+/**
+ * @brief Runtime limits for renderer-owned GPU buffers.
+ */
 struct RendererLimits {
     USize max_instances{MAX_INSTANCES};
+    USize max_materials{MAX_RENDER_MATERIALS};
 
     USize max_point_lights{MAX_POINT_LIGHTS};
     USize max_spot_lights{MAX_RENDER_SPOT_LIGHTS};
@@ -38,39 +47,39 @@ struct RendererLimits {
     USize max_spot_shadows{MAX_SPOT_SHADOWS};
 };
 
+/**
+ * @brief Renderer construction parameters.
+ *
+ * @details
+ * Renderer consumes an existing pipeline set. Shader loading and pipeline creation are handled
+ * by the asset and pipeline-cache layers.
+ */
 struct RendererCreateDesc {
+    Alloc *alloc{nullptr};
     RendererLimits limits{};
+    RendererPipelineSet pipelines{};
 };
 
+/**
+ * @brief Frame viewport size in pixels.
+ */
 struct RenderViewportDesc {
     U32 width{0};
     U32 height{0};
 };
 
+/**
+ * @brief Camera data used by renderer passes.
+ */
 struct RenderCameraDesc {
-    glm::mat4 view_proj{1.0f};
-    glm::vec3 position{0.0f};
-    glm::vec3 forward{0.0f, 0.0f, -1.0f};
+    Mat4 view_proj{1.0f};
+    Vec3 position{0.0f};
+    Vec3 forward{0.0f, 0.0f, -1.0f};
 };
 
-struct RenderPipelineSet {
-    RenderPipelineHandle lighting{};
-    RenderPipelineHandle forward_transparent{};
-    RenderPipelineHandle present{};
-
-    RenderPipelineHandle shadow{};
-    RenderPipelineHandle point_shadow{};
-    RenderPipelineHandle spot_shadow{};
-
-    RenderPipelineHandle hbao{};
-    RenderPipelineHandle hbao_blur{};
-
-    RenderPipelineHandle equirect_to_cube{};
-    RenderPipelineHandle irradiance{};
-    RenderPipelineHandle prefilter_env{};
-    RenderPipelineHandle brdf_lut{};
-};
-
+/**
+ * @brief Global lighting controls for one frame.
+ */
 struct RenderLightingSettings {
     F32 exposure{1.0f};
     F32 pbr_ambient_strength{0.01f};
@@ -78,7 +87,10 @@ struct RenderLightingSettings {
     F32 standard_specular_default{0.25f};
 };
 
-struct RenderAoSettings {
+/**
+ * @brief Ambient occlusion controls for one frame.
+ */
+struct RenderAmbientOcclusionSettings {
     bool enabled{false};
 
     F32 radius{1.5f};
@@ -88,6 +100,9 @@ struct RenderAoSettings {
     F32 thickness{1.0f};
 };
 
+/**
+ * @brief Image-based lighting controls for one frame.
+ */
 struct RenderIblSettings {
     bool enabled{true};
 
@@ -99,23 +114,32 @@ struct RenderIblSettings {
     F32 sky_visibility_strength{0.75f};
 };
 
+/**
+ * @brief Debug output controls for one frame.
+ */
 struct RenderDebugSettings {
     RenderDebugMode mode{RenderDebugMode::Final};
     U32 flags{0};
 };
 
+/**
+ * @brief Per-frame renderer input.
+ *
+ * @details
+ * Renderer consumes this data during Renderer::render() and does not retain pointers to it after
+ * the call returns.
+ */
 struct RenderFrameDesc {
-    const RenderQueue *geom_queue{nullptr};
-    const RenderQueue *shadow_queue{nullptr};
+    const RenderFrameSubmission *submission{nullptr};
 
     RenderViewportDesc viewport{};
     RenderCameraDesc camera{};
-    RenderPipelineSet pipelines{};
 
-    TextureHandle skybox_map{};
+    /// @brief Equirectangular environment source used for IBL generation.
+    TextureHandle environment_source{};
 
     RenderLightingSettings lighting{};
-    RenderAoSettings ao{};
+    RenderAmbientOcclusionSettings ao{};
     RenderIblSettings ibl{};
     RenderDebugSettings debug{};
 };

@@ -1,22 +1,31 @@
 /**
  * @file renderer.hpp
  * @author Tfoedy
- * @brief High-level deferred renderer.
+ * @brief Farfocel's high-level graphics renderer.
  */
 
 #pragma once
 
+#include "fr/core/alloc.hpp"
+
 #include "fr/renderer/render_device.hpp"
-#include "fr/renderer/render_queue.hpp"
+#include "fr/renderer/render_frame.hpp"
 #include "fr/renderer/renderer_desc.hpp"
+#include "fr/renderer/renderer_pipelines.hpp"
 #include "fr/renderer/renderer_resources.hpp"
 
 namespace fr {
 
+/**
+ * @brief Owns renderer frame resources and executes built-in passes.
+ *
+ * @details
+ * Renderer consumes RenderFrameDesc data. It does not read ECS state, load assets, or own
+ * pipeline handles.
+ */
 class Renderer {
 public:
-    explicit Renderer(RenderDevice *device,
-                      const RendererCreateDesc &desc = RendererCreateDesc{}) noexcept;
+    explicit Renderer(RenderDevice *device, const RendererCreateDesc &desc) noexcept;
 
     ~Renderer() noexcept;
 
@@ -25,9 +34,39 @@ public:
     Renderer &operator=(const Renderer &) = delete;
     Renderer &operator=(Renderer &&) = delete;
 
+    /**
+     * @brief Renders one frame from a prepared frame description.
+     */
     void render(const RenderFrameDesc &desc) noexcept;
 
-    [[nodiscard]] TextureHandle get_final_image() const noexcept;
+    /**
+     * @brief Returns the final color target produced by the last rendered frame.
+     */
+    [[nodiscard]] TextureHandle final_image() const noexcept;
+
+    [[nodiscard]] bool is_ready() const noexcept {
+        return m_ready;
+    }
+
+    [[nodiscard]] const RendererPipelineSet &pipelines() const noexcept {
+        return m_pipelines;
+    }
+
+    [[nodiscard]] RenderPipelineHandle geometry_pipeline(bool wireframe = false) const noexcept {
+        return wireframe ? m_pipelines.geometry_wire : m_pipelines.geometry;
+    }
+
+    [[nodiscard]] RenderPipelineHandle shadow_pipeline() const noexcept {
+        return m_pipelines.shadow;
+    }
+
+    [[nodiscard]] RenderPipelineHandle point_shadow_pipeline() const noexcept {
+        return m_pipelines.point_shadow;
+    }
+
+    [[nodiscard]] RenderPipelineHandle spot_shadow_pipeline() const noexcept {
+        return m_pipelines.spot_shadow;
+    }
 
 private:
     void init_global_buffers() noexcept;
@@ -35,35 +74,6 @@ private:
 
     void prepare_render_targets(U32 width, U32 height) noexcept;
     void update_global_buffers(const RenderFrameDesc &desc) noexcept;
-
-    void execute_present_pass(CommandBuffer *cmd, RenderPipelineHandle present_pipe) noexcept;
-
-    void execute_ibl_environment_pass(CommandBuffer *cmd, TextureHandle source,
-                                      RenderPipelineHandle pipe) noexcept;
-
-    void execute_ibl_irradiance_pass(CommandBuffer *cmd, RenderPipelineHandle pipe) noexcept;
-
-    void execute_ibl_prefilter_pass(CommandBuffer *cmd, RenderPipelineHandle pipe) noexcept;
-
-    void execute_ibl_brdf_lut_pass(CommandBuffer *cmd, RenderPipelineHandle pipe) noexcept;
-
-    void execute_shadow_pass(CommandBuffer *cmd, const RenderQueue &shadow_queue,
-                             RenderPipelineHandle shadow_pipe) noexcept;
-
-    void execute_point_shadow_pass(CommandBuffer *cmd, const RenderQueue &shadow_queue,
-                                   const RenderQueue &geom_queue,
-                                   RenderPipelineHandle point_shadow_pipe) noexcept;
-
-    void execute_spot_shadow_pass(CommandBuffer *cmd, const RenderQueue &shadow_queue,
-                                  const RenderQueue &geom_queue,
-                                  RenderPipelineHandle spot_shadow_pipe) noexcept;
-
-    void execute_geometry_pass(CommandBuffer *cmd, const RenderQueue &geom_queue, U32 width,
-                               U32 height) noexcept;
-
-    void execute_hbao_pass(CommandBuffer *cmd, const RenderFrameDesc &desc) noexcept;
-
-    void execute_lighting_pass(CommandBuffer *cmd, const RenderFrameDesc &desc) noexcept;
 
     void destroy_global_buffers() noexcept;
     void destroy_fallback_textures() noexcept;
@@ -77,21 +87,14 @@ private:
 
 private:
     RenderDevice *m_device{nullptr};
+    Alloc *m_alloc{nullptr};
+
     RendererLimits m_limits{};
+    RendererPipelineSet m_pipelines{};
 
-    RendererGlobalBuffers m_global{};
-    RendererFallbackTextures m_fallback{};
+    RendererResources m_resources{};
 
-    FinalColorTarget m_final{};
-
-    GBufferTargets m_gbuffer{};
-    AmbientOcclusionTargets m_ao{};
-
-    ShadowResources m_shadow{};
-    PointShadowResources m_point_shadows{};
-    SpotShadowResources m_spot_shadows{};
-
-    IblResources m_ibl{};
+    bool m_ready{false};
 };
 
 } // namespace fr

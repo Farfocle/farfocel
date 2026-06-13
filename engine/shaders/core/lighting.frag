@@ -54,6 +54,9 @@ layout(std140, binding = 2) buffer PointLightsSSBO {
     PointLight u_point_lights[];
 };
 
+// ugly but works for now
+const uint DIRECTIONAL_CASCADE_COUNT = 3u;
+
 struct DirLight {
     vec3 direction;
     float intensity;
@@ -61,11 +64,12 @@ struct DirLight {
     vec3 color;
     float padding;
 
-    mat4 light_view_proj[4];
+    mat4 light_view_proj[3];
     vec4 cascade_splits;
     vec4 shadow_params;
     vec4 shadow_filter_params;
 };
+
 
 layout(std140, binding = 3) buffer DirLightsSSBO {
     DirLight u_dir_lights[];

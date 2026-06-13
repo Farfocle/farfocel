@@ -1,36 +1,21 @@
 /**
  * @file render_parts.hpp
  * @author Tfoedy
- * @brief Core ECS parts, or in our case, parts, for the rendering system.
+ * @brief ECS parts used by scene rendering.
  */
 
 #pragma once
 
 #include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include "fr/core/typedefs.hpp"
-#include "fr/data/asset_manager.hpp"
+#include "fr/asset/asset_id.hpp"
+#include "fr/asset/asset_manager.hpp"
 
 namespace fr {
 
 /**
- * @brief Defines the shading model applied during Lighting Pass.
- */
-enum class ShadingModel : U32 {
-    Unlit = 0,    ///< No lighting applied (for example UI, skybox).
-    Standard = 1, ///< Classic Blinn-PPhong model.
-    PBR = 2       ///< Physically Based Cook-Torrance model.
-};
-
-enum class MaterialBlendMode : U8 {
-    Opaque = 0,
-    Masked = 1,
-    Alpha = 2,
-};
-
-/**
- * @brief Lens properties of a camera.
+ * @brief Camera lens properties.
  */
 struct CameraPart {
     F32 fov{70.0f};
@@ -41,6 +26,9 @@ struct CameraPart {
     CameraPart() noexcept = default;
 };
 
+/**
+ * @brief Simple first-person camera controller state.
+ */
 struct FPSControllerPart {
     F32 pitch{0.0f};
     F32 yaw{-90.0f};
@@ -51,53 +39,68 @@ struct FPSControllerPart {
 };
 
 /**
- * @brief Represents the 3D shape attached to an entity.
+ * @brief Renderable mesh reference.
+ *
+ * @details
+ * mesh_id is stable scene data. mesh_handle is a runtime cache resolved by
+ * RenderAssetSystem.
  */
-struct MeshPart {
-    MeshAssetHandle handle;
+struct MeshRendererPart {
+    AssetId mesh_id{};
+    AssetId resolved_mesh_id{};
+    MeshAssetHandle mesh_handle{};
 
-    MeshPart() noexcept
-        : handle() {
+    bool visible{true};
+    bool casts_shadow{true};
+
+    MeshRendererPart() noexcept = default;
+
+    explicit MeshRendererPart(AssetId id) noexcept
+        : mesh_id(id) {
     }
 
-    explicit MeshPart(const MeshAssetHandle &h) noexcept
-        : handle(h) {
+    MeshRendererPart(AssetId id, MeshAssetHandle loaded_mesh) noexcept
+        : mesh_id(id),
+          resolved_mesh_id(id),
+          mesh_handle(loaded_mesh) {
+    }
+
+    [[nodiscard]] bool is_mesh_resolved() const noexcept {
+        return mesh_handle.is_valid();
     }
 };
 
 /**
- * @brief Defines surface shading parameters used by the renderer.
+ * @brief Optional material override for a mesh renderer.
  *
  * @details
- * The optional extra texture uses a shared material-data layout:
- *
- * - R: metallic for PBR, reserved/specular parameter for Standard
- * - G: roughness
- * - B: ambient occlusion
- * - A: unused in texture input; shading model is written separately to the G-Buffer
- *
- * If a mesh submesh already provides textures from the cooked asset, those textures take
- * prioority. MaterialPart textures are used as a fallbacks.
+ * If resolved, this material replaces submesh materials during extraction.
  */
-struct MaterialPart {
-    ShadingModel shading_model;
+struct MaterialOverridePart {
+    AssetId material_id{};
+    AssetId resolved_material_id{};
+    MaterialAssetHandle material_handle{};
 
-    TextureAssetHandle albedo_map;
-    TextureAssetHandle normal_map;
-    TextureAssetHandle extra_map;
+    MaterialOverridePart() noexcept = default;
 
-    MaterialBlendMode blend_mode{MaterialBlendMode::Opaque};
-    F32 alpha{1.0f};
+    explicit MaterialOverridePart(AssetId id) noexcept
+        : material_id(id) {
+    }
 
-    MaterialPart() noexcept
-        : shading_model(ShadingModel::PBR),
-          albedo_map(),
-          normal_map(),
-          extra_map() {
+    MaterialOverridePart(AssetId id, MaterialAssetHandle loaded_material) noexcept
+        : material_id(id),
+          resolved_material_id(id),
+          material_handle(loaded_material) {
+    }
+
+    [[nodiscard]] bool is_override_resolved() const noexcept {
+        return material_handle.is_valid();
     }
 };
 
-/// @brief Point light source component
+/**
+ * @brief Point light component.
+ */
 struct PointLightPart {
     glm::vec3 color{1.0f, 1.0f, 1.0f};
     F32 intensity{1.0f};
@@ -110,7 +113,9 @@ struct PointLightPart {
     PointLightPart() noexcept = default;
 };
 
-/// @brief Spot light source component.
+/**
+ * @brief Spot light component.
+ */
 struct SpotLightPart {
     glm::vec3 color{1.0f, 1.0f, 1.0f};
     F32 intensity{0.0f};
@@ -126,10 +131,13 @@ struct SpotLightPart {
     SpotLightPart() noexcept = default;
 };
 
-/// @brief Directional light source like the sun
+/**
+ * @brief Directional light component.
+ */
 struct DirectionalLightPart {
     glm::vec3 color{1.0f, 1.0f, 1.0f};
     F32 intensity{5.0f};
+
     DirectionalLightPart() noexcept = default;
 };
 

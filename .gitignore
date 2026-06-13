@@ -48,3 +48,5 @@ CMakeUserPresets.json
 .direnv
 
 imgui.init
+
+assets/

@@ -9,7 +9,7 @@ out mat3 v_tbn;
 
 layout (std140, binding = 0) buffer TransformSSBO { mat4 u_transforms[]; };
 /*
-    Camera buffer layout must match fr::CameraData on the CPU side.
+    Camera buffer layout must match fr::GpuCameraData on the CPU side.
 
     u_cam_forward is not used by the geometry pass, but it is kept here so the
     block layout stays consistent with the lighting shader.

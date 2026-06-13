@@ -5,9 +5,7 @@
  */
 
 #include <SDL3/SDL.h>
-#include <algorithm>
 #include <cstdint>
-#include <cstdio>
 #include <glad/gl.h>
 
 #include "fr/core/alloc.hpp"
@@ -19,9 +17,16 @@
 #include "fr/core/slot_map.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/typedefs.hpp"
+#include "fr/logger/logger.hpp"
 #include "fr/renderer/render_device.hpp"
 
 namespace fr {
+
+struct OpenGLBuffer {
+    GLuint id{0};
+    USize size{0};
+    BufferUsage usage{BufferUsage::Static};
+};
 
 struct OpenGLTexture {
     GLuint id{0};
@@ -31,20 +36,23 @@ struct OpenGLTexture {
 
 struct OpenGLPipeline {
     GLuint program_id{0};
+
     GLenum cull_mode{GL_BACK};
+    GLenum polygon_mode{GL_FILL};
+
     GLboolean depth_test{GL_TRUE};
     GLboolean depth_write{GL_TRUE};
-    GLenum polygon_mode{GL_FILL};
+
     bool use_culling{true};
     BlendMode blend_mode{BlendMode::None};
 
     GLint loc_transform_idx{-1};
-    GLint loc_shading_model{-1};
+    GLint loc_material_idx{-1};
     GLint loc_cascade_idx{-1};
     GLint loc_shadow_idx{-1};
 };
 
-enum class CommandType : U8 {
+enum class OpenGLCommandKind : U8 {
     BeginRenderPass,
     EndRenderPass,
     SetViewport,
@@ -59,7 +67,8 @@ enum class CommandType : U8 {
 };
 
 struct OpenGLCommand {
-    CommandType type;
+    OpenGLCommandKind kind{OpenGLCommandKind::EndRenderPass};
+
     union {
         struct {
             RenderAttachment color_targets[4];
@@ -118,23 +127,26 @@ class OpenGLCommandBuffer : public CommandBuffer {
 public:
     explicit OpenGLCommandBuffer(Alloc *alloc = get_ambient_ctx().alloc) noexcept
         : m_commands(alloc) {
+        FR_ASSERT(alloc, "allocator must be non-null");
+
         m_commands.reserve(2048);
     }
 
-    void clear_commands() noexcept {
+    void clear() noexcept {
         m_commands.clear();
     }
 
-    const DynamicArray<OpenGLCommand> &get_commands() const noexcept {
+    [[nodiscard]] const DynamicArray<OpenGLCommand> &commands() const noexcept {
         return m_commands;
     }
 
     void begin_render_pass(Slice<const TextureHandle> color_targets,
                            TextureHandle depth_target) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::BeginRenderPass;
-        cmd.payload.render_pass.num_colors =
-            static_cast<U32>(fr::math::min(color_targets.size(), U64{4}));
+        cmd.kind = OpenGLCommandKind::BeginRenderPass;
+
+        const USize color_count = fr::math::min<USize>(color_targets.size(), 4);
+        cmd.payload.render_pass.num_colors = static_cast<U32>(color_count);
 
         for (U32 i = 0; i < cmd.payload.render_pass.num_colors; ++i) {
             cmd.payload.render_pass.color_targets[i].texture = color_targets[i];
@@ -154,9 +166,10 @@ public:
     void begin_render_pass_ex(Slice<const RenderAttachment> color_targets,
                               RenderAttachment depth_target) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::BeginRenderPass;
-        cmd.payload.render_pass.num_colors =
-            static_cast<U32>(fr::math::min(color_targets.size(), U64{4}));
+        cmd.kind = OpenGLCommandKind::BeginRenderPass;
+
+        const USize color_count = fr::math::min<USize>(color_targets.size(), 4);
+        cmd.payload.render_pass.num_colors = static_cast<U32>(color_count);
 
         for (U32 i = 0; i < cmd.payload.render_pass.num_colors; ++i) {
             cmd.payload.render_pass.color_targets[i] = color_targets[i];
@@ -168,12 +181,14 @@ public:
     }
 
     void end_render_pass() noexcept override {
-        m_commands.push_back({CommandType::EndRenderPass, {}});
+        OpenGLCommand cmd{};
+        cmd.kind = OpenGLCommandKind::EndRenderPass;
+        m_commands.push_back(cmd);
     }
 
     void set_viewport(U32 x, U32 y, U32 width, U32 height) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::SetViewport;
+        cmd.kind = OpenGLCommandKind::SetViewport;
         cmd.payload.viewport.x = x;
         cmd.payload.viewport.y = y;
         cmd.payload.viewport.width = width;
@@ -183,14 +198,14 @@ public:
 
     void set_pipeline(RenderPipelineHandle pipeline) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::SetPipeline;
+        cmd.kind = OpenGLCommandKind::SetPipeline;
         cmd.payload.pipeline.pipeline = pipeline;
         m_commands.push_back(cmd);
     }
 
     void bind_vertex_buffer(BufferHandle vbo, U32 stride) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::BindVertexBuffer;
+        cmd.kind = OpenGLCommandKind::BindVertexBuffer;
         cmd.payload.vertex_buffer.vbo = vbo;
         cmd.payload.vertex_buffer.stride = stride;
         m_commands.push_back(cmd);
@@ -198,14 +213,14 @@ public:
 
     void bind_index_buffer(BufferHandle ibo) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::BindIndexBuffer;
+        cmd.kind = OpenGLCommandKind::BindIndexBuffer;
         cmd.payload.index_buffer.ibo = ibo;
         m_commands.push_back(cmd);
     }
 
     void bind_texture(TextureHandle texture, U32 slot) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::BindTexture;
+        cmd.kind = OpenGLCommandKind::BindTexture;
         cmd.payload.texture.texture = texture;
         cmd.payload.texture.slot = slot;
         m_commands.push_back(cmd);
@@ -213,7 +228,7 @@ public:
 
     void bind_storage_buffer(BufferHandle buffer, U32 slot) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::BindStorageBuffer;
+        cmd.kind = OpenGLCommandKind::BindStorageBuffer;
         cmd.payload.storage_buffer.buffer = buffer;
         cmd.payload.storage_buffer.slot = slot;
         m_commands.push_back(cmd);
@@ -221,7 +236,7 @@ public:
 
     void set_push_constants(Slice<const Byte> data) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::SetPushConstants;
+        cmd.kind = OpenGLCommandKind::SetPushConstants;
 
         constexpr USize max_push_constant_size = sizeof(cmd.payload.push_constants.data);
         FR_ASSERT(data.size() <= max_push_constant_size, "push constant payload is too large");
@@ -241,7 +256,7 @@ public:
     void draw_indexed(U32 index_count, U32 index_offset = 0,
                       U32 vertex_offset = 0) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::DrawIndexed;
+        cmd.kind = OpenGLCommandKind::DrawIndexed;
         cmd.payload.draw.index_count = index_count;
         cmd.payload.draw.index_offset = index_offset;
         cmd.payload.draw.vertex_offset = vertex_offset;
@@ -250,7 +265,7 @@ public:
 
     void draw_arrays(U32 vertex_count, U32 first_vertex = 0) noexcept override {
         OpenGLCommand cmd{};
-        cmd.type = CommandType::DrawArrays;
+        cmd.kind = OpenGLCommandKind::DrawArrays;
         cmd.payload.draw_arrays.vertex_count = vertex_count;
         cmd.payload.draw_arrays.first_vertex = first_vertex;
         m_commands.push_back(cmd);
@@ -283,8 +298,8 @@ void check_gl_error(const char *label) noexcept {
 #if FR_IS_DEBUG
     GLenum error = GL_NO_ERROR;
     while ((error = glGetError()) != GL_NO_ERROR) {
-        std::fprintf(stderr, "[OpenGL Error] %s: %s (0x%X)\n", label, gl_error_to_string(error),
-                     static_cast<unsigned>(error));
+        FR_LOG_ERR("[OpenGL Error] {}: {} ({})", label, gl_error_to_string(error),
+                   static_cast<U32>(error));
     }
 #else
     (void)label;
@@ -319,12 +334,58 @@ const char *framebuffer_status_to_string(GLenum status) noexcept {
 bool check_framebuffer_complete(const char *label) noexcept {
     GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
-        std::fprintf(stderr, "[OpenGL FBO Error] %s: %s (0x%X)\n", label,
-                     framebuffer_status_to_string(status), static_cast<unsigned>(status));
+        FR_LOG_ERR("[OpenGL FBO Error] {}: {} ({})", label, framebuffer_status_to_string(status),
+                   static_cast<U32>(status));
         return false;
     }
 
     return true;
+}
+
+StringView shader_debug_name_or_fallback(StringView debug_name) noexcept {
+    if (!debug_name.is_empty()) {
+        return debug_name;
+    }
+
+    return StringView("<unnamed shader>");
+}
+
+String read_shader_info_log(GLuint shader) noexcept {
+    GLint info_len = 0;
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &info_len);
+
+    if (info_len <= 0) {
+        return String{};
+    }
+
+    String log;
+    log.grow_default(static_cast<USize>(info_len));
+    glGetShaderInfoLog(shader, info_len, nullptr, log.data());
+
+    if (log.size() > 0 && log.back() == '\0') {
+        log.shrink(log.size() - 1);
+    }
+
+    return log;
+}
+
+String read_program_info_log(GLuint program) noexcept {
+    GLint info_len = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &info_len);
+
+    if (info_len <= 0) {
+        return String{};
+    }
+
+    String log;
+    log.grow_default(static_cast<USize>(info_len));
+    glGetProgramInfoLog(program, info_len, nullptr, log.data());
+
+    if (log.size() > 0 && log.back() == '\0') {
+        log.shrink(log.size() - 1);
+    }
+
+    return log;
 }
 
 class OpenGLRenderDevice : public RenderDevice {
@@ -336,6 +397,8 @@ public:
           m_shaders(256),
           m_pipelines(256),
           m_runtime_cmd_buffer(alloc) {
+        FR_ASSERT(alloc, "allocator must be non-null");
+
         if (!gladLoadGL(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress))) {
             FR_PANIC("Couldn't init GLAD");
         }
@@ -348,25 +411,41 @@ public:
     }
 
     ~OpenGLRenderDevice() noexcept override {
-        glDeleteFramebuffers(1, &m_fallback_fbo);
-        glDeleteVertexArrays(1, &m_vao);
-        glDeleteVertexArrays(1, &m_empty_vao);
+        glUseProgram(0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindVertexArray(0);
+
+        destroy_remaining_resources();
+
+        if (m_fallback_fbo != 0) {
+            glDeleteFramebuffers(1, &m_fallback_fbo);
+            m_fallback_fbo = 0;
+        }
+
+        if (m_vao != 0) {
+            glDeleteVertexArrays(1, &m_vao);
+            m_vao = 0;
+        }
+
+        if (m_empty_vao != 0) {
+            glDeleteVertexArrays(1, &m_empty_vao);
+            m_empty_vao = 0;
+        }
     }
 
-    TextureHandle create_texture_2d(const TextureDesc &desc) noexcept override {
+    TextureHandle create_texture(const TextureDesc &desc) noexcept override {
         if (desc.width == 0 || desc.height == 0) {
-            std::fprintf(stderr, "[OpenGL Texture Error] Cannot create a zero-sized texture.\n");
+            FR_LOG_ERR("[OpenGL Texture Error] Cannot create a zero-sized texture.");
             return TextureHandle{};
         }
 
         if (desc.dimension == TextureDimension::Cube && desc.width != desc.height) {
-            std::fprintf(stderr, "[OpenGL Texture Error] Cubemap faces must be square.\n");
+            FR_LOG_ERR("[OpenGL Texture Error] Cubemap faces must be square.");
             return TextureHandle{};
         }
 
         if (desc.dimension == TextureDimension::Cube && !desc.initial_data.is_empty()) {
-            std::fprintf(stderr,
-                         "[OpenGL Texture Error] Cubemap initial data is not supported yet.\n");
+            FR_LOG_ERR("[OpenGL Texture Error] Cubemap initial data is not supported yet.");
             return TextureHandle{};
         }
 
@@ -379,7 +458,7 @@ public:
         glCreateTextures(gl_target, 1, &id);
 
         if (id == 0) {
-            std::fprintf(stderr, "[OpenGL Texture Error] glCreateTextures returned 0.\n");
+            FR_LOG_ERR("[OpenGL Texture Error] glCreateTextures returned 0.");
             return TextureHandle{};
         }
 
@@ -432,7 +511,7 @@ public:
             break;
         }
 
-        const U32 allocated_mips = std::max<U32>(desc.mip_levels, 1);
+        const U32 allocated_mips = fr::math::max<U32>(desc.mip_levels, 1);
 
         glTextureStorage2D(id, allocated_mips, internal_format, desc.width, desc.height);
 
@@ -501,7 +580,7 @@ public:
         texture.target = gl_target;
         texture.format = desc.format;
 
-        check_gl_error("create_texture_2d(TextureDesc)");
+        check_gl_error("create_texture(TextureDesc)");
 
         return TextureHandle{m_textures.add(texture)};
     }
@@ -514,13 +593,12 @@ public:
         }
 
         if (buffer_size == 0) {
-            std::fprintf(stderr, "[OpenGL Buffer Error] Cannot create a zero-sized buffer.\n");
+            FR_LOG_ERR("[OpenGL Buffer Error] Cannot create a zero-sized buffer.");
             return BufferHandle{};
         }
 
         if (!desc.initial_data.is_empty() && desc.initial_data.size() > buffer_size) {
-            std::fprintf(stderr,
-                         "[OpenGL Buffer Error] Initial buffer data is larger than buffer size.\n");
+            FR_LOG_ERR("[OpenGL Buffer Error] Initial buffer data is larger than buffer size.");
             return BufferHandle{};
         }
 
@@ -528,7 +606,7 @@ public:
         glCreateBuffers(1, &id);
 
         if (id == 0) {
-            std::fprintf(stderr, "[OpenGL Buffer Error] glCreateBuffers returned 0.\n");
+            FR_LOG_ERR("[OpenGL Buffer Error] glCreateBuffers returned 0.");
             return BufferHandle{};
         }
 
@@ -542,85 +620,89 @@ public:
 
         glNamedBufferData(id, buffer_size, initial_data, gl_usage);
 
+        OpenGLBuffer buffer{};
+        buffer.id = id;
+        buffer.size = buffer_size;
+        buffer.usage = desc.usage;
+
         check_gl_error("create_buffer(BufferDesc)");
 
-        return BufferHandle{m_buffers.add(id)};
+        return BufferHandle{m_buffers.add(buffer)};
     }
 
-    ShaderHandle create_shader(StringView vertex_src, StringView fragment_src) noexcept override {
-        String vert_str = String::from_view(vertex_src);
-        String frag_str = String::from_view(fragment_src);
+    ShaderHandle create_shader(StringView vertex_src, StringView fragment_src,
+                               StringView debug_name = {}) noexcept override {
+        const StringView shader_name = shader_debug_name_or_fallback(debug_name);
 
-        const char *vert_ptr = vert_str.data();
-        const char *frag_ptr = frag_str.data();
-
-        GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vs, 1, &vert_ptr, nullptr);
-        glCompileShader(vs);
-
-        GLint compiled = 0;
-        glGetShaderiv(vs, GL_COMPILE_STATUS, &compiled);
-        if (!compiled) {
-            GLint info_len = 0;
-            glGetShaderiv(vs, GL_INFO_LOG_LENGTH, &info_len);
-
-            if (info_len > 0) {
-                char *log = static_cast<char *>(alloca(static_cast<USize>(info_len)));
-                glGetShaderInfoLog(vs, info_len, nullptr, log);
-                std::fprintf(stderr, "[Shader Error] Vertex shader compilation failed:\n%s\n", log);
-            }
-
-            glDeleteShader(vs);
+        if (vertex_src.is_empty() || fragment_src.is_empty()) {
+            FR_LOG_ERR("[OpenGL Shader Error] Cannot create shader '{}' from empty source.",
+                       shader_name);
             return ShaderHandle{};
         }
 
-        GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fs, 1, &frag_ptr, nullptr);
-        glCompileShader(fs);
+        const char *vertex_ptr = vertex_src.data();
+        const char *fragment_ptr = fragment_src.data();
 
-        compiled = 0;
-        glGetShaderiv(fs, GL_COMPILE_STATUS, &compiled);
-        if (!compiled) {
-            GLint info_len = 0;
-            glGetShaderiv(fs, GL_INFO_LOG_LENGTH, &info_len);
+        const GLint vertex_len = static_cast<GLint>(vertex_src.size());
+        const GLint fragment_len = static_cast<GLint>(fragment_src.size());
 
-            if (info_len > 0) {
-                char *log = static_cast<char *>(alloca(static_cast<USize>(info_len)));
-                glGetShaderInfoLog(fs, info_len, nullptr, log);
-                std::fprintf(stderr, "[Shader Error] Fragment shader compilation failed:\n%s\n",
-                             log);
-            }
+        GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+        glShaderSource(vertex_shader, 1, &vertex_ptr, &vertex_len);
+        glCompileShader(vertex_shader);
 
-            glDeleteShader(vs);
-            glDeleteShader(fs);
+        GLint vertex_compiled = GL_FALSE;
+        glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &vertex_compiled);
+
+        if (vertex_compiled != GL_TRUE) {
+            String log = read_shader_info_log(vertex_shader);
+            FR_LOG_ERR("[OpenGL Shader Error] Vertex shader compilation failed for '{}':\n{}",
+                       shader_name, log.view());
+
+            glDeleteShader(vertex_shader);
+            return ShaderHandle{};
+        }
+
+        GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragment_shader, 1, &fragment_ptr, &fragment_len);
+        glCompileShader(fragment_shader);
+
+        GLint fragment_compiled = GL_FALSE;
+        glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &fragment_compiled);
+
+        if (fragment_compiled != GL_TRUE) {
+            String log = read_shader_info_log(fragment_shader);
+            FR_LOG_ERR("[OpenGL Shader Error] Vertex shader compilation failed for '{}':\n{}",
+                       shader_name, log.view());
+
+            glDeleteShader(vertex_shader);
+            glDeleteShader(fragment_shader);
             return ShaderHandle{};
         }
 
         GLuint program = glCreateProgram();
-        glAttachShader(program, vs);
-        glAttachShader(program, fs);
+        glAttachShader(program, vertex_shader);
+        glAttachShader(program, fragment_shader);
         glLinkProgram(program);
 
-        GLint linked = 0;
+        GLint linked = GL_FALSE;
         glGetProgramiv(program, GL_LINK_STATUS, &linked);
-        if (!linked) {
-            GLint info_len = 0;
-            glGetProgramiv(program, GL_INFO_LOG_LENGTH, &info_len);
 
-            if (info_len > 0) {
-                char *log = static_cast<char *>(alloca(static_cast<USize>(info_len)));
-                glGetProgramInfoLog(program, info_len, nullptr, log);
-                std::fprintf(stderr, "[Shader Error] Program linking failed:\n%s\n", log);
-            }
+        glDetachShader(program, vertex_shader);
+        glDetachShader(program, fragment_shader);
 
-            glDeleteShader(vs);
-            glDeleteShader(fs);
+        glDeleteShader(vertex_shader);
+        glDeleteShader(fragment_shader);
+
+        if (linked != GL_TRUE) {
+            String log = read_program_info_log(program);
+            FR_LOG_ERR("[OpenGL Shader Error] Program linking failed for '{}':\n{}", shader_name,
+                       log.view());
+
             glDeleteProgram(program);
             return ShaderHandle{};
         }
 
-        glDeleteShader(vs);
-        glDeleteShader(fs);
+        check_gl_error("create_shader");
 
         return ShaderHandle{m_shaders.add(program)};
     }
@@ -629,9 +711,8 @@ public:
     create_render_pipeline(const RenderPipelineProperties &properties) noexcept override {
         GLuint *shader_id = m_shaders.get_data(properties.shader.key);
         if (!shader_id || *shader_id == 0) {
-            std::fprintf(
-                stderr,
-                "[OpenGL Pipeline Error] Cannot create pipeline from invalid shader handle.\n");
+            FR_LOG_ERR(
+                "[OpenGL Pipeline Error] Cannot create pipeline from invalid shader handle.");
             return RenderPipelineHandle{};
         }
 
@@ -639,7 +720,7 @@ public:
         pipe.program_id = *shader_id;
 
         pipe.loc_transform_idx = glGetUniformLocation(pipe.program_id, "u_transform_idx");
-        pipe.loc_shading_model = glGetUniformLocation(pipe.program_id, "u_shading_model");
+        pipe.loc_material_idx = glGetUniformLocation(pipe.program_id, "u_material_idx");
         pipe.loc_cascade_idx = glGetUniformLocation(pipe.program_id, "u_cascade_idx");
         pipe.loc_shadow_idx = glGetUniformLocation(pipe.program_id, "u_shadow_idx");
 
@@ -660,51 +741,80 @@ public:
     }
 
     void destroy_buffer(BufferHandle handle) noexcept override {
-        GLuint *id = m_buffers.get_data(handle.key);
-        if (id) {
-            glDeleteBuffers(1, id);
-            m_buffers.erase(handle.key);
+        OpenGLBuffer *buffer = m_buffers.get_data(handle.key);
+        if (!buffer) {
+            return;
         }
+
+        if (buffer->id != 0) {
+            glDeleteBuffers(1, &buffer->id);
+            buffer->id = 0;
+            buffer->size = 0;
+        }
+
+        m_buffers.erase(handle.key);
     }
 
     void destroy_texture(TextureHandle handle) noexcept override {
         OpenGLTexture *texture = m_textures.get_data(handle.key);
-        if (texture && texture->id != 0) {
-            glDeleteTextures(1, &texture->id);
-            m_textures.erase(handle.key);
+        if (!texture) {
+            return;
         }
+
+        if (texture->id != 0) {
+            glDeleteTextures(1, &texture->id);
+            texture->id = 0;
+        }
+
+        m_textures.erase(handle.key);
     }
 
     void destroy_shader(ShaderHandle handle) noexcept override {
-        GLuint *id = m_shaders.get_data(handle.key);
-        if (id) {
-            glDeleteProgram(*id);
-            m_shaders.erase(handle.key);
+        GLuint *program = m_shaders.get_data(handle.key);
+        if (!program) {
+            return;
         }
+
+        if (*program != 0) {
+            glDeleteProgram(*program);
+            *program = 0;
+        }
+
+        m_shaders.erase(handle.key);
     }
 
     void destroy_pipeline(RenderPipelineHandle handle) noexcept override {
+        if (!handle.is_valid()) {
+            return;
+        }
+
         m_pipelines.erase(handle.key);
     }
 
     CommandBuffer *adopt_command_buffer() noexcept override {
-        m_runtime_cmd_buffer.clear_commands();
+        m_runtime_cmd_buffer.clear();
         return &m_runtime_cmd_buffer;
     }
 
     void submit_command_buffer(CommandBuffer *cmd_buffer) noexcept override {
+        if (!cmd_buffer) {
+            FR_LOG_ERR("[OpenGL Command Error] Cannot submit a null command buffer.");
+            return;
+        }
+
         glBindVertexArray(m_vao);
 
         auto *gl_cmd_buffer = static_cast<OpenGLCommandBuffer *>(cmd_buffer);
-        const auto &stream = gl_cmd_buffer->get_commands();
+
+        const DynamicArray<OpenGLCommand> &stream = gl_cmd_buffer->commands();
 
         const OpenGLPipeline *current_pipe = nullptr;
 
         for (USize i = 0; i < stream.size(); ++i) {
             const OpenGLCommand &cmd = stream[i];
 
-            switch (cmd.type) {
-            case CommandType::BeginRenderPass: {
+            switch (cmd.kind) {
+            case OpenGLCommandKind::BeginRenderPass: {
                 glDepthMask(GL_TRUE);
                 glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
@@ -756,12 +866,18 @@ public:
                     OpenGLTexture *depth_texture =
                         m_textures.get_data(cmd.payload.render_pass.depth_target.texture.key);
 
-                    const GLenum attachment =
-                        depth_texture && depth_texture->format == TextureFormat::Depth24_Stencil8
-                            ? GL_DEPTH_STENCIL_ATTACHMENT
-                            : GL_DEPTH_ATTACHMENT;
+                    const bool is_depth_stencil =
+                        depth_texture && depth_texture->format == TextureFormat::Depth24_Stencil8;
 
-                    attach_texture_to_fbo(attachment, cmd.payload.render_pass.depth_target);
+                    if (is_depth_stencil) {
+                        attach_texture_to_fbo(GL_DEPTH_ATTACHMENT, RenderAttachment{});
+                        attach_texture_to_fbo(GL_DEPTH_STENCIL_ATTACHMENT,
+                                              cmd.payload.render_pass.depth_target);
+                    } else {
+                        attach_texture_to_fbo(GL_DEPTH_STENCIL_ATTACHMENT, RenderAttachment{});
+                        attach_texture_to_fbo(GL_DEPTH_ATTACHMENT,
+                                              cmd.payload.render_pass.depth_target);
+                    }
                 } else {
                     attach_texture_to_fbo(GL_DEPTH_ATTACHMENT, RenderAttachment{});
                     attach_texture_to_fbo(GL_DEPTH_STENCIL_ATTACHMENT, RenderAttachment{});
@@ -803,24 +919,23 @@ public:
                 break;
             }
 
-            case CommandType::EndRenderPass:
+            case OpenGLCommandKind::EndRenderPass:
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 glDrawBuffer(GL_BACK);
                 glReadBuffer(GL_BACK);
                 check_gl_error("EndRenderPass");
                 break;
 
-            case CommandType::SetViewport:
+            case OpenGLCommandKind::SetViewport:
                 glViewport(cmd.payload.viewport.x, cmd.payload.viewport.y,
                            cmd.payload.viewport.width, cmd.payload.viewport.height);
                 break;
 
-            case CommandType::SetPipeline: {
+            case OpenGLCommandKind::SetPipeline: {
                 current_pipe = m_pipelines.get_data(cmd.payload.pipeline.pipeline.key);
 
                 if (!current_pipe || current_pipe->program_id == 0) {
-                    std::fprintf(stderr,
-                                 "[OpenGL Pipeline Error] Tried to bind an invalid pipeline.\n");
+                    FR_LOG_ERR("[OpenGL Pipeline Error] Tried to bind an invalid pipeline.");
                     current_pipe = nullptr;
                     glUseProgram(0);
                     break;
@@ -857,14 +972,14 @@ public:
                 break;
             }
 
-            case CommandType::BindVertexBuffer: {
-                GLuint *vbo = m_buffers.get_data(cmd.payload.vertex_buffer.vbo.key);
-                if (!vbo) {
-                    std::fprintf(stderr, "[OpenGL Buffer Error] Invalid vertex buffer handle.\n");
+            case OpenGLCommandKind::BindVertexBuffer: {
+                OpenGLBuffer *vbo = m_buffers.get_data(cmd.payload.vertex_buffer.vbo.key);
+                if (!vbo || vbo->id == 0) {
+                    FR_LOG_ERR("[OpenGL Buffer Error] Invalid vertex buffer handle.");
                     break;
                 }
 
-                glVertexArrayVertexBuffer(m_vao, 0, *vbo, 0, cmd.payload.vertex_buffer.stride);
+                glVertexArrayVertexBuffer(m_vao, 0, vbo->id, 0, cmd.payload.vertex_buffer.stride);
 
                 glEnableVertexArrayAttrib(m_vao, 0);
                 glVertexArrayAttribFormat(m_vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
@@ -886,19 +1001,21 @@ public:
                 break;
             }
 
-            case CommandType::BindStorageBuffer: {
-                GLuint *ssbo = m_buffers.get_data(cmd.payload.storage_buffer.buffer.key);
-                if (!ssbo) {
-                    std::fprintf(stderr, "[OpenGL Buffer Error] Invalid storage buffer handle.\n");
+            case OpenGLCommandKind::BindStorageBuffer: {
+                OpenGLBuffer *ssbo = m_buffers.get_data(cmd.payload.storage_buffer.buffer.key);
+                if (!ssbo || ssbo->id == 0) {
+                    FR_LOG_ERR("[OpenGL Buffer Error] Invalid storage buffer handle.");
                     break;
                 }
 
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, cmd.payload.storage_buffer.slot, *ssbo);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, cmd.payload.storage_buffer.slot,
+                                 ssbo->id);
+
                 check_gl_error("BindStorageBuffer");
                 break;
             }
 
-            case CommandType::SetPushConstants: {
+            case OpenGLCommandKind::SetPushConstants: {
                 if (!current_pipe) {
                     break;
                 }
@@ -908,8 +1025,8 @@ public:
                                  cmd.payload.push_constants.data[0]);
                 }
 
-                if (current_pipe->loc_shading_model != -1) {
-                    glUniform1ui(current_pipe->loc_shading_model,
+                if (current_pipe->loc_material_idx != -1) {
+                    glUniform1ui(current_pipe->loc_material_idx,
                                  cmd.payload.push_constants.data[1]);
                 }
 
@@ -925,24 +1042,24 @@ public:
                 break;
             }
 
-            case CommandType::BindIndexBuffer: {
-                GLuint *ibo = m_buffers.get_data(cmd.payload.index_buffer.ibo.key);
-                if (!ibo) {
-                    std::fprintf(stderr, "[OpenGL Buffer Error] Invalid index buffer handle.\n");
+            case OpenGLCommandKind::BindIndexBuffer: {
+                OpenGLBuffer *ibo = m_buffers.get_data(cmd.payload.index_buffer.ibo.key);
+                if (!ibo || ibo->id == 0) {
+                    FR_LOG_ERR("[OpenGL Buffer Error] Invalid index buffer handle.");
                     break;
                 }
 
-                glVertexArrayElementBuffer(m_vao, *ibo);
+                glVertexArrayElementBuffer(m_vao, ibo->id);
+
                 check_gl_error("BindIndexBuffer");
                 break;
             }
 
-            case CommandType::BindTexture: {
+            case OpenGLCommandKind::BindTexture: {
                 OpenGLTexture *texture = m_textures.get_data(cmd.payload.texture.texture.key);
                 if (!texture || texture->id == 0) {
-                    std::fprintf(stderr,
-                                 "[OpenGL Texture Error] Invalid texture handle at slot %u.\n",
-                                 cmd.payload.texture.slot);
+                    FR_LOG_ERR("[OpenGL Texture Error] Invalid texture handle at slot {}.",
+                               cmd.payload.texture.slot);
                     break;
                 }
 
@@ -951,26 +1068,24 @@ public:
                 break;
             }
 
-            case CommandType::DrawIndexed:
+            case OpenGLCommandKind::DrawIndexed:
                 if (!current_pipe) {
-                    std::fprintf(stderr,
-                                 "[OpenGL Draw Warning] Skipping indexed draw without pipeline.\n");
+                    FR_LOG_WARN("[OpenGL Draw Warning] Skipping indexed draw without pipeline.");
                     break;
                 }
 
-                glDrawElementsBaseVertex(GL_TRIANGLES, cmd.payload.draw.index_count,
-                                         GL_UNSIGNED_INT,
-                                         reinterpret_cast<void *>(static_cast<USize>(
-                                             cmd.payload.draw.index_offset * sizeof(U32))),
-                                         cmd.payload.draw.vertex_offset);
+                glDrawElementsBaseVertex(
+                    GL_TRIANGLES, cmd.payload.draw.index_count, GL_UNSIGNED_INT,
+                    reinterpret_cast<void *>(static_cast<USize>(cmd.payload.draw.index_offset) *
+                                             sizeof(U32)),
+                    cmd.payload.draw.vertex_offset);
 
                 check_gl_error("DrawIndexed");
                 break;
 
-            case CommandType::DrawArrays:
+            case OpenGLCommandKind::DrawArrays:
                 if (!current_pipe) {
-                    std::fprintf(stderr,
-                                 "[OpenGL Draw Warning] Skipping array draw without pipeline.\n");
+                    FR_LOG_WARN("[OpenGL Draw Warning] Skipping array draw without pipeline.");
                     break;
                 }
 
@@ -991,47 +1106,85 @@ public:
             return;
         }
 
-        GLuint *id = m_buffers.get_data(handle.key);
-        if (!id) {
-            std::fprintf(stderr, "[OpenGL Buffer Error] Invalid buffer handle in update_buffer.\n");
+        OpenGLBuffer *buffer = m_buffers.get_data(handle.key);
+        if (!buffer || buffer->id == 0) {
+            FR_LOG_ERR("[OpenGL Buffer Error] Invalid buffer handle in update_buffer.");
+            return;
+        }
+
+        const USize byte_offset = static_cast<USize>(offset);
+
+        if (byte_offset > buffer->size || data.size() > buffer->size - byte_offset) {
+            FR_LOG_ERR(
+                "[OpenGL Buffer Error] update_buffer range out of bounds. Offset: {}, size: {}, "
+                "buffer size: {}.",
+                byte_offset, data.size(), buffer->size);
             return;
         }
 
         GLbitfield map_flags = GL_MAP_WRITE_BIT | (offset == 0 ? GL_MAP_INVALIDATE_BUFFER_BIT
                                                                : GL_MAP_INVALIDATE_RANGE_BIT);
 
-        void *mapped = glMapNamedBufferRange(*id, offset, data.size(), map_flags);
+        void *mapped = glMapNamedBufferRange(buffer->id, offset, data.size(), map_flags);
         if (!mapped) {
-            std::fprintf(stderr,
-                         "[OpenGL Buffer Error] Failed to map buffer range in update_buffer.\n");
+            FR_LOG_ERR("[OpenGL Buffer Error] Failed to map buffer range in update_buffer.");
             check_gl_error("update_buffer map failure");
             return;
         }
 
         fr::mem::copy_raw_range(data.data(), data.size(), static_cast<Byte *>(mapped));
 
-        if (glUnmapNamedBuffer(*id) == GL_FALSE) {
-            std::fprintf(stderr,
-                         "[OpenGL Buffer Error] Buffer contents became corrupted during update.\n");
+        if (glUnmapNamedBuffer(buffer->id) == GL_FALSE) {
+            FR_LOG_ERR("[OpenGL Buffer Error] Buffer contents became corrupted during update.");
         }
 
         check_gl_error("update_buffer");
     }
 
-    Alloc *get_allocator() const noexcept {
+    [[nodiscard]] Alloc *allocator() const noexcept {
         return m_alloc;
     }
 
-    void *get_native_texture_handle(TextureHandle handle) noexcept override {
+    void *native_texture_handle(TextureHandle handle) noexcept override {
         if (!handle.is_valid()) {
             return nullptr;
         }
 
         OpenGLTexture *texture = m_textures.get_data(handle.key);
-        return texture ? reinterpret_cast<void *>(static_cast<uintptr_t>(texture->id)) : nullptr;
+        if (!texture || texture->id == 0) {
+            return nullptr;
+        }
+
+        return reinterpret_cast<void *>(static_cast<uintptr_t>(texture->id));
     }
 
 private:
+    void destroy_remaining_resources() noexcept {
+        m_buffers.for_each_alive([](SlotKey, OpenGLBuffer &buffer) noexcept {
+            if (buffer.id != 0) {
+                glDeleteBuffers(1, &buffer.id);
+                buffer.id = 0;
+                buffer.size = 0;
+            }
+        });
+
+        m_textures.for_each_alive([](SlotKey, OpenGLTexture &texture) noexcept {
+            if (texture.id != 0) {
+                glDeleteTextures(1, &texture.id);
+                texture.id = 0;
+            }
+        });
+
+        m_shaders.for_each_alive([](SlotKey, GLuint &program) noexcept {
+            if (program != 0) {
+                glDeleteProgram(program);
+                program = 0;
+            }
+        });
+
+        m_pipelines.clear();
+    }
+
     static GLenum cube_face_target(U32 layer) noexcept {
         return GL_TEXTURE_CUBE_MAP_POSITIVE_X + static_cast<GLenum>(layer);
     }
@@ -1044,14 +1197,14 @@ private:
 
         OpenGLTexture *texture = m_textures.get_data(view.texture.key);
         if (!texture || texture->id == 0) {
-            std::fprintf(stderr, "[OpenGL RenderPass Error] Invalid attachment texture.\n");
+            FR_LOG_ERR("[OpenGL RenderPass Error] Invalid attachment texture.");
             glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, 0, 0);
             return;
         }
 
         if (texture->target == GL_TEXTURE_CUBE_MAP) {
             if (view.layer >= 6) {
-                std::fprintf(stderr, "[OpenGL RenderPass Error] Invalid cubemap face index.\n");
+                FR_LOG_ERR("[OpenGL RenderPass Error] Invalid cubemap face index.");
                 glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, 0, 0);
                 return;
             }
@@ -1072,7 +1225,7 @@ private:
 
     Alloc *m_alloc{nullptr};
 
-    SlotMap<GLuint> m_buffers;
+    SlotMap<OpenGLBuffer> m_buffers;
     SlotMap<OpenGLTexture> m_textures;
     SlotMap<GLuint> m_shaders;
     SlotMap<OpenGLPipeline> m_pipelines;
@@ -1091,7 +1244,7 @@ FR_API void destroy_opengl_render_device(RenderDevice *device) noexcept {
     }
 
     auto *opengl_device = static_cast<OpenGLRenderDevice *>(device);
-    Alloc *alloc = opengl_device->get_allocator();
+    Alloc *alloc = opengl_device->allocator();
 
     opengl_device->~OpenGLRenderDevice();
     alloc->deallocate(opengl_device, sizeof(OpenGLRenderDevice), alignof(OpenGLRenderDevice));
