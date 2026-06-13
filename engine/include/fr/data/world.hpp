@@ -145,7 +145,7 @@ public:
     /**
      * @brief Attaches a child to the parent immediately. Updates hierarchy.
      * @return false if either thing is nil.
-     * @pre Both things must have `Relations` part.
+     * @note Emplaces a default `Relations` on parent or child if not already present.
      */
     bool attach_child_now(Thing parent, Thing child) noexcept;
 
@@ -158,14 +158,14 @@ public:
 
     /**
      * @brief Detaches a child from a parent immediately. Updates hierarchy.
-     * @return false if either thing is nil, or child is not actually a child of parent.
-     * @pre Both things must have `Relations` part.
+     * @return false if either thing is nil, parent or child lacks `Relations`, or child is not
+     * actually a child of parent.
      */
     bool detach_child_now(Thing parent, Thing child) noexcept;
 
     /**
      * @brief Emits a deferred `DetachChild` command.
-     * @pre Both things must have `Relations` part.
+     * @note If either thing does not have `Relations` part; does nothing.
      * @note If either thing is nil; does nothing.
      */
     void detach_child(Thing parent, Thing child) noexcept;
@@ -226,6 +226,14 @@ public:
      */
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Runs `fn` on each matching thing in parallel across `options.threads` threads.
+     * @details Splits the base pool into equal chunks and processes them concurrently. Blocks
+     * until all threads finish. `fn` receives a `ChunkQuery<Include...>` to iterate over.
+     */
+    template <typename... Include, typename Fn>
+    void async_query(Fn &&fn, QueryOptions options = {}) noexcept;
 
     // ---------------------------------------------------------------- Resources
 
@@ -320,10 +328,12 @@ public:
 
     /// @brief Attaches `child` to self as a parent immediately. Updates hierarchy.
     /// @return false if either thing is nil.
+    /// @note Emplaces a default `Relations` on self or child if not already present.
     bool attach_child_now(Thing child) noexcept;
 
     /// @brief Detaches `child` from self immediately. Updates hierarchy.
-    /// @return false if `child` is not actually a child of self.
+    /// @return false if self or child lacks `Relations`, or `child` is not actually a child of
+    /// self.
     bool detach_child_now(Thing child) noexcept;
 
     // ------------------------------------------------------------------- Parts
@@ -631,7 +641,7 @@ public:
     /**
      * @brief Attaches a child to the parent immediately. Updates hierarchy.
      * @return false if either thing is nil.
-     * @pre Both things must have `Relations` part.
+     * @note Emplaces a default `Relations` on parent or child if not already present.
      */
     bool attach_child_now(Thing parent, Thing child) noexcept;
 
@@ -644,8 +654,8 @@ public:
 
     /**
      * @brief Detaches a child from a parent immediately. Updates hierarchy.
-     * @return false if either thing is nil, or child is not actually a child of parent.
-     * @pre Both things must have `Relations` part.
+     * @return false if either thing is nil, parent or child lacks `Relations`, or child is not
+     * actually a child of parent.
      */
     bool detach_child_now(Thing parent, Thing child) noexcept;
 
@@ -839,6 +849,14 @@ public:
      */
     template <typename... Include>
     auto bottom_up_query(QueryOptions options = {}) noexcept;
+
+    /**
+     * @brief Runs `fn` on each matching thing in parallel across `options.threads` threads.
+     * @details Splits the base pool into equal chunks and processes them concurrently. Blocks
+     * until all threads finish. `fn` receives a `ChunkQuery<Include...>` to iterate over.
+     */
+    template <typename... Include, typename Fn>
+    void async_query(Fn &&fn, QueryOptions options = {}) noexcept;
 
     /// @brief Returns a reference to the world's active command batch.
     CmdBatch &cmd_batch() noexcept {
@@ -1535,6 +1553,13 @@ inline bool World::attach_child_now(Thing parent, Thing child) noexcept {
         return false;
     }
 
+    if (!m_registry.has<RelationsPart>(parent)) {
+        m_registry.emplace_unchecked<RelationsPart>(parent);
+    }
+    if (!m_registry.has<RelationsPart>(child)) {
+        m_registry.emplace_unchecked<RelationsPart>(child);
+    }
+
     RelationsPart &parent_rel = m_registry.get_unchecked<RelationsPart>(parent);
     RelationsPart &child_rel = m_registry.get_unchecked<RelationsPart>(child);
 
@@ -1571,7 +1596,12 @@ inline bool World::detach_child_now(Thing parent, Thing child) noexcept {
         return false;
     }
 
+    if (!has<RelationsPart>(parent) || !has<RelationsPart>(child)) {
+        return false;
+    }
+
     RelationsPart &child_rel = m_registry.get_unchecked<RelationsPart>(child);
+  
     if (child_rel.parent != parent) {
         return false;
     }
@@ -1709,6 +1739,11 @@ inline auto World::top_down_query(QueryOptions options) noexcept {
 template <typename... Include>
 inline auto World::bottom_up_query(QueryOptions options) noexcept {
     return BottomUpQuery<Include...>(&m_registry, Signature::from_parts<Include...>(), options);
+}
+
+template <typename... Include, typename Fn>
+inline void World::async_query(Fn &&fn, QueryOptions options) noexcept {
+    m_registry.async_query<Fn, Include...>(std::forward<Fn>(fn), options);
 }
 
 inline void World::schedule(Stage stage, const System &system) noexcept {
@@ -1911,6 +1946,11 @@ inline auto Scope::top_down_query(QueryOptions options) noexcept {
 template <typename... Include>
 inline auto Scope::bottom_up_query(QueryOptions options) noexcept {
     return m_world->bottom_up_query<Include...>(options);
+}
+
+template <typename... Include, typename Fn>
+inline void Scope::async_query(Fn &&fn, QueryOptions options) noexcept {
+    m_world->async_query<Include...>(std::forward<Fn>(fn), options);
 }
 
 template <typename T>

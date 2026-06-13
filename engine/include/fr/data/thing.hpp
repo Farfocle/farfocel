@@ -329,6 +329,7 @@ private:
 
         m_free_next = thing.idx();
         ++m_free_count;
+        --m_alive_count;
     }
 
     // ----------------------------------------------------------------- Members
