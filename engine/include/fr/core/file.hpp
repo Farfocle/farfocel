@@ -30,10 +30,17 @@ namespace impl {
 }
 
 struct ScopedFile {
-    FILE* handle;
-    explicit ScopedFile(FILE* f) : handle(f) {}
-    ~ScopedFile() { if (handle) std::fclose(handle); }
-    operator FILE*() const { return handle; }
+    FILE *handle;
+    explicit ScopedFile(FILE *f)
+        : handle(f) {
+    }
+    ~ScopedFile() {
+        if (handle)
+            std::fclose(handle);
+    }
+    operator FILE *() const {
+        return handle;
+    }
 };
 } // namespace impl
 
@@ -137,7 +144,8 @@ inline void normalize(String &path) noexcept {
 
     for (USize i = filename.size(); i-- > 0;) {
         if (filename[i] == '.') {
-            if (i == 0) break; // Hidden file edge case (for example .gitignore)
+            if (i == 0)
+                break; // Hidden file edge case (for example .gitignore)
             return filename.view_from(i + 1);
         }
     }
@@ -155,7 +163,8 @@ inline void normalize(String &path) noexcept {
 
     for (USize i = filename.size(); i-- > 0;) {
         if (filename[i] == '.') {
-            if (i == 0) break; // Hidden file edge case
+            if (i == 0)
+                break; // Hidden file edge case
             return filename.view_to(i - 1);
         }
     }
@@ -165,7 +174,7 @@ inline void normalize(String &path) noexcept {
 /**
  * @brief Gets file size
  */
-[[nodiscard]] inline Optional<S64> get_file_size(const String& path) {
+[[nodiscard]] inline Optional<S64> get_file_size(const String &path) {
     struct stat stat_buf;
     int rc = stat(path.c_str(), &stat_buf);
 
@@ -180,7 +189,7 @@ inline void normalize(String &path) noexcept {
  * @param path Path to the file
  */
 [[nodiscard]] inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(Alloc *alloc,
-                                                                         const fr::String& path) {
+                                                                         const fr::String &path) {
     impl::ScopedFile file(std::fopen(path.c_str(), "rb"));
     if (!file) {
         return fr::none();
@@ -212,7 +221,7 @@ inline void normalize(String &path) noexcept {
  * @brief Reads all bytes to a DynamicArray.
  * @param path Path to the file
  */
-[[nodiscard]] inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(const fr::String& path) {
+[[nodiscard]] inline fr::Optional<fr::DynamicArray<Byte>> read_all_bytes(const fr::String &path) {
     return read_all_bytes(get_ambient_ctx().alloc, path);
 }
 
@@ -221,7 +230,7 @@ inline void normalize(String &path) noexcept {
  * @param alloc Pointer to the allocator to use.
  * @param path Path to the file
  */
-[[nodiscard]] inline fr::Optional<fr::String> read_all_text(Alloc *alloc, const fr::String& path) {
+[[nodiscard]] inline fr::Optional<fr::String> read_all_text(Alloc *alloc, const fr::String &path) {
     impl::ScopedFile file(std::fopen(path.c_str(), "rb"));
     if (!file) {
         return fr::none();
@@ -254,7 +263,7 @@ inline void normalize(String &path) noexcept {
  * @brief Reads all text from a file into a String.
  * @param path Path to the file
  */
-[[nodiscard]] inline fr::Optional<fr::String> read_all_text(const fr::String& path) {
+[[nodiscard]] inline fr::Optional<fr::String> read_all_text(const fr::String &path) {
     return read_all_text(get_ambient_ctx().alloc, path);
 }
 
@@ -264,7 +273,7 @@ inline void normalize(String &path) noexcept {
  * @param bytes Slice of elements to write.
  * @return True if the entire slice was written successfully, false otherwise.
  */
-inline bool write_all_bytes(const fr::String& path, fr::Slice<Byte> bytes) noexcept {
+inline bool write_all_bytes(const fr::String &path, fr::Slice<const Byte> bytes) noexcept {
     impl::ScopedFile file(std::fopen(path.c_str(), "wb"));
     if (!file) {
         return false;
@@ -287,7 +296,7 @@ inline bool write_all_bytes(const fr::String& path, fr::Slice<Byte> bytes) noexc
  * @param path Path to the file or directory.
  * @return True if file exists, false otherwise.
  */
-[[nodiscard]] inline bool exists(const fr::String& path) noexcept {
+[[nodiscard]] inline bool exists(const fr::String &path) noexcept {
     struct stat stat_buf;
     return stat(path.c_str(), &stat_buf) == 0;
 }
