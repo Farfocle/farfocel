@@ -17,7 +17,7 @@
 
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
-#include "fr/renderer/imgui_archive.hpp"
+#include "fr/devtools/imgui_archive.hpp"
 #include "fr/core/json.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/shape.hpp"

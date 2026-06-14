@@ -1,3 +1,10 @@
+/**
+ * @file imgui_inspector.cpp
+ * @author Kiju
+ *
+ * @brief Demonstrates the world inspector devtools panel.
+ */
+
 #include <SDL3/SDL.h>
 #include <glad/gl.h>
 #include <imgui.h>
@@ -5,13 +12,14 @@
 #include <imgui_impl_sdl3.h>
 
 #include "fr/core/ctx.hpp"
+#include "fr/core/math.hpp"
 #include "fr/core/meta.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/data/parts.hpp"
 #include "fr/data/world.hpp"
+#include "fr/devtools/inspector.hpp"
 #include "fr/platform/input.hpp"
 #include "fr/platform/window.hpp"
-#include "fr/renderer/imgui_archive.hpp"
 
 // ======================================================================= Parts
 
@@ -28,7 +36,7 @@ struct Health {
 FR_TYPE(Health);
 
 struct Velocity {
-    fr::Vec3 linear{0.0f, 0.0f, 0.0f};
+    fr::Vec3 linear{};
     F32 speed{1.0f};
 
     FR_SHAPE({
@@ -39,164 +47,137 @@ struct Velocity {
 
 FR_TYPE(Velocity);
 
-struct GameConfig {
-    U32 tick_rate{60};
-    F32 gravity{9.81f};
-    bool paused{false};
-
-    FR_SHAPE({
-        FR_PROP(tick_rate);
-        FR_PROP(gravity);
-        FR_PROP(paused);
-    })
-};
-
-FR_TYPE(GameConfig);
-
-// ========================================================================= App
+// ======================================================================== Game
 
 static void on_sdl_event(void *event_data, void * /*user_data*/) {
     ImGui_ImplSDL3_ProcessEvent(static_cast<SDL_Event *>(event_data));
 }
 
-int main() {
-    fr::init_core_ctx();
+static void inspector_system(fr::Scope scope) {
+    auto &state = scope.get_resource<fr::devtools::InspectorState>();
 
-    {
-        fr::World world;
+    ImGui::SetNextWindowSize(ImVec2(1100.0f, 660.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(20.0f, 20.0f), ImGuiCond_FirstUseEver);
 
-        // --------------------------------------------------------------- World
+    if (ImGui::Begin("World Inspector")) {
+        fr::devtools::inspector(scope.world(), state);
+    }
 
-        world.emplace_resource<GameConfig>(GameConfig{
-            .tick_rate = 30,
-            .gravity = 20.0f,
-        });
+    ImGui::End();
+}
 
-        // ---- player (root)
-        fr::Thing player = world.spawn();
-        world.emplace_now<fr::RelationsPart>(player);
+struct Game {
+    fr::World world;
+    fr::Thing player;
+    fr::Window window;
+    fr::WindowInput input;
+    bool running{true};
 
-        {
-            fr::LocalTransformPart t;
-            t.position = {0.0f, 1.8f, 0.0f};
-            t.scale = {1.0f, 1.0f, 1.0f};
-            world.emplace_now<fr::LocalTransformPart>(player, t);
+    bool init() {
+        if (!do_init_window()) {
+            return false;
         }
 
-        world.emplace_now<Health>(player, Health{.current = 100.0f, .max = 100.0f});
-        world.emplace_now<Velocity>(player, Velocity{.linear = {1.0f, 0.0f, 0.0f}, .speed = 5.0f});
+        do_init_things();
+        do_init_systems();
 
-        // ---- 3 enemies, each parented to player
-        for (int i = 0; i < 3; ++i) {
-            fr::Thing enemy = world.spawn();
+        return true;
+    }
 
-            world.emplace_now<fr::RelationsPart>(enemy);
-
-            {
-                fr::LocalTransformPart t;
-                t.position = {static_cast<float>(i) * 4.0f - 4.0f, 0.0f, 5.0f};
-                world.emplace_now<fr::LocalTransformPart>(enemy, t);
+    void run_loop() {
+        while (running) {
+            if (!window.poll_events(input) || input.is_key_pressed(fr::Key::Escape)) {
+                break;
             }
 
-            world.emplace_now<Health>(
-                enemy, Health{.current = 40.0f + static_cast<float>(i) * 10.0f, .max = 80.0f});
-            world.emplace_now<Velocity>(enemy,
-                                        Velocity{.linear = {-1.0f, 0.0f, 0.0f}, .speed = 2.5f});
-
-            world.attach_child_now(player, enemy);
-
-            // ---- 2 projectiles parented to each enemy
-            for (int j = 0; j < 2; ++j) {
-                fr::Thing proj = world.spawn();
-                world.emplace_now<fr::RelationsPart>(proj);
-
-                fr::LocalTransformPart t;
-                t.position = {0.0f, 0.5f, static_cast<float>(j) * 0.5f};
-                t.scale = {0.2f, 0.2f, 0.2f};
-
-                world.emplace_now<fr::LocalTransformPart>(proj, t);
-                world.emplace_now<Velocity>(proj,
-                                            Velocity{.linear = {0.0f, 0.0f, 1.0f}, .speed = 15.0f});
-                world.attach_child_now(enemy, proj);
-            }
+            do_begin_frame();
+            world.run();
+            world.commit();
+            do_end_frame();
         }
+    }
 
-        // -------------------------------------------------------------- Window
+    void shutdown() {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplSDL3_Shutdown();
+        ImGui::DestroyContext();
+        window.close();
+    }
 
-        fr::Window window{};
-        fr::WindowProperties props{};
-        props.title = "World Inspector";
-        props.width = 1100;
-        props.height = 700;
-        props.vsync = true;
-        props.api = fr::GRAPHICS_API::OPENGL;
+private:
+    bool do_init_window() {
+        fr::WindowProperties props{
+            .title = "World Inspector",
+            .width = 1200,
+            .height = 720,
+            .vsync = true,
+            .api = fr::GRAPHICS_API::OPENGL,
+        };
 
         if (!window.init(props)) {
-            fr::shutdown_core_ctx();
-            return 1;
+            return false;
         }
 
         if (!gladLoadGL(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress))) {
             window.close();
-            fr::shutdown_core_ctx();
-            return 1;
+            return false;
         }
 
         window.set_event_callback(on_sdl_event, nullptr);
 
-        // --------------------------------------------------------------- ImGui
-
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-
-        ImGuiIO &io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         ImGui::StyleColorsDark();
-
         ImGui_ImplSDL3_InitForOpenGL(static_cast<SDL_Window *>(window.get_native_window()),
                                      static_cast<SDL_GLContext>(window.get_native_context()));
         ImGui_ImplOpenGL3_Init("#version 450 core");
 
-        fr::WindowInput input{};
-        bool running = true;
+        return true;
+    }
 
-        // ---------------------------------------------------------------- Loop
+    void do_init_things() {
+        player = world.spawn();
+        world.insert(player, fr::RelationsPart{});
+        world.insert(player, fr::LocalTransformPart{});
+        world.insert(player, Health{.current = 100.0f, .max = 100.0f});
+        world.insert(player, Velocity{.linear = {1.0f, 0.0f, 0.0f}, .speed = 5.0f});
 
-        while (running) {
-            if (!window.poll_events(input) || input.is_key_pressed(fr::Key::Escape)) {
-                running = false;
-                break;
-            }
+        world.emplace_resource<fr::devtools::InspectorState>();
 
-            ImGui_ImplOpenGL3_NewFrame();
-            ImGui_ImplSDL3_NewFrame();
-            ImGui::NewFrame();
+        world.commit();
+    }
 
-            ImGui::SetNextWindowSize(ImVec2(600, 650), ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
-            ImGui::Begin("World Inspector");
+    void do_init_systems() {
+        world.schedule(fr::Stage::Update, inspector_system);
+    }
 
-            fr::ImGuiWriterArchive archive{};
-            call_shape(archive, world);
+    void do_begin_frame() {
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+    }
 
-            ImGui::End();
+    void do_end_frame() {
+        glClearColor(0.10f, 0.10f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        window.swap_buffers();
+    }
+};
 
-            glClearColor(0.10f, 0.10f, 0.12f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
+int main() {
+    fr::init_core_ctx();
 
-            ImGui::Render();
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    {
+        Game game;
 
-            window.swap_buffers();
+        if (game.init()) {
+            game.run_loop();
         }
 
-        // ------------------------------------------------------------- Cleanup
-
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplSDL3_Shutdown();
-        ImGui::DestroyContext();
-
-        window.close();
+        game.shutdown();
     }
 
     fr::shutdown_core_ctx();
