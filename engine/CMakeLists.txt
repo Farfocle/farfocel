@@ -116,6 +116,9 @@ set(ENGINE_SOURCES
     "src/logger/logger.cpp"
 
 #### physics
+    "src/physics/parts.cpp"
+    "src/physics/collision_manifold_pool.cpp"
+    "src/physics/spatial_hash_grid.cpp"
     "src/physics/systems.cpp"
 
 #### platform
