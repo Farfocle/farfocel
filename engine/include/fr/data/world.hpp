@@ -636,6 +636,27 @@ public:
     template <typename T>
     void sort_by_hierarchy_depth() noexcept;
 
+    // ------------------------------------------------- Inspector / Devtools API
+
+    /// @brief Iterates all alive non-nil things and calls `fn(Thing)` for each.
+    template <typename Fn>
+    void for_each_alive_thing(Fn &&fn) noexcept;
+
+    /// @brief Returns the number of currently alive non-nil things.
+    USize alive_thing_count() const noexcept;
+
+    /// @brief Read-only access to the part meta registry.
+    const PartMetaRegistry &part_meta() const noexcept;
+
+    /**
+     * @brief Default-constructs the part at `tidx` and inserts it on `thing` (checked).
+     * @note No-op if the part type is not registered.
+     */
+    void insert_default_raw(TypeIdx tidx, Thing thing) noexcept;
+
+    /// @brief Returns the number of things owning the part at `tidx` (0 if pool not created).
+    USize pool_size_raw(TypeIdx tidx) const noexcept;
+
     // --------------------------------------------------------------- Relations
 
     /**
@@ -1530,6 +1551,30 @@ inline void *World::try_get_raw(TypeIdx tidx, Thing thing) noexcept {
 
 inline void *World::get_raw(TypeIdx tidx, Thing thing) noexcept {
     return m_registry.get_unchecked_raw(tidx, thing);
+}
+
+// ------------------------------------------------- Inspector / Devtools API
+
+template <typename Fn>
+inline void World::for_each_alive_thing(Fn &&fn) noexcept {
+    m_registry.for_each_alive_thing(std::forward<Fn>(fn));
+}
+
+inline USize World::alive_thing_count() const noexcept {
+    return m_registry.alive_thing_count();
+}
+
+inline const PartMetaRegistry &World::part_meta() const noexcept {
+    return m_registry.part_meta();
+}
+
+inline void World::insert_default_raw(TypeIdx tidx, Thing thing) noexcept {
+    m_registry.insert_default_raw(tidx, thing);
+}
+
+inline USize World::pool_size_raw(TypeIdx tidx) const noexcept {
+    const USize count = m_registry.pool_part_count(tidx);
+    return count > 0 ? count - 1 : 0; // subtract stub at slot 0
 }
 
 // ------------------------------------------ Raw Deferred Part Operations

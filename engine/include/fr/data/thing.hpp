@@ -330,8 +330,13 @@ private:
 
         m_free_next = next_idx;
         --m_free_count;
-
         ++m_alive_count;
+
+        // Restore the slot so that things[fresh_idx].idx() == fresh_idx.
+        // This invariant is relied on by iteration logic: a slot is alive iff its stored idx
+        // equals its own position (dead slots hold the next free-list pointer instead).
+        things[fresh_idx] = Thing(fresh_idx, fresh_gen);
+
         return Thing(fresh_idx, fresh_gen);
     }
 

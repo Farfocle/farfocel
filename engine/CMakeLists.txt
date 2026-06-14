@@ -91,6 +91,10 @@ set(ENGINE_HEADERS
     "include/fr/platform/keycode.hpp"
     "include/fr/platform/window.hpp"
 
+#### devtools
+    "include/fr/devtools/imgui_archive.hpp"
+    "include/fr/devtools/inspector.hpp"
+
 #### renderer
     "include/fr/renderer/default_renderer_assets.hpp"
     "include/fr/renderer/default_renderer_setup.hpp"

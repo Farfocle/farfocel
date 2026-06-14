@@ -79,6 +79,13 @@ struct PartMeta {
     /// Return a raw pointer to the part owned by thing (unchecked — caller guarantees alive + has
     /// part).
     void *(*get_raw_unchecked)(void *registry, Thing thing) noexcept {nullptr};
+
+    /// Render the part at `part` as ImGui widgets via the shape protocol. Null when T has no ImGui
+    /// shape.
+    void (*imgui_part)(void *part, ImGuiWriterArchive &archive) noexcept {nullptr};
+
+    /// Default-construct T and insert it on `thing` in the registry (checked). Never null.
+    void (*insert_default)(void *registry, Thing thing) noexcept {nullptr};
 };
 
 // ============================================================ PartMetaRegistry
@@ -427,6 +434,36 @@ public:
     void *get_unchecked_raw(TypeIdx tidx, Thing thing) noexcept {
         FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
         return m_meta_registry.get(tidx).get_raw_unchecked(static_cast<void *>(this), thing);
+    }
+
+    /**
+     * @brief Default-constructs T and inserts it on `thing` (checked).
+     * @note No-op if `PartMeta` is not registered or T has no default constructor.
+     */
+    void insert_default_raw(TypeIdx tidx, Thing thing) noexcept {
+        if (!m_meta_registry.has(tidx)) [[unlikely]] {
+            return;
+        }
+        const PartMeta &meta = m_meta_registry.get(tidx);
+        if (!meta.insert_default) [[unlikely]] {
+            return;
+        }
+        meta.insert_default(static_cast<void *>(this), thing);
+    }
+
+    /// @brief Returns the number of parts stored for `tidx`, including the stub at slot 0.
+    USize pool_part_count(TypeIdx tidx) const noexcept {
+        return do_part_count_by_tidx(tidx);
+    }
+
+    /// @brief Iterates all alive non-nil things and calls `fn(Thing)` for each.
+    template <typename Fn>
+    void for_each_alive_thing(Fn &&fn) noexcept;
+
+    /// @brief Returns the number of currently alive non-nil things.
+    USize alive_thing_count() const noexcept {
+        // m_alive_count starts at 1 (nil occupies slot 0 but is not tracked), subtract it.
+        return m_thing_pool.alive_count() - 1;
     }
 
 private:
@@ -1472,6 +1509,16 @@ inline void PartMetaRegistry::ensure() noexcept {
     pm.get_raw_unchecked = +[](void *reg, Thing thing) noexcept -> void * {
         return &static_cast<impl::Registry *>(reg)->get_unchecked<T>(thing);
     };
+
+    if constexpr (IsShape<ImGuiWriterArchive, T>) {
+        pm.imgui_part = +[](void *part, ImGuiWriterArchive &ar) noexcept {
+            call_shape(ar, *static_cast<T *>(part));
+        };
+    }
+
+    pm.insert_default = +[](void *reg, Thing thing) noexcept {
+        static_cast<impl::Registry *>(reg)->emplace_checked<T>(thing);
+    };
 }
 
 } // namespace fr
@@ -1547,6 +1594,19 @@ inline void Registry::shape(ImGuiWriterArchive &archive) noexcept {
             });
         }
     });
+}
+
+template <typename Fn>
+inline void Registry::for_each_alive_thing(Fn &&fn) noexcept {
+    // A slot at index i is alive when the stored thing's idx field equals i.
+    // Dead slots have their idx overwritten with the next free-list pointer.
+    const USize hwm = m_thing_pool.alive_count() + m_thing_pool.free_count();
+    for (ThingIdx i = 1; i < static_cast<ThingIdx>(hwm); ++i) {
+        Thing t = m_thing_pool.get_by_idx(i);
+        if (t.idx() == i) {
+            std::forward<Fn>(fn)(t);
+        }
+    }
 }
 
 } // namespace fr::impl
