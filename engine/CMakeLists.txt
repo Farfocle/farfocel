@@ -121,6 +121,9 @@ set(ENGINE_SOURCES
     "src/physics/spatial_hash_grid.cpp"
     "src/physics/systems.cpp"
 
+#### devtools
+    "src/devtools/inspector.cpp"
+
 #### platform
     "src/platform/sdl3/sdl_window.cpp"
 
