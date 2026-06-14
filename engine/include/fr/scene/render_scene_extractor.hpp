@@ -50,13 +50,13 @@ struct RenderDirectionalShadowSettings {
     Vec3 cascade_half_extents{15.0f, 50.0f, 150.0f};
     Vec3 cascade_depth_ranges{50.0f, 150.0f, 300.0f};
 
-    F32 min_bias{0.0001f};
-    F32 slope_bias{0.0010f};
-    F32 cascade_bias_scale{1.0f};
+    F32 min_bias{0.0010f};
+    F32 slope_bias{0.0030f};
+    F32 cascade_bias_scale{0.0f};
     F32 shadow_strength{1.0f};
 
-    F32 filter_radius_texels{1.35f};
-    F32 cascade_filter_scale{0.35f};
+    F32 filter_radius_texels{1.75f};
+    F32 cascade_filter_scale{0.0f};
 };
 
 /**
