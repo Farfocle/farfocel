@@ -494,10 +494,14 @@ public:
      * @param c The character to be added
      */
     String &append_repeated(USize count, char c) {
-        if (count == 0)
+        if (count == 0) {
             return *this;
+        }
+
+        const USize old_size = size();
 
         std::memset(prepare_append(count), c, count);
+        set_size(old_size + count);
 
         return *this;
     }

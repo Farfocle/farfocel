@@ -1,194 +1,289 @@
 /**
  * @file mesh_compiler.cpp
  * @author Tfoedy
- * @brief Serializes RawMesh structures into .fmesh binary files.
+ * @brief Mesh asset compiler.
  */
 
 #include "mesh_compiler.hpp"
-#include "fr/core/mem.hpp"
-#include "fr/data/asset_format.hpp"
+
+#include "fr/asset/asset_format.hpp"
+#include "fr/core/file.hpp"
+#include "fr/core/macros.hpp"
+#include "fr/core/string.hpp"
+#include "fr/logger/logger.hpp"
+
 #include <cstdio>
-#include <fstream>
 
 namespace fr::asscooker {
+namespace {
 
-/**
- * @brief Serializes an intermediate RawMesh into the cooked `.fmesh` binary format.
- *
- * @details
- * The resulting file layout is:
- *
- * - MeshHeader
- * - CookedSubMesh array
- * - CookedVertex array
- * - U32 index array
- * - optional null-terminated string block
- *
- * All write operations are validated. If any write fails, the function returns false.
- *
- * @param raw_mesh Source mesh in the intermediate cooker format.
- * @param output_path Destination path for the cooked `.fmesh` file.
- * @return True when the mesh was written successfully, false otherwise.
- */
-bool compile_mesh(const RawMesh &raw_mesh, StringView output_path) {
-    String out_path_str = String::from_view(output_path);
+template <typename T, USize N>
+void copy_array(const T (&src)[N], T (&dst)[N]) noexcept {
+    for (USize i = 0; i < N; ++i) {
+        dst[i] = src[i];
+    }
+}
 
-    std::ofstream file(out_path_str.data(), std::ios::binary);
-    if (!file.is_open()) {
+[[nodiscard]] bool checked_mul_u_size(USize a, USize b, USize &out) noexcept {
+    if (a != 0 && b > static_cast<USize>(-1) / a) {
         return false;
     }
 
-    auto write_items = [&](const void *data, USize item_size, USize item_count) -> bool {
-        if (item_count == 0) {
-            return true;
-        }
+    out = a * b;
+    return true;
+}
 
-        if (!data || item_size == 0) {
-            return false;
-        }
+[[nodiscard]] bool write_file_bytes(std::FILE *file, const void *data, USize size) noexcept {
+    if (size == 0) {
+        return true;
+    }
 
-        file.write(static_cast<const char *>(data),
-                   static_cast<std::streamsize>(item_size * item_count));
+    FR_ASSERT(file, "file must be non-null");
+    FR_ASSERT(data, "source data must be non-null");
 
-        return static_cast<bool>(file);
-    };
+    return static_cast<USize>(std::fwrite(data, 1, size, file)) == size;
+}
 
-    if (raw_mesh.vertices.is_empty() || raw_mesh.indices.is_empty() ||
-        raw_mesh.submeshes.is_empty()) {
+[[nodiscard]] bool validate_mesh(const RawMesh &mesh, StringView output_path) noexcept {
+    if (output_path.is_empty()) {
+        FR_LOG_ERR("[Cooker] Cannot compile mesh with empty output path.");
         return false;
     }
 
-    USize string_block_capacity = 0;
-    for (USize i = 0; i < raw_mesh.submeshes.size(); ++i) {
-        const RawSubMesh &sub = raw_mesh.submeshes[i];
-
-        if (sub.albedo_path.size() > 0) {
-            string_block_capacity += sub.albedo_path.size() + 1;
-        }
-
-        if (sub.normal_path.size() > 0) {
-            string_block_capacity += sub.normal_path.size() + 1;
-        }
-
-        if (sub.extra_path.size() > 0) {
-            string_block_capacity += sub.extra_path.size() + 1;
-        }
+    if (mesh.vertices.is_empty()) {
+        FR_LOG_ERR("[Cooker] Mesh has no vertices: {}", output_path);
+        return false;
     }
 
-    DynamicArray<char> string_table;
-    string_table.reserve(string_block_capacity);
+    if (mesh.indices.is_empty()) {
+        FR_LOG_ERR("[Cooker] Mesh has no indices: {}", output_path);
+        return false;
+    }
 
-    auto add_string = [&](const String &str) -> U32 {
-        if (str.size() == 0) {
-            return 0xFFFFFFFF;
-        }
+    if (mesh.submeshes.is_empty()) {
+        FR_LOG_ERR("[Cooker] Mesh has no submeshes: {}", output_path);
+        return false;
+    }
 
-        U32 offset = static_cast<U32>(string_table.size());
-        USize current_size = string_table.size();
+    if (mesh.vertices.size() > static_cast<USize>(0xFFFFFFFFu) ||
+        mesh.indices.size() > static_cast<USize>(0xFFFFFFFFu) ||
+        mesh.submeshes.size() > static_cast<USize>(0xFFFFFFFFu)) {
+        FR_LOG_ERR("[Cooker] Mesh is too large for `.fmesh`: {}", output_path);
+        return false;
+    }
 
-        string_table.grow_default(current_size + str.size() + 1);
-        fr::mem::copy_raw_range(str.data(), str.size(), string_table.data() + current_size);
-        string_table[current_size + str.size()] = '\0';
+    for (USize i = 0; i < mesh.submeshes.size(); ++i) {
+        const RawSubMesh &submesh = mesh.submeshes[i];
 
-        return offset;
-    };
-
-    DynamicArray<CookedSubMesh> disk_submeshes;
-    disk_submeshes.reserve(raw_mesh.submeshes.size());
-
-    for (USize i = 0; i < raw_mesh.submeshes.size(); ++i) {
-        const RawSubMesh &raw_sub = raw_mesh.submeshes[i];
-
-        if (raw_sub.index_count == 0) {
+        if (submesh.index_count == 0) {
+            FR_LOG_ERR("[Cooker] Mesh submesh {} has zero index count: {}", i, output_path);
             return false;
         }
 
-        CookedSubMesh cooked{};
-        cooked.index_count = raw_sub.index_count;
-        cooked.index_offset = raw_sub.index_offset;
-        cooked.vertex_offset = raw_sub.vertex_offset;
-        cooked.pass_type = raw_sub.pass_type;
+        if (submesh.pass_type > 2) {
+            FR_LOG_ERR("[Cooker] Mesh submesh {} has invalid pass type {}.", i, submesh.pass_type);
+            return false;
+        }
 
-        fr::mem::copy_raw_range(raw_sub.transform, 16, cooked.transform);
-        fr::mem::copy_raw_range(raw_sub.aabb_min, 3, cooked.aabb_min);
-        fr::mem::copy_raw_range(raw_sub.aabb_max, 3, cooked.aabb_max);
+        const USize index_begin = static_cast<USize>(submesh.index_offset);
+        const USize index_count = static_cast<USize>(submesh.index_count);
 
-        cooked.albedo_path_offset = add_string(raw_sub.albedo_path);
-        cooked.normal_path_offset = add_string(raw_sub.normal_path);
-        cooked.extra_path_offset = add_string(raw_sub.extra_path);
+        if (index_begin >= mesh.indices.size()) {
+            FR_LOG_ERR("[Cooker] Mesh submesh {} index offset is out of bounds: {}", i,
+                       output_path);
+            return false;
+        }
 
-        disk_submeshes.push_back(cooked);
+        if (index_count > mesh.indices.size() - index_begin) {
+            FR_LOG_ERR("[Cooker] Mesh submesh {} index range is out of bounds: {}", i, output_path);
+            return false;
+        }
+
+        const USize vertex_offset = static_cast<USize>(submesh.vertex_offset);
+        if (vertex_offset >= mesh.vertices.size()) {
+            FR_LOG_ERR("[Cooker] Mesh submesh {} vertex offset is out of bounds: {}", i,
+                       output_path);
+            return false;
+        }
+
+        const USize local_vertex_count = mesh.vertices.size() - vertex_offset;
+        const USize index_end = index_begin + index_count;
+
+        for (USize index = index_begin; index < index_end; ++index) {
+            const USize local_index = static_cast<USize>(mesh.indices[index]);
+
+            if (local_index >= local_vertex_count) {
+                FR_LOG_ERR("[Cooker] Mesh submesh {} references vertex out of bounds: {}", i,
+                           output_path);
+                return false;
+            }
+        }
     }
 
-    DynamicArray<CookedVertex> safe_vertices;
-    safe_vertices.reserve(raw_mesh.vertices.size());
+    return true;
+}
 
+[[nodiscard]] CookedSubMesh make_cooked_submesh(const RawSubMesh &raw_submesh) noexcept {
+    CookedSubMesh cooked{};
+    cooked.index_count = raw_submesh.index_count;
+    cooked.index_offset = raw_submesh.index_offset;
+    cooked.vertex_offset = raw_submesh.vertex_offset;
+    cooked.pass_type = raw_submesh.pass_type;
+    cooked.material_id = raw_submesh.material_id;
+
+    copy_array(raw_submesh.transform, cooked.transform);
+    copy_array(raw_submesh.aabb_min, cooked.aabb_min);
+    copy_array(raw_submesh.aabb_max, cooked.aabb_max);
+
+    return cooked;
+}
+
+[[nodiscard]] CookedVertex make_cooked_vertex(const RawVertex &raw_vertex) noexcept {
+    CookedVertex cooked{};
+
+    copy_array(raw_vertex.position, cooked.position);
+    copy_array(raw_vertex.normal, cooked.normal);
+    copy_array(raw_vertex.uv, cooked.uv);
+    copy_array(raw_vertex.tangent, cooked.tangent);
+
+    return cooked;
+}
+
+[[nodiscard]] bool write_cooked_submeshes(std::FILE *file, const RawMesh &raw_mesh,
+                                          StringView output_path) noexcept {
+    for (USize i = 0; i < raw_mesh.submeshes.size(); ++i) {
+        const CookedSubMesh cooked = make_cooked_submesh(raw_mesh.submeshes[i]);
+
+        if (!write_file_bytes(file, &cooked, sizeof(CookedSubMesh))) {
+            FR_LOG_ERR("[Cooker] Failed to write mesh submesh {}: {}", i, output_path);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+[[nodiscard]] bool write_cooked_vertices(std::FILE *file, const RawMesh &raw_mesh,
+                                         StringView output_path) noexcept {
     for (USize i = 0; i < raw_mesh.vertices.size(); ++i) {
-        const RawVertex &rv = raw_mesh.vertices[i];
+        const CookedVertex cooked = make_cooked_vertex(raw_mesh.vertices[i]);
 
-        CookedVertex cv{};
-        cv.position[0] = rv.position[0];
-        cv.position[1] = rv.position[1];
-        cv.position[2] = rv.position[2];
-
-        cv.normal[0] = rv.normal[0];
-        cv.normal[1] = rv.normal[1];
-        cv.normal[2] = rv.normal[2];
-
-        cv.uv[0] = rv.uv[0];
-        cv.uv[1] = rv.uv[1];
-
-        cv.tangent[0] = rv.tangent[0];
-        cv.tangent[1] = rv.tangent[1];
-        cv.tangent[2] = rv.tangent[2];
-        cv.tangent[3] = rv.tangent[3];
-
-        safe_vertices.push_back(cv);
+        if (!write_file_bytes(file, &cooked, sizeof(CookedVertex))) {
+            FR_LOG_ERR("[Cooker] Failed to write mesh vertex {}: {}", i, output_path);
+            return false;
+        }
     }
 
-    MeshHeader header{};
+    return true;
+}
+
+[[nodiscard]] bool write_cooked_indices(std::FILE *file, const RawMesh &raw_mesh,
+                                        StringView output_path) noexcept {
+    USize index_data_size = 0;
+    if (!checked_mul_u_size(raw_mesh.indices.size(), sizeof(U32), index_data_size)) {
+        FR_LOG_ERR("[Cooker] Mesh index data size overflow: {}", output_path);
+        return false;
+    }
+
+    if (!write_file_bytes(file, raw_mesh.indices.data(), index_data_size)) {
+        FR_LOG_ERR("[Cooker] Failed to write mesh index data: {}", output_path);
+        return false;
+    }
+
+    return true;
+}
+
+} // namespace
+
+bool compile_mesh(const RawMesh &raw_mesh, StringView output_path) noexcept {
+    if (!validate_mesh(raw_mesh, output_path)) {
+        return false;
+    }
+
+    const USize vertex_count = raw_mesh.vertices.size();
+    const USize index_count = raw_mesh.indices.size();
+    const USize submesh_count = raw_mesh.submeshes.size();
+
+    USize vertex_data_size = 0;
+    USize index_data_size = 0;
+    USize submesh_data_size = 0;
+
+    if (!checked_mul_u_size(vertex_count, sizeof(CookedVertex), vertex_data_size) ||
+        !checked_mul_u_size(index_count, sizeof(U32), index_data_size) ||
+        !checked_mul_u_size(submesh_count, sizeof(CookedSubMesh), submesh_data_size)) {
+        FR_LOG_ERR("[Cooker] Mesh binary section size overflow: {}", output_path);
+        return false;
+    }
+
+    if (vertex_data_size > static_cast<USize>(0xFFFFFFFFu) ||
+        index_data_size > static_cast<USize>(0xFFFFFFFFu) ||
+        submesh_data_size > static_cast<USize>(0xFFFFFFFFu)) {
+        FR_LOG_ERR("[Cooker] Mesh binary sections are too large for `.fmesh` header: {}",
+                   output_path);
+        return false;
+    }
+
+    CookedMeshHeader header{};
     header.base.verify[0] = 'F';
     header.base.verify[1] = 'M';
     header.base.verify[2] = 'S';
     header.base.verify[3] = 'H';
-    header.base.version = 1;
+    header.base.version = 2;
 
-    header.vertex_count = static_cast<U32>(safe_vertices.size());
-    header.index_count = static_cast<U32>(raw_mesh.indices.size());
-    header.submesh_count = static_cast<U32>(disk_submeshes.size());
+    header.vertex_count = static_cast<U32>(vertex_count);
+    header.index_count = static_cast<U32>(index_count);
+    header.submesh_count = static_cast<U32>(submesh_count);
 
-    header.vertex_data_size = header.vertex_count * sizeof(CookedVertex);
-    header.index_data_size = header.index_count * sizeof(U32);
-    header.submesh_data_size = header.submesh_count * sizeof(CookedSubMesh);
-    header.string_block_size = static_cast<U32>(string_table.size());
+    header.vertex_data_size = static_cast<U32>(vertex_data_size);
+    header.index_data_size = static_cast<U32>(index_data_size);
+    header.submesh_data_size = static_cast<U32>(submesh_data_size);
+    header.reserved0 = 0;
 
-    fr::mem::copy_raw_range(raw_mesh.aabb_min, 3, header.aabb_min);
-    fr::mem::copy_raw_range(raw_mesh.aabb_max, 3, header.aabb_max);
+    copy_array(raw_mesh.aabb_min, header.aabb_min);
+    copy_array(raw_mesh.aabb_max, header.aabb_max);
 
-    if (!write_items(&header, sizeof(MeshHeader), 1)) {
+    String out_path = String::from_view(output_path);
+
+    std::FILE *file = std::fopen(out_path.c_str(), "wb");
+    if (!file) {
+        FR_LOG_ERR("[Cooker] Failed to open cooked mesh for writing: {}", output_path);
         return false;
     }
 
-    if (!write_items(disk_submeshes.data(), sizeof(CookedSubMesh), header.submesh_count)) {
+    bool ok = true;
+
+    /*
+        Runtime loader reads .fmesh in this exact order:
+        header -> submeshes -> vertices -> indices.
+    */
+    if (ok && !write_file_bytes(file, &header, sizeof(CookedMeshHeader))) {
+        FR_LOG_ERR("[Cooker] Failed to write mesh header: {}", output_path);
+        ok = false;
+    }
+
+    if (ok && !write_cooked_submeshes(file, raw_mesh, output_path)) {
+        ok = false;
+    }
+
+    if (ok && !write_cooked_vertices(file, raw_mesh, output_path)) {
+        ok = false;
+    }
+
+    if (ok && !write_cooked_indices(file, raw_mesh, output_path)) {
+        ok = false;
+    }
+
+    if (std::fclose(file) != 0) {
+        FR_LOG_ERR("[Cooker] Failed to close cooked mesh file after writing: {}", output_path);
         return false;
     }
 
-    if (!write_items(safe_vertices.data(), sizeof(CookedVertex), header.vertex_count)) {
+    if (!ok) {
         return false;
     }
 
-    if (!write_items(raw_mesh.indices.data(), sizeof(U32), header.index_count)) {
-        return false;
-    }
-
-    if (header.string_block_size > 0) {
-        if (!write_items(string_table.data(), 1, header.string_block_size)) {
-            return false;
-        }
-    }
-
-    file.close();
-    return static_cast<bool>(file);
+    FR_LOG("[Cooker] Wrote cooked mesh: {}", output_path);
+    return true;
 }
 
 } // namespace fr::asscooker

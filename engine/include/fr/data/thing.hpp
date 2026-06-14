@@ -14,6 +14,7 @@
 #include "fr/core/macros.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
+#include <new>
 
 namespace fr {
 
@@ -162,14 +163,20 @@ public:
         m_alloc = alloc;
 
         void *raw = m_alloc->allocate(sizeof(Things), alignof(Things));
-        m_things = static_cast<Things *>(raw);
+        // m_things = static_cast<Things *>(raw);
 
-        std::memset(m_things, 0, sizeof(Things));
+        // std::memset(m_things, 0, sizeof(Things)); this causes error on gcc
+        m_things = new (raw) Things{};
     }
 
     ~ThingPool() noexcept {
         using Things = Array<Thing, MAX_THINGS>;
 
+        if (!m_things)
+            return;
+
+        // m_alloc->deallocate(m_things, sizeof(Things), alignof(Things)); fix karol
+        m_things->~Things();
         m_alloc->deallocate(m_things, sizeof(Things), alignof(Things));
     }
 
@@ -278,13 +285,21 @@ public:
                 }
             });
         } else {
+            // fix karol
             archive.prop("alive_count", m_alive_count);
             archive.prop("free_count", m_free_count);
             archive.prop("free_next", m_free_next);
-            using Things = Array<Thing, MAX_THINGS>;
-            std::memset(m_things, 0, sizeof(Things));
+
+            for (USize i = 0; i < MAX_THINGS; ++i) {
+                (*m_things)[i] = Thing{};
+            }
+
             archive.list("slots", [&](Archive &la) {
                 USize n = la.current_list_size();
+
+                FR_ASSERT(n <= MAX_THINGS,
+                          "serialized thing list is larger than ThingPool capacity");
+
                 for (USize i = 0; i < n; ++i) {
                     ThingRaw raw = 0;
                     la.prop("", raw);

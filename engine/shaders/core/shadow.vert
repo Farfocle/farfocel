@@ -6,6 +6,8 @@ out vec2 v_uv;                               // passed to fragment shader
 
 layout (std140, binding = 0) buffer TransformSSBO { mat4 u_models[]; };
 
+const uint DIRECTIONAL_CASCADE_COUNT = 3u;
+// ugly but works for now
 struct DirLight {
     vec3 direction;
     float intensity;
@@ -13,9 +15,10 @@ struct DirLight {
     vec3 color;
     float padding;
 
-    mat4 light_view_proj[4];
+    mat4 light_view_proj[3];
     vec4 cascade_splits;
     vec4 shadow_params;
+    vec4 shadow_filter_params;
 };
 
 layout (std140, binding = 3) buffer DirLightsSSBO { DirLight u_dir_lights[]; };

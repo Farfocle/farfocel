@@ -8,13 +8,17 @@
 
 #include "fr/core/typedefs.hpp"
 #include "fr/renderer/render_device.hpp"
-#include "fr/renderer/renderer_constants.hpp"
+#include "fr/renderer/renderer_limits.hpp"
 
 namespace fr {
 
+/**
+ * @brief Global buffers bound by renderer passes.
+ */
 struct RendererGlobalBuffers {
     BufferHandle transform_ssbo{};
     BufferHandle shadow_transform_ssbo{};
+    BufferHandle materials_ssbo{};
     BufferHandle camera_ssbo{};
 
     BufferHandle point_lights_ssbo{};
@@ -25,6 +29,9 @@ struct RendererGlobalBuffers {
     BufferHandle spot_shadows_ssbo{};
 };
 
+/**
+ * @brief Small textures used when a material texture is missing.
+ */
 struct RendererFallbackTextures {
     TextureHandle white{};
     TextureHandle black{};
@@ -32,6 +39,9 @@ struct RendererFallbackTextures {
     TextureHandle material{};
 };
 
+/**
+ * @brief Deferred renderer GBuffer targets.
+ */
 struct GBufferTargets {
     TextureHandle albedo{};
     TextureHandle normal{};
@@ -42,6 +52,9 @@ struct GBufferTargets {
     U32 height{0};
 };
 
+/**
+ * @brief Final color target produced by lighting and post passes.
+ */
 struct FinalColorTarget {
     TextureHandle color{};
 
@@ -49,28 +62,44 @@ struct FinalColorTarget {
     U32 height{0};
 };
 
-struct AmbientOcclusionTargets {
+/**
+ * @brief Ambient occlusion pass resources.
+ */
+struct AmbientOcclusionResources {
     TextureHandle target{};
+
     U32 width{0};
     U32 height{0};
 };
 
-struct ShadowResources {
+/**
+ * @brief Directional shadow atlas resources.
+ */
+struct DirectionalShadowResources {
     TextureHandle map{};
     U32 size{4096};
 };
 
+/**
+ * @brief Point shadow cubemap resources.
+ */
 struct PointShadowResources {
     TextureHandle cube_maps[MAX_POINT_SHADOWS]{};
     U32 size{512};
 };
 
+/**
+ * @brief Spot shadow atlas resources.
+ */
 struct SpotShadowResources {
     TextureHandle atlas{};
     U32 size{2048};
     U32 tile_size{1024};
 };
 
+/**
+ * @brief Image-based lighting resources.
+ */
 struct IblResources {
     TextureHandle source{};
 
@@ -89,6 +118,25 @@ struct IblResources {
     bool irradiance_ready{false};
     bool prefiltered_ready{false};
     bool brdf_lut_ready{false};
+};
+
+/**
+ * @brief All GPU resources owned by Renderer.
+ */
+struct RendererResources {
+    RendererGlobalBuffers global{};
+    RendererFallbackTextures fallback{};
+
+    FinalColorTarget final{};
+
+    GBufferTargets gbuffer{};
+    AmbientOcclusionResources ao{};
+
+    DirectionalShadowResources shadow{};
+    PointShadowResources point_shadows{};
+    SpotShadowResources spot_shadows{};
+
+    IblResources ibl{};
 };
 
 } // namespace fr

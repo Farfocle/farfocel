@@ -2,27 +2,37 @@
  * @file slot_map.hpp
  * @author Tfoedy
  *
- * @brief Farfocel's SlotMap!
- *
- *
+ * @brief Generational slot map storage.
  */
 
 #pragma once
+
+#include <type_traits>
+#include <utility>
+
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
-#include <type_traits>
 
 namespace fr {
+
 constexpr USize DEF_SLOTMAP_ALLOC_COUNT = 128;
+constexpr U32 INVALID_SLOT_INDEX = 0xFFFFFFFFu;
+
 struct SlotKey {
-    U32 index = 0;
-    // even number of generation = not alive, odd = alive and used
-    U32 generation = 0;
+    U32 index{0};
+
+    /// @brief Even generation means dead/free, odd generation means alive.
+    U32 generation{0};
+
+    [[nodiscard]] bool is_valid_generation() const noexcept {
+        return (generation & 1u) != 0;
+    }
 
     [[nodiscard]] bool operator==(const SlotKey &other) const noexcept {
         return index == other.index && generation == other.generation;
     }
+
     [[nodiscard]] bool operator!=(const SlotKey &other) const noexcept {
         return !(*this == other);
     }
@@ -30,98 +40,166 @@ struct SlotKey {
 
 template <typename T>
 struct Slot {
-    U32 generation = 0;
+    U32 generation{0};
+
     union {
-        U32 next_free_index = 0xFFFFFFFF;
+        U32 next_free_index = INVALID_SLOT_INDEX;
         alignas(T) unsigned char data[sizeof(T)];
     };
 };
 
 template <typename T>
 class SlotMap {
+    static_assert(std::is_nothrow_move_constructible_v<T>,
+                  "SlotMap<T> requires nothrow move construction");
+    static_assert(std::is_nothrow_destructible_v<T>, "SlotMap<T> requires nothrow destruction");
+
 public:
     SlotMap()
-        : SlotMap(DEF_SLOTMAP_ALLOC_COUNT) {
+        : SlotMap(static_cast<U32>(DEF_SLOTMAP_ALLOC_COUNT)) {
     }
+
     explicit SlotMap(U32 preallocation_count) {
-        FR_ASSERT(preallocation_count > 0, "prealloc count must be greated than 0");
+        FR_ASSERT(preallocation_count > 0, "preallocation count must be greater than 0");
         reserve(preallocation_count);
     }
 
     SlotMap(const SlotMap &) = delete;
     SlotMap &operator=(const SlotMap &) = delete;
 
-    SlotMap(SlotMap &&) noexcept = default;
-    SlotMap &operator=(SlotMap &&) noexcept = default;
+    SlotMap(SlotMap &&other) noexcept
+        : m_slots(std::move(other.m_slots)),
+          m_next_free_index(other.m_next_free_index),
+          m_size(other.m_size) {
+        other.m_next_free_index = INVALID_SLOT_INDEX;
+        other.m_size = 0;
+    }
 
-    ~SlotMap() {
+    SlotMap &operator=(SlotMap &&other) noexcept {
+        if (this == &other) {
+            return *this;
+        }
+
+        clear();
+
+        m_slots = std::move(other.m_slots);
+        m_next_free_index = other.m_next_free_index;
+        m_size = other.m_size;
+
+        other.m_next_free_index = INVALID_SLOT_INDEX;
+        other.m_size = 0;
+
+        return *this;
+    }
+
+    ~SlotMap() noexcept {
         clear();
     }
 
     template <typename... Args>
     [[nodiscard]] SlotKey add(Args &&...args) {
-        if (m_next_free_index == 0xFFFFFFFF) {
-            U32 current_capacity = m_slots.size();
-            // geometrical growth
-            U32 new_capacity =
-                (current_capacity > 0) ? (current_capacity * 2) : DEF_SLOTMAP_ALLOC_COUNT;
+        if (m_next_free_index == INVALID_SLOT_INDEX) {
+            const U32 current_capacity = static_cast<U32>(m_slots.size());
+            const U32 new_capacity = current_capacity > 0
+                                         ? current_capacity * 2
+                                         : static_cast<U32>(DEF_SLOTMAP_ALLOC_COUNT);
+
             reserve(new_capacity);
         }
 
-        U32 index = m_next_free_index;
-        m_next_free_index = m_slots[index].next_free_index;
+        const U32 index = m_next_free_index;
+        Slot<T> &slot = m_slots[index];
 
-        m_slots[index].generation++;
+        FR_ASSERT(!do_is_alive(slot.generation), "free slot has an alive generation");
 
-        new (&m_slots[index].data) T(std::forward<Args>(args)...);
-        m_size++;
-        return SlotKey{index, m_slots[index].generation};
+        m_next_free_index = slot.next_free_index;
+
+        ++slot.generation;
+
+        if (slot.generation == 0) [[unlikely]] {
+            ++slot.generation;
+        }
+
+        new (static_cast<void *>(slot.data)) T(std::forward<Args>(args)...);
+
+        ++m_size;
+        return SlotKey{index, slot.generation};
     }
 
     [[nodiscard]] T *get_data(SlotKey key) noexcept {
-        if (key.index >= m_slots.size())
+        if (key.index >= m_slots.size()) {
             return nullptr;
-        if (m_slots[key.index].generation != key.generation)
+        }
+
+        Slot<T> &slot = m_slots[key.index];
+
+        if (slot.generation != key.generation) {
             return nullptr;
+        }
 
-        if (key.generation % 2 == 0)
+        if (!do_is_alive(key.generation)) {
             return nullptr;
+        }
 
-        return reinterpret_cast<T *>(m_slots[key.index].data);
-    }
-
-    [[nodiscard]] T *get_data_unsafe(SlotKey key) noexcept {
-        FR_ASSERT(key.index < m_slots.size(), "index outside range");
-        return reinterpret_cast<T *>(m_slots[key.index].data);
+        return do_data_ptr(slot);
     }
 
     [[nodiscard]] const T *get_data(SlotKey key) const noexcept {
-        if (key.index >= m_slots.size())
+        if (key.index >= m_slots.size()) {
             return nullptr;
+        }
 
-        if (m_slots[key.index].generation != key.generation)
+        const Slot<T> &slot = m_slots[key.index];
+
+        if (slot.generation != key.generation) {
             return nullptr;
+        }
 
-        if (key.generation % 2 == 0)
+        if (!do_is_alive(key.generation)) {
             return nullptr;
+        }
 
-        return reinterpret_cast<const T *>(m_slots[key.index].data);
+        return do_data_ptr(slot);
+    }
+
+    /**
+     * @brief Returns slot data without validating the generation.
+     * @pre key.index must be in range and the slot must be alive.
+     */
+    [[nodiscard]] T *get_data_unsafe(SlotKey key) noexcept {
+        FR_ASSERT(key.index < m_slots.size(), "slot index outside range");
+        FR_ASSERT(do_is_alive(m_slots[key.index].generation), "slot is not alive");
+
+        return do_data_ptr(m_slots[key.index]);
+    }
+
+    /**
+     * @brief Returns slot data without validating the generation.
+     * @pre key.index must be in range and the slot must be alive.
+     */
+    [[nodiscard]] const T *get_data_unsafe(SlotKey key) const noexcept {
+        FR_ASSERT(key.index < m_slots.size(), "slot index outside range");
+        FR_ASSERT(do_is_alive(m_slots[key.index].generation), "slot is not alive");
+
+        return do_data_ptr(m_slots[key.index]);
     }
 
     bool erase(SlotKey key) noexcept {
         T *obj = get_data(key);
-        if (!obj)
+        if (!obj) {
             return false;
+        }
 
         obj->~T();
 
-        auto &slot = m_slots[key.index];
-        slot.generation++;
+        Slot<T> &slot = m_slots[key.index];
 
+        ++slot.generation;
         slot.next_free_index = m_next_free_index;
         m_next_free_index = key.index;
 
-        m_size--;
+        FR_ASSERT(m_size > 0, "SlotMap size underflow");
+        --m_size;
 
         return true;
     }
@@ -134,65 +212,129 @@ public:
         return m_slots.size();
     }
 
-    void clear() noexcept {
-        if (m_size == 0)
-            return;
+    [[nodiscard]] bool is_empty() const noexcept {
+        return m_size == 0;
+    }
 
-        FR_ASSERT(m_slots.size() > 0, "clear called on an empty buffer");
-
+    template <typename Fn>
+    void for_each_alive(Fn &&fn) noexcept {
         const U32 capacity = static_cast<U32>(m_slots.size());
 
-        // little optimization for basic data types with no allocations
-        if constexpr (std::is_trivially_destructible_v<T>) {
-            for (U32 i = 0; i < capacity; ++i) {
-                auto &slot = m_slots[i];
-                // equivalent to: if (gen % 2 != 0) gen++; but without branching
-                slot.generation = (slot.generation + 1) & ~1u;
-                slot.next_free_index = i + 1;
-            }
-        } else {
-            for (U32 i = 0; i < capacity; i++) {
-                auto &slot = m_slots[i];
-                // if used
-                if (slot.generation % 2 != 0) {
-                    reinterpret_cast<T *>(&slot.data)->~T();
-                    slot.generation++;
-                }
+        for (U32 i = 0; i < capacity; ++i) {
+            Slot<T> &slot = m_slots[i];
 
-                slot.next_free_index = i + 1;
+            if (!do_is_alive(slot.generation)) {
+                continue;
             }
+
+            fn(SlotKey{i, slot.generation}, *do_data_ptr(slot));
+        }
+    }
+
+    template <typename Fn>
+    void for_each_alive(Fn &&fn) const noexcept {
+        const U32 capacity = static_cast<U32>(m_slots.size());
+
+        for (U32 i = 0; i < capacity; ++i) {
+            const Slot<T> &slot = m_slots[i];
+
+            if (!do_is_alive(slot.generation)) {
+                continue;
+            }
+
+            fn(SlotKey{i, slot.generation}, *do_data_ptr(slot));
+        }
+    }
+
+    void clear() noexcept {
+        const U32 capacity = static_cast<U32>(m_slots.size());
+
+        if (capacity == 0) {
+            m_next_free_index = INVALID_SLOT_INDEX;
+            m_size = 0;
+            return;
         }
 
-        if (capacity > 0)
-            m_slots[capacity - 1].next_free_index = 0xFFFFFFFF;
+        for (U32 i = 0; i < capacity; ++i) {
+            Slot<T> &slot = m_slots[i];
+
+            if (do_is_alive(slot.generation)) {
+                do_data_ptr(slot)->~T();
+                ++slot.generation;
+            }
+
+            slot.generation &= ~1u;
+            slot.next_free_index = i + 1;
+        }
+
+        m_slots[capacity - 1].next_free_index = INVALID_SLOT_INDEX;
 
         m_next_free_index = 0;
         m_size = 0;
     }
 
+    /**
+     * @brief Reserves at least capacity slots.
+     *
+     * @details Active objects are moved with their move constructors. This keeps SlotMap valid for
+     * non-trivial types such as DynamicArray/String owning asset records.
+     */
     void reserve(U32 capacity) {
-        U32 old_capacity = static_cast<U32>(m_slots.size());
-        FR_ASSERT(capacity > old_capacity, "New capacity must be greater than current capacity");
-        if (capacity <= old_capacity)
+        const U32 old_capacity = static_cast<U32>(m_slots.size());
+
+        if (capacity <= old_capacity) {
             return;
-
-        m_slots.reserve(capacity);
-
-        for (U32 i = old_capacity; i < capacity; ++i) {
-            m_slots.emplace_back();
-            if (i == capacity - 1)
-                m_slots[i].next_free_index = m_next_free_index;
-            else
-                m_slots[i].next_free_index = i + 1;
         }
 
+        DynamicArray<Slot<T>> new_slots;
+        new_slots.reserve(capacity);
+
+        for (U32 i = 0; i < capacity; ++i) {
+            new_slots.emplace_back();
+        }
+
+        for (U32 i = 0; i < old_capacity; ++i) {
+            Slot<T> &src = m_slots[i];
+            Slot<T> &dst = new_slots[i];
+
+            dst.generation = src.generation;
+
+            if (do_is_alive(src.generation)) {
+                new (static_cast<void *>(dst.data)) T(std::move(*do_data_ptr(src)));
+                do_data_ptr(src)->~T();
+            } else {
+                dst.next_free_index = src.next_free_index;
+            }
+        }
+
+        for (U32 i = old_capacity; i < capacity; ++i) {
+            Slot<T> &slot = new_slots[i];
+
+            slot.generation = 0;
+            slot.next_free_index = (i + 1 < capacity) ? i + 1 : m_next_free_index;
+        }
+
+        m_slots = std::move(new_slots);
         m_next_free_index = old_capacity;
     }
 
 private:
-    fr::DynamicArray<Slot<T>> m_slots;
-    U32 m_next_free_index = 0xFFFFFFFF;
-    U32 m_size{};
+    [[nodiscard]] static bool do_is_alive(U32 generation) noexcept {
+        return (generation & 1u) != 0;
+    }
+
+    [[nodiscard]] static T *do_data_ptr(Slot<T> &slot) noexcept {
+        return reinterpret_cast<T *>(slot.data);
+    }
+
+    [[nodiscard]] static const T *do_data_ptr(const Slot<T> &slot) noexcept {
+        return reinterpret_cast<const T *>(slot.data);
+    }
+
+private:
+    DynamicArray<Slot<T>> m_slots{};
+    U32 m_next_free_index{INVALID_SLOT_INDEX};
+    USize m_size{0};
 };
 
 } // namespace fr

@@ -1,10 +1,7 @@
 /**
  * @file strong_handle.hpp
  * @author Tfoedy
- * @brief Strongly-typed handle for resource management.
- * The template is used to differentiate between different types of resources at compile time.
- *
- *
+ * @brief Strongly typed generational handles.
  */
 
 #pragma once
@@ -12,18 +9,27 @@
 #include "fr/core/slot_map.hpp"
 
 namespace fr {
+
 template <typename Tag>
 struct StrongHandle {
     SlotKey key{};
 
+    /**
+     * @brief Returns true if the handle looks non-null.
+     *
+     * @details This only checks the handle generation parity. It does not prove that the referenced
+     * resource is still alive inside its owning SlotMap. Owners must validate handles through their
+     * storage before dereferencing.
+     */
     [[nodiscard]] bool is_valid() const noexcept {
-        return key.generation % 2 != 0;
+        return key.is_valid_generation();
     }
 
-    bool operator==(const StrongHandle &other) const noexcept {
+    [[nodiscard]] bool operator==(const StrongHandle &other) const noexcept {
         return key == other.key;
     }
-    bool operator!=(const StrongHandle &other) const noexcept {
+
+    [[nodiscard]] bool operator!=(const StrongHandle &other) const noexcept {
         return key != other.key;
     }
 };
