@@ -60,7 +60,7 @@ static void inspector_system(fr::Scope scope) {
     ImGui::SetNextWindowPos(ImVec2(20.0f, 20.0f), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin("World Inspector")) {
-        fr::devtools::inspector(scope.world(), state);
+        fr::devtools::inspector_ui(scope.world(), state);
     }
 
     ImGui::End();

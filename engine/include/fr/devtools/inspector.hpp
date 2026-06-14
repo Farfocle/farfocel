@@ -30,7 +30,7 @@ struct InspectorState {
 };
 
 /// @brief Draws the parts editor for a single thing inline.
-void thing_parts_editor(World &world, Thing thing) noexcept;
+void thing_parts_editor_ui(World &world, Thing thing) noexcept;
 
 /**
  * @brief Draws the world inspector inside the current ImGui window.
@@ -40,6 +40,6 @@ void thing_parts_editor(World &world, Thing thing) noexcept;
  *
  * @note Must be called between `ImGui::Begin` / `ImGui::End`.
  */
-void inspector(World &world, InspectorState &state) noexcept;
+void inspector_ui(World &world, InspectorState &state) noexcept;
 
 } // namespace fr::devtools

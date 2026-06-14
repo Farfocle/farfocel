@@ -81,6 +81,10 @@ set(ENGINE_HEADERS
 #### devtools
     "include/fr/devtools/imgui_archive.hpp"
     "include/fr/devtools/inspector.hpp"
+    "include/fr/devtools/thing_explorer.hpp"
+    "include/fr/devtools/pool_explorer.hpp"
+    "include/fr/devtools/thing_inspector.hpp"
+    "include/fr/devtools/pool_inspector.hpp"
 
 #### renderer
     "include/fr/renderer/frustum.hpp"
@@ -123,6 +127,11 @@ set(ENGINE_SOURCES
 
 #### devtools
     "src/devtools/inspector.cpp"
+    "src/devtools/thing_parts_editor.cpp"
+    "src/devtools/thing_explorer.cpp"
+    "src/devtools/pool_explorer.cpp"
+    "src/devtools/thing_inspector.cpp"
+    "src/devtools/pool_inspector.cpp"
 
 #### platform
     "src/platform/sdl3/sdl_window.cpp"
