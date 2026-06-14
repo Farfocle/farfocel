@@ -23,7 +23,7 @@ namespace fr {
 
 /**
  * @brief Filtering options for a query.
- * @note Use `Signature::from_parts<...>()` to construct the fields.
+ * @note Use Signature::from_parts<...>() to construct the fields.
  */
 struct QueryOptions {
     Signature with{};
@@ -38,40 +38,40 @@ struct PartMeta {
     USize size{0};
     USize alignment{0};
 
-    /// Destroy the part object at `part`.
+    /// Destroy the part object at part.
     void (*destroy)(void *part) noexcept {nullptr};
 
-    /// Copy-construct a T at `dst` from `src`. Null when T is not nothrow copy constructible.
+    /// Copy-construct a T at dst from src. Null when T is not nothrow copy constructible.
     void (*copy_construct)(void *dst, const void *src) noexcept {nullptr};
 
-    /// Move the part at `part_ptr` into the registry (emplace / insert by move).
+    /// Move the part at part_ptr into the registry (emplace / insert by move).
     void (*commit_insert_move)(void *registry, Thing thing, void *part_ptr) noexcept {nullptr};
 
-    /// Copy the part at `part_ptr` into the registry (emplace / insert by copy).
+    /// Copy the part at part_ptr into the registry (emplace / insert by copy).
     void (*commit_insert_copy)(void *registry, Thing thing,
                                const void *part_ptr) noexcept {nullptr};
 
-    /// Destroy the part owned by `thing` in the registry (checked).
+    /// Destroy the part owned by thing in the registry (checked).
     void (*commit_destroy)(void *registry, Thing thing) noexcept {nullptr};
 
-    /// Overwrite the part owned by `thing` with the value at `next_ptr` (in-place mutate).
+    /// Overwrite the part owned by thing with the value at next_ptr (in-place mutate).
     void (*commit_mutate)(void *registry, Thing thing, void *next_ptr) noexcept {nullptr};
 
-    /// Destroy the part owned by `thing` directly through its PartPool slot.
+    /// Destroy the part owned by thing directly through its PartPool slot.
     void (*pool_destroy)(void *pool, Thing thing) noexcept {nullptr};
 
-    /// Return a raw pointer to the part owned by `thing`, or nullptr if not present (checked).
+    /// Return a raw pointer to the part owned by thing, or nullptr if not present (checked).
     void *(*get_raw)(void *registry, Thing thing) noexcept {nullptr};
 
-    /// Move the part at `part_ptr` into the registry unchecked.
+    /// Move the part at part_ptr into the registry unchecked.
     void (*commit_emplace_unchecked_move)(void *registry, Thing thing,
                                           void *part_ptr) noexcept {nullptr};
 
-    /// Copy the part at `part_ptr` into the registry unchecked.
+    /// Copy the part at part_ptr into the registry unchecked.
     void (*commit_emplace_unchecked_copy)(void *registry, Thing thing,
                                           const void *part_ptr) noexcept {nullptr};
 
-    /// Return a raw pointer to the part owned by `thing` (unchecked — caller guarantees alive + has
+    /// Return a raw pointer to the part owned by thing (unchecked — caller guarantees alive + has
     /// part).
     void *(*get_raw_unchecked)(void *registry, Thing thing) noexcept {nullptr};
 };
@@ -81,9 +81,9 @@ struct PartMeta {
 /**
  * @brief Lookup table of PartMeta indexed by TypeIdx.
  *
- * Lives inside `Registry`. Populated via `register_part<T>()`, which is called by
- * `Registry::ensure<T>()`. `register_part<T>()`'s body is defined below the Registry
- * class because it needs `impl::PartPool<T>` to be complete.
+ * Lives inside Registry. Populated via register_part<T>(), which is called by
+ * Registry::ensure<T>(). register_part<T>()'s body is defined below the Registry
+ * class because it needs impl::PartPool<T> to be complete.
  */
 class PartMetaRegistry {
 public:
@@ -98,7 +98,7 @@ public:
         return m_parts[tidx.idx()];
     }
 
-    /// @brief Registers metadata for part `T` (safe to call multiple times).
+    /// @brief Registers metadata for part T (safe to call multiple times).
     template <typename T>
     void ensure() noexcept;
 
@@ -167,20 +167,20 @@ public:
     SignaturePool &signature_pool_mut() noexcept;
 
     /**
-     * @brief Returns a pointer to the part pool `T`.
-     * @note If the part pool `T` is not yet created returns nullptr.
+     * @brief Returns a pointer to the part pool T.
+     * @note If the part pool T is not yet created returns nullptr.
      */
     template <typename T>
     PartPool<T> *try_part_pool_mut() noexcept;
 
     /**
-     * @brief Returns a reference to the part pool `T`.
-     * @note If the part pool `T` is not yet created, it will be created first.
+     * @brief Returns a reference to the part pool T.
+     * @note If the part pool T is not yet created, it will be created first.
      */
     template <typename T>
     PartPool<T> &part_pool_mut() noexcept;
 
-    /// @brief Returns true if a part pool for part `T` has been created.
+    /// @brief Returns true if a part pool for part T has been created.
     template <typename T>
     bool check_part_pool() const noexcept;
 
@@ -205,47 +205,47 @@ public:
     // --------------------------------------------------------- Part Operations
 
     /**
-     * @brief Returns true if the thing has part `T`.
+     * @brief Returns true if the thing has part T.
      * @note Returns false if pool is missing or thing is dead.
-     * @note Returns true for nil thing when the part pool `T` exists.
+     * @note Returns true for nil thing when the part pool T exists.
      */
     template <typename T>
     bool has(Thing thing) const noexcept;
 
     /**
-     * @brief Emplaces or overrides part `T` on a thing.
+     * @brief Emplaces or overrides part T on a thing.
      * @note If the thing is nil; returns the stub pointer.
      * @note If the thing is dead; return nullptr.
-     * @note If the thing does NOT have a part `T`; inserts the new part, returns a pointer to it.
-     * @note If the thing does have a part `T`; overrides it, returns a pointer to it.
+     * @note If the thing does NOT have a part T; inserts the new part, returns a pointer to it.
+     * @note If the thing does have a part T; overrides it, returns a pointer to it.
      */
     template <typename T, typename... Args>
     T *emplace_checked(Thing thing, Args &&...args) noexcept;
 
-    /// @brief Emplaces part `T` on a thing without any checks.
+    /// @brief Emplaces part T on a thing without any checks.
     template <typename T, typename... Args>
     T &emplace_unchecked(Thing thing, Args &&...args) noexcept;
 
     /**
-     * @brief Destroys part `T` on a thing if present.
-     * @return false if thing is nil, dead, pool is missing, or thing does not have part `T`, true
+     * @brief Destroys part T on a thing if present.
+     * @return false if thing is nil, dead, pool is missing, or thing does not have part T, true
      * otherwise.
      */
     template <typename T>
     bool destroy_checked(Thing thing) noexcept;
 
-    /// @brief Destroys part `T` on a thing without any checks.
+    /// @brief Destroys part T on a thing without any checks.
     template <typename T>
     void destroy_unchecked(Thing thing) noexcept;
 
     /**
-     * @brief Returns a pointer to part `T` owned by the thing, or nullptr if not found.
+     * @brief Returns a pointer to part T owned by the thing, or nullptr if not found.
      * @note If the thing is nil; returns the stub pointer.
      */
     template <typename T>
     T *get_checked(Thing thing) noexcept;
 
-    /// @brief Returns a reference to part `T` on the thing without any checks.
+    /// @brief Returns a reference to part T on the thing without any checks.
     template <typename T>
     T &get_unchecked(Thing thing) noexcept;
 
@@ -293,8 +293,8 @@ public:
     void shape(JsonReaderArchive &archive) noexcept;
 
     /**
-     * @brief Ensures the part pool and PartMeta for part `T` both exist.
-     * @note Idempotent - safe to call before any insert, destroy, or query on part `T`.
+     * @brief Ensures the part pool and PartMeta for part T both exist.
+     * @note Idempotent - safe to call before any insert, destroy, or query on part T.
      */
     template <typename T>
     PartPool<T> &ensure() noexcept {
@@ -312,7 +312,7 @@ public:
         return m_meta_registry;
     }
 
-    /// @brief Returns true if `thing` owns the part for `tidx`.
+    /// @brief Returns true if thing owns the part for tidx.
     bool has_raw(TypeIdx tidx, Thing thing) const noexcept {
         if (do_pool_absent(tidx)) [[unlikely]] {
             return false;
@@ -327,8 +327,8 @@ public:
     }
 
     /**
-     * @brief Move the part at `part_ptr` into the registry for `thing` (checked).
-     * @pre `ensure<T>()` must have been called for this part type.
+     * @brief Move the part at part_ptr into the registry for thing (checked).
+     * @pre ensure<T>() must have been called for this part type.
      */
     void insert_raw(TypeIdx tidx, Thing thing, void *part_ptr) noexcept {
         FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
@@ -336,8 +336,8 @@ public:
     }
 
     /**
-     * @brief Copy the part at `part_ptr` into the registry for `thing` (checked).
-     * @pre `ensure<T>()` must have been called for this part type.
+     * @brief Copy the part at part_ptr into the registry for thing (checked).
+     * @pre ensure<T>() must have been called for this part type.
      */
     void insert_raw(TypeIdx tidx, Thing thing, const void *part_ptr) noexcept {
         FR_ASSERT(m_meta_registry.has(tidx), "PartMeta not registered; call ensure<T>() first");
@@ -345,7 +345,7 @@ public:
     }
 
     /**
-     * @brief Move the part at `part_ptr` into the registry for `thing` (unchecked).
+     * @brief Move the part at part_ptr into the registry for thing (unchecked).
      * @pre Caller guarantees: thing is alive and does not yet own this part.
      */
     void emplace_unchecked_raw(TypeIdx tidx, Thing thing, void *part_ptr) noexcept {
@@ -355,7 +355,7 @@ public:
     }
 
     /**
-     * @brief Copy the part at `part_ptr` into the registry for `thing` (unchecked).
+     * @brief Copy the part at part_ptr into the registry for thing (unchecked).
      * @pre Caller guarantees: thing is alive and does not yet own this part.
      */
     void emplace_unchecked_raw(TypeIdx tidx, Thing thing, const void *part_ptr) noexcept {
@@ -365,8 +365,8 @@ public:
     }
 
     /**
-     * @brief Destroy the part owned by `thing` (checked).
-     * @note No-op if `PartMeta` is not registered or the thing does not own this part.
+     * @brief Destroy the part owned by thing (checked).
+     * @note No-op if PartMeta is not registered or the thing does not own this part.
      */
     void destroy_raw(TypeIdx tidx, Thing thing) noexcept {
         if (!m_meta_registry.has(tidx)) [[unlikely]] {
@@ -376,7 +376,7 @@ public:
     }
 
     /**
-     * @brief Destroy the part owned by `thing` (unchecked).
+     * @brief Destroy the part owned by thing (unchecked).
      * @pre Caller guarantees: thing is alive and owns this part.
      */
     void destroy_unchecked_raw(TypeIdx tidx, Thing thing) noexcept {
@@ -387,8 +387,8 @@ public:
     }
 
     /**
-     * @brief Return a raw pointer to the part owned by `thing`, or nullptr if absent (checked).
-     * @note Returns nullptr if `PartMeta` is not registered.
+     * @brief Return a raw pointer to the part owned by thing, or nullptr if absent (checked).
+     * @note Returns nullptr if PartMeta is not registered.
      */
     void *get_raw(TypeIdx tidx, Thing thing) noexcept {
         if (!m_meta_registry.has(tidx)) [[unlikely]] {
@@ -398,7 +398,7 @@ public:
     }
 
     /**
-     * @brief Return a raw pointer to the part owned by `thing` (unchecked).
+     * @brief Return a raw pointer to the part owned by thing (unchecked).
      * @pre Caller guarantees: thing is alive and owns this part.
      */
     void *get_unchecked_raw(TypeIdx tidx, Thing thing) noexcept {
@@ -640,10 +640,10 @@ inline void Registry::do_create_part_pool(TypeIdx tidx) noexcept {
     }
 
     if constexpr (IsShape<JsonReaderArchive, T>) {
-        fns.read = +[](void *reg_v, TypeIdx tidx, JsonReaderArchive &archive) noexcept {
+        fns.read = +[](void *reg_v, TypeIdx part_tidx, JsonReaderArchive &archive) noexcept {
             Registry *registry = static_cast<Registry *>(reg_v);
             PartPool<T> &pool = registry->ensure<T>();
-            pool.shape(archive, registry->signature_pool_mut(), tidx);
+            pool.shape(archive, registry->signature_pool_mut(), part_tidx);
         };
     }
 }
@@ -937,7 +937,7 @@ private:
 /**
  * @brief Iterates all descendants of a thing in depth-first order.
  * @tparam Include List of part types that children must have and that are yielded.
- * @note Root must own a `Relations` part; if it does not, the query yields nothing.
+ * @note Root must own a Relations part; if it does not, the query yields nothing.
  */
 template <typename... Include>
 class DeepHierarchyQuery {
@@ -1219,7 +1219,7 @@ inline auto Registry::bottom_up_query(QueryOptions options) noexcept {
 } // namespace fr::impl
 
 // =================================== DataMeta::register_part<T> Implementation
-// Placed here because it needs `impl::Registry` and `impl::PartPool<T>` to be fully defined.
+// Placed here because it needs impl::Registry and impl::PartPool<T> to be fully defined.
 
 namespace fr {
 
