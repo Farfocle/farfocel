@@ -155,6 +155,7 @@ target_link_libraries(engine
     PRIVATE
         farfocel_compiler_options
         glad
+    )
 
 target_link_libraries(engine PRIVATE glad)
 target_link_libraries(engine PUBLIC glm::glm)
@@ -163,6 +164,8 @@ target_link_libraries(engine PRIVATE cgltf)
 target_link_libraries(engine PRIVATE stb)
 target_link_libraries(engine PUBLIC wyhash)
 target_link_libraries(engine PUBLIC imgui)
+target_link_libraries(engine PUBLIC yyjson)
+
 
 target_include_directories(engine
     PUBLIC
