@@ -152,12 +152,13 @@ target_link_libraries(engine
         farfocel_compiler_options
         glad
 
-    PUBLIC
-        yyjson
-        glm::glm
-        SDL3::SDL3-static
-        wyhash
-)
+target_link_libraries(engine PRIVATE glad)
+target_link_libraries(engine PUBLIC glm::glm)
+target_link_libraries(engine PUBLIC SDL3::SDL3-static)
+target_link_libraries(engine PRIVATE cgltf)
+target_link_libraries(engine PRIVATE stb)
+target_link_libraries(engine PUBLIC wyhash)
+target_link_libraries(engine PUBLIC imgui)
 
 target_include_directories(engine
     PUBLIC

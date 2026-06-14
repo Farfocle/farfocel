@@ -8,6 +8,7 @@
 #pragma once
 
 #include "fr/core/math.hpp"
+#include "fr/core/meta.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/data/thing.hpp"
 #include "glm/gtc/quaternion.hpp"
@@ -27,13 +28,27 @@ struct RelationsPart {
     Thing next_sibling{Thing::nil()};
     HierarchyDepth depth{ROOT_HIERARCHY_DEPTH};
 
-    FR_SHAPE({
-        FR_PROP(parent);
-        FR_PROP(first_child);
-        FR_PROP(prev_sibling);
-        FR_PROP(next_sibling);
-        FR_PROP(depth);
-    })
+    template <typename Archive>
+    void shape(Archive &archive) noexcept {
+        if constexpr (Archive::action == ArchiveAction::Write) {
+            Thing p = parent;
+            Thing fc = first_child;
+            Thing ps = prev_sibling;
+            Thing ns = next_sibling;
+            HierarchyDepth d = depth;
+            archive.prop("parent", p);
+            archive.prop("first_child", fc);
+            archive.prop("prev_sibling", ps);
+            archive.prop("next_sibling", ns);
+            archive.prop("depth", d);
+        } else {
+            archive.prop("parent", parent);
+            archive.prop("first_child", first_child);
+            archive.prop("prev_sibling", prev_sibling);
+            archive.prop("next_sibling", next_sibling);
+            archive.prop("depth", depth);
+        }
+    }
 };
 
 // ================================================================== Transforms
@@ -111,3 +126,7 @@ struct WorldTransformPart {
     }
 };
 } // namespace fr
+
+FR_TYPE(fr::RelationsPart);
+FR_TYPE(fr::WorldTransformPart);
+FR_TYPE(fr::LocalTransformPart);

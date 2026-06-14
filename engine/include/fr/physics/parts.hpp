@@ -17,6 +17,7 @@
 #include "fr/core/array.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/math.hpp"
+#include "fr/core/meta.hpp"
 #include "fr/core/shape.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/data/thing.hpp"
@@ -178,6 +179,18 @@ struct Sphere {
 /// @brief Identifies which collision primitive is active inside a `Collider`.
 enum class ColliderKind : U8 { AABB, Sphere };
 
+template <typename Archive>
+void shape(Archive &a, ColliderKind &value) {
+    if constexpr (Archive::action == ArchiveAction::Write) {
+        const char *str = value == ColliderKind::AABB ? "aabb" : "sphere";
+        a.prop("@value", str);
+    } else {
+        StringView str;
+        a.prop("@value", str);
+        value = (str == "sphere") ? ColliderKind::Sphere : ColliderKind::AABB;
+    }
+}
+
 /**
  * @brief A broad-phase collision primitive attached to a thing.
  *
@@ -195,9 +208,14 @@ struct ColliderPart {
 
     Vec3 offset{};
 
-    ColliderPart() noexcept {
+    ColliderPart() noexcept {};
 
-    };
+    FR_SHAPE({
+        FR_PROP(kind);
+        FR_PROP(aabb);
+        FR_PROP(sphere);
+        FR_PROP(offset);
+    })
 
     /// @brief Creates an AABB collider with an optional local-space offset.
     static ColliderPart make_aabb(AABB box, Vec3 offset = {}) noexcept {
@@ -254,6 +272,11 @@ struct CollisionEventsPart {
     USize count{0};
     Array<Thing, MAX_COLLISIONS> contacts{
         Array<Thing, MAX_COLLISIONS>::from_repeated(Thing::nil())};
+
+    FR_SHAPE({
+        FR_PROP(count);
+        FR_PROP(contacts);
+    })
 
     /// @brief Returns true if `p` thing appears in the current contact list.
     bool has(Thing thing) const noexcept {
@@ -312,7 +335,7 @@ struct PhysicsMaterialPart {
  * Bodies with `inv_mass == 0` are immovable static bodies - all force, impulse, and
  * integration steps are no-ops for them.
  */
-struct RigitBodyPart {
+struct RigidBodyPart {
     /// @brief Linear velocity in world space (m/s).
     Vec3 velocity{0.0f, 0.0f, 0.0f};
 
@@ -356,11 +379,11 @@ struct RigitBodyPart {
     })
 
     /// @brief Creates a dynamic body with the given mass (kg) and optional surface properties.
-    static RigitBodyPart make_dynamic(F32 mass, F32 restitution = 0.3f,
+    static RigidBodyPart make_dynamic(F32 mass, F32 restitution = 0.3f,
                                       F32 friction = 0.5f) noexcept {
         FR_ASSERT(mass > 0.0f, "mass must be positive");
 
-        RigitBodyPart rb;
+        RigidBodyPart rb;
         rb.inv_mass = 1.0f / mass;
         rb.restitution = restitution;
         rb.friction = friction;
@@ -369,8 +392,8 @@ struct RigitBodyPart {
     }
 
     /// @brief Creates an immovable static body (inv_mass = 0).
-    static RigitBodyPart make_static(F32 restitution = 0.3f, F32 friction = 0.5f) noexcept {
-        RigitBodyPart rb;
+    static RigidBodyPart make_static(F32 restitution = 0.3f, F32 friction = 0.5f) noexcept {
+        RigidBodyPart rb;
         rb.inv_mass = 0.0f;
         rb.restitution = restitution;
         rb.friction = friction;
@@ -440,7 +463,7 @@ inline bool check_collision(const ColliderPart &a, const ColliderPart &b) noexce
  * @brief Result of a narrow-phase collision test.
  *
  * @details If `hit` is false, the `manifold` field is uninitialised and must not be read.
- * The `Thing` fields inside `manifold` are left as `Thing::nil()` — the caller (narrowphase
+ * The `Thing` fields inside `manifold` are left as `Thing::nil()` - the caller (narrowphase
  * system) is responsible for filling them in before storing the manifold.
  */
 struct CollisionManifoldResult {
@@ -621,3 +644,9 @@ inline CollisionManifoldResult compute_manifold(const ColliderPart &a,
 }
 
 } // namespace fr
+
+FR_TYPE(fr::MassPart);
+FR_TYPE(fr::ColliderPart);
+FR_TYPE(fr::CollisionEventsPart);
+FR_TYPE(fr::PhysicsMaterialPart);
+FR_TYPE(fr::RigidBodyPart);

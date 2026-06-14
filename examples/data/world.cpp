@@ -32,6 +32,7 @@ struct Sprite {
 
 void system_a(fr::Scope scope) {
     std::cout << "---- system_a: \n";
+
     for (auto [thing, pos] : scope.query<Pos>()) {
         std::cout << fr::format("thing: {}; pos: {}", thing, pos) << "\n";
     }
@@ -39,6 +40,7 @@ void system_a(fr::Scope scope) {
 
 void system_b(fr::Scope scope) {
     std::cout << "---- system_b: \n";
+
     for (auto [thing, sprite] : scope.query<Sprite>()) {
         std::cout << fr::format("thing: {}; sprite: {}", thing, sprite) << "\n";
     }

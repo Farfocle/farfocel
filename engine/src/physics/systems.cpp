@@ -275,7 +275,7 @@ void rigit_body_force_system(Scope scope) {
     const F32 dt = state.dt;
     const Vec3 gravity = state.options.gravity;
 
-    for (auto [thing, rb, lt] : scope.query<RigitBodyPart, LocalTransformPart>()) {
+    for (auto [thing, rb, lt] : scope.query<RigidBodyPart, LocalTransformPart>()) {
         if (rb.inv_mass <= 0.0f) {
             continue;
         }
@@ -308,8 +308,8 @@ void rigit_body_collision_resolution_system(Scope scope) {
     PhysicsState &state = scope.get_resource<PhysicsState>();
 
     for (const CollisionManifold &m : state.manifold_pool.manifolds()) {
-        RigitBodyPart *rb_a = scope.try_get<RigitBodyPart>(m.a);
-        RigitBodyPart *rb_b = scope.try_get<RigitBodyPart>(m.b);
+        RigidBodyPart *rb_a = scope.try_get<RigidBodyPart>(m.a);
+        RigidBodyPart *rb_b = scope.try_get<RigidBodyPart>(m.b);
 
         const F32 inv_a = rb_a ? rb_a->inv_mass : 0.0f;
         const F32 inv_b = rb_b ? rb_b->inv_mass : 0.0f;

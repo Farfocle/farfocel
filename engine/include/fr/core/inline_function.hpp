@@ -206,4 +206,7 @@ using Fn96 = InlineFunction<S, 96>;
 
 template <typename S>
 using Fn128 = InlineFunction<S, 128>;
+
+template <typename S>
+using Fn512 = InlineFunction<S, 512>;
 } // namespace fr
