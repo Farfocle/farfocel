@@ -28,6 +28,7 @@
 
 #include <utility>
 
+#include <glm/common.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -35,6 +36,13 @@
 
 namespace fr::asscooker {
 namespace {
+
+/**
+ * @brief Transmission materials are approximated by regular alpha blending until the renderer
+ * supports physical transmission/refraction.
+ */
+constexpr F32 MIN_TRANSMISSION_VISUAL_ALPHA = 0.15f;
+constexpr F32 TRANSMISSION_EPSILON = 0.001f;
 
 /**
  * @brief Texture baking task type.
@@ -45,13 +53,40 @@ enum class TextureBakeTaskType {
 };
 
 /**
+ * @brief Texture source used by glTF texture baking.
+ *
+ * @details
+ * A source can either be an external file path or an embedded GLB buffer view.
+ */
+struct TextureBakeSource {
+    String path{};
+    String label{};
+
+    const Byte *memory{nullptr};
+    USize memory_size{0};
+
+    [[nodiscard]] bool has_file() const noexcept {
+        return path.size() != 0;
+    }
+
+    [[nodiscard]] bool has_memory() const noexcept {
+        return memory != nullptr && memory_size != 0;
+    }
+
+    [[nodiscard]] bool is_valid() const noexcept {
+        return has_file() || has_memory();
+    }
+};
+
+/**
  * @brief Texture baking task queued by the glTF importer.
  */
 struct TextureBakeTask {
     TextureBakeTaskType type{TextureBakeTaskType::RegularTexture};
 
-    String in_path{};
-    String secondary_path{};
+    TextureBakeSource source{};
+    TextureBakeSource secondary_source{};
+
     String out_path{};
 
     AssetId output_id{};
@@ -74,6 +109,20 @@ struct ImportedMaterialRecord {
     const cgltf_material *source{nullptr};
     AssetId material_id{};
     String material_path{};
+};
+
+/**
+ * @brief Resolved alpha/pass information for a glTF material.
+ */
+struct ImportedMaterialAlpha {
+    MaterialBlendMode blend_mode{MaterialBlendMode::Opaque};
+    U32 pass_type{0};
+
+    F32 alpha{1.0f};
+    F32 alpha_cutoff{0.5f};
+
+    bool uses_transmission{false};
+    F32 transmission_factor{0.0f};
 };
 
 /**
@@ -146,6 +195,10 @@ static U32 mip_count_for_size(S32 width, S32 height) noexcept {
     }
 
     return mip_count;
+}
+
+static F32 clamp01(F32 value) noexcept {
+    return glm::clamp(value, 0.0f, 1.0f);
 }
 
 /**
@@ -249,6 +302,22 @@ static String replace_filename(StringView path, StringView new_filename) noexcep
     }
 
     return join_paths(parent, new_filename);
+}
+
+static void sanitize_filename(String &name) noexcept {
+    if (name.size() == 0) {
+        name = String::from_chars("unnamed");
+        return;
+    }
+
+    for (USize i = 0; i < name.size(); ++i) {
+        char &c = name[i];
+
+        if (c == ' ' || c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' ||
+            c == '<' || c == '>' || c == '|') {
+            c = '_';
+        }
+    }
 }
 
 static AssetId asset_id_from_logical_path(StringView path) noexcept {
@@ -356,6 +425,85 @@ static void log_texture_decode_failure(StringView path, const char *label) noexc
                label ? label : "texture", path, exists ? "yes" : "no", reason ? reason : "unknown");
 }
 
+static void log_texture_memory_decode_failure(StringView label) noexcept {
+    const char *reason = stbi_failure_reason();
+
+    FR_LOG_ERR("[Cooker] Failed to load embedded {}. stb: {}", label, reason ? reason : "unknown");
+}
+
+static USize find_image_index(const cgltf_data *data, const cgltf_image *image) noexcept {
+    if (!data || !image || !data->images) {
+        return 0;
+    }
+
+    for (cgltf_size i = 0; i < data->images_count; ++i) {
+        if (&data->images[i] == image) {
+            return static_cast<USize>(i);
+        }
+    }
+
+    return 0;
+}
+
+static String make_embedded_texture_filename(const cgltf_data *data, const cgltf_image *image,
+                                             StringView semantic) noexcept {
+    String name;
+
+    if (image && image->name && image->name[0] != '\0') {
+        name = String::from_chars(image->name);
+    } else {
+        name = String::from_chars("image_");
+        append_decimal(name, find_image_index(data, image));
+    }
+
+    sanitize_filename(name);
+
+    if (!semantic.is_empty()) {
+        name.push_back('_');
+        name.append(semantic);
+    }
+
+    name.append(".ftex");
+    return name;
+}
+
+static String image_uri_source_path(const cgltf_image *image, StringView base_dir) {
+    if (!image || !image->uri) {
+        return String::from_chars("");
+    }
+
+    return join_paths(base_dir, StringView(image->uri));
+}
+
+static TextureBakeSource make_texture_source(const cgltf_texture_view &view, StringView base_dir,
+                                             StringView label) noexcept {
+    TextureBakeSource source{};
+    source.label = String::from_view(label);
+
+    if (!view.texture || !view.texture->image) {
+        return source;
+    }
+
+    const cgltf_image *image = view.texture->image;
+
+    if (image->uri) {
+        source.path = image_uri_source_path(image, base_dir);
+        return source;
+    }
+
+    if (image->buffer_view && image->buffer_view->buffer && image->buffer_view->buffer->data &&
+        image->buffer_view->size > 0) {
+        const Byte *buffer_data = reinterpret_cast<const Byte *>(image->buffer_view->buffer->data);
+
+        source.memory = buffer_data + static_cast<USize>(image->buffer_view->offset);
+        source.memory_size = static_cast<USize>(image->buffer_view->size);
+
+        return source;
+    }
+
+    return source;
+}
+
 static bool has_pending_texture_task(const DynamicArray<TextureBakeTask> &tasks,
                                      const String &output_path) noexcept {
     for (USize i = 0; i < tasks.size(); ++i) {
@@ -367,9 +515,10 @@ static bool has_pending_texture_task(const DynamicArray<TextureBakeTask> &tasks,
     return false;
 }
 
-static void queue_regular_texture(DynamicArray<TextureBakeTask> &tasks, const String &input_path,
-                                  const String &output_path, bool is_srgb, bool force) {
-    if (input_path.size() == 0 || output_path.size() == 0) {
+static void queue_regular_texture(DynamicArray<TextureBakeTask> &tasks,
+                                  const TextureBakeSource &source, const String &output_path,
+                                  bool is_srgb, bool force) {
+    if (!source.is_valid() || output_path.size() == 0) {
         return;
     }
 
@@ -379,7 +528,7 @@ static void queue_regular_texture(DynamicArray<TextureBakeTask> &tasks, const St
 
     TextureBakeTask task{};
     task.type = TextureBakeTaskType::RegularTexture;
-    task.in_path = String::from_view(input_path.view());
+    task.source = source;
     task.out_path = String::from_view(output_path.view());
     task.output_id = asset_id_from_logical_path(output_path.view());
     task.is_srgb = is_srgb;
@@ -389,10 +538,14 @@ static void queue_regular_texture(DynamicArray<TextureBakeTask> &tasks, const St
 }
 
 static void queue_material_extra_texture(DynamicArray<TextureBakeTask> &tasks,
-                                         const String &metallic_roughness_path,
-                                         const String &occlusion_path, const String &output_path,
-                                         bool force) {
+                                         const TextureBakeSource &metallic_roughness_source,
+                                         const TextureBakeSource &occlusion_source,
+                                         const String &output_path, bool force) {
     if (output_path.size() == 0) {
+        return;
+    }
+
+    if (!metallic_roughness_source.is_valid() && !occlusion_source.is_valid()) {
         return;
     }
 
@@ -402,8 +555,8 @@ static void queue_material_extra_texture(DynamicArray<TextureBakeTask> &tasks,
 
     TextureBakeTask task{};
     task.type = TextureBakeTaskType::MaterialExtraTexture;
-    task.in_path = String::from_view(metallic_roughness_path.view());
-    task.secondary_path = String::from_view(occlusion_path.view());
+    task.source = metallic_roughness_source;
+    task.secondary_source = occlusion_source;
     task.out_path = String::from_view(output_path.view());
     task.output_id = asset_id_from_logical_path(output_path.view());
     task.is_srgb = false;
@@ -412,37 +565,38 @@ static void queue_material_extra_texture(DynamicArray<TextureBakeTask> &tasks,
     tasks.push_back(std::move(task));
 }
 
-static String get_source_texture_path(const cgltf_texture_view &view, StringView base_dir) {
-    if (!view.texture || !view.texture->image || !view.texture->image->uri) {
+static String make_regular_ftex_path(const cgltf_data *data, const cgltf_texture_view &view,
+                                     StringView base_dir, StringView semantic) {
+    if (!view.texture || !view.texture->image) {
         return String::from_chars("");
     }
 
-    return join_paths(base_dir, StringView(view.texture->image->uri));
-}
+    const cgltf_image *image = view.texture->image;
 
-static String make_regular_ftex_path(const cgltf_texture_view &view, StringView base_dir) {
-    if (!view.texture || !view.texture->image || !view.texture->image->uri) {
-        return String::from_chars("");
+    if (image->uri) {
+        String source_path = join_paths(base_dir, StringView(image->uri));
+        String cooked_path = replace_extension(source_path.view(), ".ftex");
+
+        warn_if_unstable_logical_path(cooked_path.view(), "texture cooked output");
+        return cooked_path;
     }
 
-    String source_path = join_paths(base_dir, StringView(view.texture->image->uri));
-    String cooked_path = replace_extension(source_path.view(), ".ftex");
+    String filename = make_embedded_texture_filename(data, image, semantic);
+    String cooked_path = join_paths(base_dir, filename.view());
 
     warn_if_unstable_logical_path(cooked_path.view(), "texture cooked output");
-
     return cooked_path;
 }
 
-static String make_extra_ftex_path(const cgltf_material &material, StringView base_dir) {
+static String make_extra_ftex_path(const cgltf_data *data, const cgltf_material &material,
+                                   StringView base_dir) {
     const cgltf_texture_view *source_view = nullptr;
 
     if (material.has_pbr_metallic_roughness &&
         material.pbr_metallic_roughness.metallic_roughness_texture.texture &&
-        material.pbr_metallic_roughness.metallic_roughness_texture.texture->image &&
-        material.pbr_metallic_roughness.metallic_roughness_texture.texture->image->uri) {
+        material.pbr_metallic_roughness.metallic_roughness_texture.texture->image) {
         source_view = &material.pbr_metallic_roughness.metallic_roughness_texture;
-    } else if (material.occlusion_texture.texture && material.occlusion_texture.texture->image &&
-               material.occlusion_texture.texture->image->uri) {
+    } else if (material.occlusion_texture.texture && material.occlusion_texture.texture->image) {
         source_view = &material.occlusion_texture;
     }
 
@@ -450,17 +604,34 @@ static String make_extra_ftex_path(const cgltf_material &material, StringView ba
         return String::from_chars("");
     }
 
-    String source_path = join_paths(base_dir, StringView(source_view->texture->image->uri));
-    StringView stem = file::get_stem(source_path.view());
+    if (source_view->texture->image->uri) {
+        String source_path = join_paths(base_dir, StringView(source_view->texture->image->uri));
+        StringView stem = file::get_stem(source_path.view());
 
-    String filename = String::with_capacity(stem.size() + 12);
-    filename.append(stem);
+        String filename = String::with_capacity(stem.size() + 12);
+        filename.append(stem);
+        filename.append("_extra.ftex");
+
+        String cooked_path = replace_filename(source_path.view(), filename.view());
+
+        warn_if_unstable_logical_path(cooked_path.view(), "material extra texture output");
+        return cooked_path;
+    }
+
+    String name =
+        material.name ? String::from_chars(material.name) : String::from_chars("material");
+
+    sanitize_filename(name);
+
+    String filename = String::with_capacity(name.size() + 32);
+    filename.append(name.view());
+    filename.append("_");
+    append_decimal(filename, find_image_index(data, source_view->texture->image));
     filename.append("_extra.ftex");
 
-    String cooked_path = replace_filename(source_path.view(), filename.view());
+    String cooked_path = join_paths(base_dir, filename.view());
 
     warn_if_unstable_logical_path(cooked_path.view(), "material extra texture output");
-
     return cooked_path;
 }
 
@@ -473,14 +644,7 @@ static String make_material_fmat_path(const cgltf_material &material, StringView
         name = String::from_chars("material");
     }
 
-    for (USize i = 0; i < name.size(); ++i) {
-        char &c = name[i];
-
-        if (c == ' ' || c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' ||
-            c == '<' || c == '>' || c == '|') {
-            c = '_';
-        }
-    }
+    sanitize_filename(name);
 
     String filename = String::with_capacity(name.size() + 32);
     filename.append(name.view());
@@ -526,18 +690,80 @@ static bool find_imported_material(const DynamicArray<ImportedMaterialRecord> &m
     return false;
 }
 
-static String resolve_regular_texture(const cgltf_texture_view &view, StringView base_dir,
-                                      DynamicArray<TextureBakeTask> &tasks, bool is_srgb,
-                                      bool force) {
-    String input_path = get_source_texture_path(view, base_dir);
-    String output_path = make_regular_ftex_path(view, base_dir);
+static F32 material_transmission_factor_or_zero(const cgltf_material &material) noexcept {
+    if (material.has_transmission) {
+        return clamp01(static_cast<F32>(material.transmission.transmission_factor));
+    }
 
-    queue_regular_texture(tasks, input_path, output_path, is_srgb, force);
+    return 0.0f;
+}
+
+static bool material_uses_transmission(const cgltf_material &material,
+                                       F32 &out_transmission_factor) noexcept {
+    out_transmission_factor = material_transmission_factor_or_zero(material);
+
+    if (out_transmission_factor > TRANSMISSION_EPSILON) {
+        return true;
+    }
+
+    if (material.has_transmission &&
+        material.transmission.transmission_texture.texture != nullptr) {
+        out_transmission_factor = 1.0f;
+        return true;
+    }
+
+    return false;
+}
+
+static ImportedMaterialAlpha resolve_material_alpha(const cgltf_material &material,
+                                                    F32 base_alpha) noexcept {
+    ImportedMaterialAlpha result{};
+    result.alpha = clamp01(base_alpha);
+    result.alpha_cutoff = glm::clamp(static_cast<F32>(material.alpha_cutoff), 0.0f, 1.0f);
+
+    if (material.alpha_mode == cgltf_alpha_mode_mask) {
+        result.blend_mode = MaterialBlendMode::Masked;
+        result.pass_type = 1;
+        return result;
+    }
+
+    if (material.alpha_mode == cgltf_alpha_mode_blend) {
+        result.blend_mode = MaterialBlendMode::Transparent;
+        result.pass_type = 2;
+        return result;
+    }
+
+    F32 transmission_factor = 0.0f;
+    if (material_uses_transmission(material, transmission_factor)) {
+        result.blend_mode = MaterialBlendMode::Transparent;
+        result.pass_type = 2;
+        result.uses_transmission = true;
+        result.transmission_factor = transmission_factor;
+
+        const F32 opacity = 1.0f - transmission_factor;
+        result.alpha = glm::clamp(result.alpha * opacity, MIN_TRANSMISSION_VISUAL_ALPHA, 1.0f);
+
+        return result;
+    }
+
+    result.blend_mode = MaterialBlendMode::Opaque;
+    result.pass_type = 0;
+    return result;
+}
+
+static String resolve_regular_texture(const cgltf_data *data, const cgltf_texture_view &view,
+                                      StringView base_dir, DynamicArray<TextureBakeTask> &tasks,
+                                      bool is_srgb, bool force, StringView semantic) {
+    TextureBakeSource source = make_texture_source(view, base_dir, semantic);
+    String output_path = make_regular_ftex_path(data, view, base_dir, semantic);
+
+    queue_regular_texture(tasks, source, output_path, is_srgb, force);
 
     return output_path;
 }
 
-static String resolve_material_extra_texture(const cgltf_material &material, StringView base_dir,
+static String resolve_material_extra_texture(const cgltf_data *data, const cgltf_material &material,
+                                             StringView base_dir,
                                              DynamicArray<TextureBakeTask> &tasks, bool force) {
     bool has_metallic_roughness = false;
     bool has_occlusion = false;
@@ -547,14 +773,12 @@ static String resolve_material_extra_texture(const cgltf_material &material, Str
 
     if (material.has_pbr_metallic_roughness &&
         material.pbr_metallic_roughness.metallic_roughness_texture.texture &&
-        material.pbr_metallic_roughness.metallic_roughness_texture.texture->image &&
-        material.pbr_metallic_roughness.metallic_roughness_texture.texture->image->uri) {
+        material.pbr_metallic_roughness.metallic_roughness_texture.texture->image) {
         metallic_roughness_view = material.pbr_metallic_roughness.metallic_roughness_texture;
         has_metallic_roughness = true;
     }
 
-    if (material.occlusion_texture.texture && material.occlusion_texture.texture->image &&
-        material.occlusion_texture.texture->image->uri) {
+    if (material.occlusion_texture.texture && material.occlusion_texture.texture->image) {
         occlusion_view = material.occlusion_texture;
         has_occlusion = true;
     }
@@ -563,16 +787,18 @@ static String resolve_material_extra_texture(const cgltf_material &material, Str
         return String::from_chars("");
     }
 
-    String metallic_roughness_path =
-        has_metallic_roughness ? get_source_texture_path(metallic_roughness_view, base_dir)
-                               : String::from_chars("");
+    TextureBakeSource metallic_roughness_source =
+        has_metallic_roughness
+            ? make_texture_source(metallic_roughness_view, base_dir, "metallic_roughness")
+            : TextureBakeSource{};
 
-    String occlusion_path =
-        has_occlusion ? get_source_texture_path(occlusion_view, base_dir) : String::from_chars("");
+    TextureBakeSource occlusion_source =
+        has_occlusion ? make_texture_source(occlusion_view, base_dir, "occlusion")
+                      : TextureBakeSource{};
 
-    String output_path = make_extra_ftex_path(material, base_dir);
+    String output_path = make_extra_ftex_path(data, material, base_dir);
 
-    queue_material_extra_texture(tasks, metallic_roughness_path, occlusion_path, output_path,
+    queue_material_extra_texture(tasks, metallic_roughness_source, occlusion_source, output_path,
                                  force);
 
     return output_path;
@@ -597,9 +823,12 @@ static bool cook_gltf_material_asset(const cgltf_data *data, const cgltf_materia
     static_assert(sizeof(raw.base_color_factor) >= sizeof(F32) * 4,
                   "RawMaterial::base_color_factor must contain 4 floats.");
 
+    F32 imported_base_alpha = raw.base_color_factor[3];
+
     if (material.has_pbr_metallic_roughness) {
-        albedo_path = resolve_regular_texture(material.pbr_metallic_roughness.base_color_texture,
-                                              base_dir, texture_tasks, true, force);
+        albedo_path =
+            resolve_regular_texture(data, material.pbr_metallic_roughness.base_color_texture,
+                                    base_dir, texture_tasks, true, force, "albedo");
 
         raw.base_color_factor[0] = material.pbr_metallic_roughness.base_color_factor[0];
         raw.base_color_factor[1] = material.pbr_metallic_roughness.base_color_factor[1];
@@ -608,11 +837,14 @@ static bool cook_gltf_material_asset(const cgltf_data *data, const cgltf_materia
 
         raw.metallic_factor = material.pbr_metallic_roughness.metallic_factor;
         raw.roughness_factor = material.pbr_metallic_roughness.roughness_factor;
+
+        imported_base_alpha = raw.base_color_factor[3];
     }
 
-    normal_path =
-        resolve_regular_texture(material.normal_texture, base_dir, texture_tasks, false, force);
-    extra_path = resolve_material_extra_texture(material, base_dir, texture_tasks, force);
+    normal_path = resolve_regular_texture(data, material.normal_texture, base_dir, texture_tasks,
+                                          false, force, "normal");
+
+    extra_path = resolve_material_extra_texture(data, material, base_dir, texture_tasks, force);
 
     if (albedo_path.size() > 0) {
         raw.albedo_texture = asset_id_from_logical_path(albedo_path.view());
@@ -628,16 +860,21 @@ static bool cook_gltf_material_asset(const cgltf_data *data, const cgltf_materia
 
     raw.shading_model = MaterialShadingModel::PBR;
 
-    if (material.alpha_mode == cgltf_alpha_mode_mask) {
-        raw.blend_mode = MaterialBlendMode::Masked;
-        raw.alpha_cutoff = material.alpha_cutoff;
-    } else if (material.alpha_mode == cgltf_alpha_mode_blend) {
-        raw.blend_mode = MaterialBlendMode::Transparent;
-    } else {
-        raw.blend_mode = MaterialBlendMode::Opaque;
-    }
+    const ImportedMaterialAlpha alpha = resolve_material_alpha(material, imported_base_alpha);
 
-    raw.alpha = raw.base_color_factor[3];
+    raw.blend_mode = alpha.blend_mode;
+    raw.alpha = alpha.alpha;
+    raw.alpha_cutoff = alpha.alpha_cutoff;
+
+    raw.base_color_factor[3] = 1.0f;
+
+    if (alpha.uses_transmission || raw.blend_mode != MaterialBlendMode::Opaque) {
+        FR_LOG("[Cooker] Material '{}': alpha_mode={}, imported_alpha={}, blend={}, alpha={}, "
+               "transmission={}, transmission_factor={}",
+               material.name ? material.name : "<unnamed>", static_cast<U32>(material.alpha_mode),
+               imported_base_alpha, static_cast<U32>(raw.blend_mode), raw.alpha,
+               alpha.uses_transmission ? "yes" : "no", alpha.transmission_factor);
+    }
 
     const bool needs_compile = force || !file::exists(out_material_path);
     if (needs_compile) {
@@ -648,6 +885,184 @@ static bool cook_gltf_material_asset(const cgltf_data *data, const cgltf_materia
 
     append_cooked_asset_output_once(outputs, out_material_id, AssetKind::Material,
                                     out_material_path.view());
+
+    return true;
+}
+
+static bool decode_texture_source(const TextureBakeSource &source, bool is_srgb,
+                                  RawTexture &out_texture) noexcept {
+    S32 width = 0;
+    S32 height = 0;
+    S32 channels = 0;
+
+    if (source.has_file()) {
+        String path_str = String::from_view(source.path.view());
+
+        stbi_set_flip_vertically_on_load(false);
+
+        const bool is_hdr = stbi_is_hdr(path_str.c_str()) != 0;
+
+        if (is_hdr) {
+            F32 *data = stbi_loadf(path_str.c_str(), &width, &height, &channels, 4);
+            if (!data) {
+                log_texture_decode_failure(source.path.view(), source.label.c_str());
+                return false;
+            }
+
+            if (width <= 0 || height <= 0) {
+                FR_LOG_ERR("[Cooker] Invalid HDR texture dimensions: {} ({}x{}).",
+                           source.path.view(), width, height);
+                stbi_image_free(data);
+                return false;
+            }
+
+            out_texture.width = static_cast<U32>(width);
+            out_texture.height = static_cast<U32>(height);
+            out_texture.channels = 4;
+            out_texture.bytes_per_pixel = sizeof(F32) * 4;
+            out_texture.format = CookedTextureFormat::RGBA32F_HDR;
+            out_texture.mip_levels = mip_count_for_size(width, height);
+
+            const USize size = static_cast<USize>(width) * static_cast<USize>(height) *
+                               out_texture.bytes_per_pixel;
+
+            out_texture.pixels.clear();
+            out_texture.pixels.grow_default(size);
+
+            fr::mem::copy_raw_range(reinterpret_cast<const U8 *>(data), size,
+                                    out_texture.pixels.data());
+
+            stbi_image_free(data);
+            return true;
+        }
+
+        stbi_uc *data = stbi_load(path_str.c_str(), &width, &height, &channels, 4);
+        if (!data) {
+            log_texture_decode_failure(source.path.view(), source.label.c_str());
+            return false;
+        }
+
+        if (width <= 0 || height <= 0) {
+            FR_LOG_ERR("[Cooker] Invalid LDR texture dimensions: {} ({}x{}).", source.path.view(),
+                       width, height);
+            stbi_image_free(data);
+            return false;
+        }
+
+        out_texture.width = static_cast<U32>(width);
+        out_texture.height = static_cast<U32>(height);
+        out_texture.channels = 4;
+        out_texture.bytes_per_pixel = 4;
+        out_texture.format =
+            is_srgb ? CookedTextureFormat::RGBA8_SRGB : CookedTextureFormat::RGBA8_UNORM;
+        out_texture.mip_levels = mip_count_for_size(width, height);
+
+        const USize size =
+            static_cast<USize>(width) * static_cast<USize>(height) * out_texture.bytes_per_pixel;
+
+        out_texture.pixels.clear();
+        out_texture.pixels.grow_default(size);
+
+        fr::mem::copy_raw_range(reinterpret_cast<const U8 *>(data), size,
+                                out_texture.pixels.data());
+
+        stbi_image_free(data);
+        return true;
+    }
+
+    if (source.has_memory()) {
+        stbi_set_flip_vertically_on_load(false);
+
+        const int memory_size = static_cast<int>(source.memory_size);
+        const stbi_uc *memory = reinterpret_cast<const stbi_uc *>(source.memory);
+
+        const bool is_hdr = stbi_is_hdr_from_memory(memory, memory_size) != 0;
+
+        if (is_hdr) {
+            F32 *data = stbi_loadf_from_memory(memory, memory_size, &width, &height, &channels, 4);
+            if (!data) {
+                log_texture_memory_decode_failure(source.label.view());
+                return false;
+            }
+
+            if (width <= 0 || height <= 0) {
+                FR_LOG_ERR("[Cooker] Invalid embedded HDR texture dimensions: {}x{}.", width,
+                           height);
+                stbi_image_free(data);
+                return false;
+            }
+
+            out_texture.width = static_cast<U32>(width);
+            out_texture.height = static_cast<U32>(height);
+            out_texture.channels = 4;
+            out_texture.bytes_per_pixel = sizeof(F32) * 4;
+            out_texture.format = CookedTextureFormat::RGBA32F_HDR;
+            out_texture.mip_levels = mip_count_for_size(width, height);
+
+            const USize size = static_cast<USize>(width) * static_cast<USize>(height) *
+                               out_texture.bytes_per_pixel;
+
+            out_texture.pixels.clear();
+            out_texture.pixels.grow_default(size);
+
+            fr::mem::copy_raw_range(reinterpret_cast<const U8 *>(data), size,
+                                    out_texture.pixels.data());
+
+            stbi_image_free(data);
+            return true;
+        }
+
+        stbi_uc *data = stbi_load_from_memory(memory, memory_size, &width, &height, &channels, 4);
+        if (!data) {
+            log_texture_memory_decode_failure(source.label.view());
+            return false;
+        }
+
+        if (width <= 0 || height <= 0) {
+            FR_LOG_ERR("[Cooker] Invalid embedded LDR texture dimensions: {}x{}.", width, height);
+            stbi_image_free(data);
+            return false;
+        }
+
+        out_texture.width = static_cast<U32>(width);
+        out_texture.height = static_cast<U32>(height);
+        out_texture.channels = 4;
+        out_texture.bytes_per_pixel = 4;
+        out_texture.format =
+            is_srgb ? CookedTextureFormat::RGBA8_SRGB : CookedTextureFormat::RGBA8_UNORM;
+        out_texture.mip_levels = mip_count_for_size(width, height);
+
+        const USize size =
+            static_cast<USize>(width) * static_cast<USize>(height) * out_texture.bytes_per_pixel;
+
+        out_texture.pixels.clear();
+        out_texture.pixels.grow_default(size);
+
+        fr::mem::copy_raw_range(reinterpret_cast<const U8 *>(data), size,
+                                out_texture.pixels.data());
+
+        stbi_image_free(data);
+        return true;
+    }
+
+    return false;
+}
+
+static bool cook_texture_source(const TextureBakeSource &source, StringView output_path,
+                                bool is_srgb) noexcept {
+    Alloc *alloc = get_ambient_ctx().alloc;
+    FR_ASSERT(alloc, "ambient allocator must be non-null");
+
+    RawTexture raw(alloc);
+    if (!decode_texture_source(source, is_srgb, raw)) {
+        FR_LOG_ERR("[Cooker] Failed to import texture source for output: {}", output_path);
+        return false;
+    }
+
+    if (!compile_texture(raw, output_path)) {
+        FR_LOG_ERR("[Cooker] Failed to compile texture source: {}", output_path);
+        return false;
+    }
 
     return true;
 }
@@ -672,89 +1087,65 @@ static bool cook_gltf_material_asset(const cgltf_data *data, const cgltf_materia
  * - B = ambient occlusion
  * - A = 255
  */
-static bool bake_material_extra_texture(StringView metallic_roughness_path,
-                                        StringView occlusion_path, StringView output_path) {
-    String mr_path = String::from_view(metallic_roughness_path);
-    String ao_path = String::from_view(occlusion_path);
-
-    const bool has_metallic_roughness = mr_path.size() > 0;
-    const bool has_occlusion = ao_path.size() > 0;
+static bool bake_material_extra_texture(const TextureBakeSource &metallic_roughness_source,
+                                        const TextureBakeSource &occlusion_source,
+                                        StringView output_path) {
+    const bool has_metallic_roughness = metallic_roughness_source.is_valid();
+    const bool has_occlusion = occlusion_source.is_valid();
 
     if (!has_metallic_roughness && !has_occlusion) {
-        return false;
-    }
-
-    int mr_width = 0;
-    int mr_height = 0;
-    int mr_channels = 0;
-
-    int ao_width = 0;
-    int ao_height = 0;
-    int ao_channels = 0;
-
-    stbi_uc *mr_pixels = nullptr;
-    stbi_uc *ao_pixels = nullptr;
-
-    if (has_metallic_roughness) {
-        mr_pixels = stbi_load(mr_path.c_str(), &mr_width, &mr_height, &mr_channels, 4);
-        if (!mr_pixels) {
-            log_texture_decode_failure(mr_path.view(), "metallic-roughness texture");
-            return false;
-        }
-    }
-
-    if (has_occlusion) {
-        ao_pixels = stbi_load(ao_path.c_str(), &ao_width, &ao_height, &ao_channels, 4);
-        if (!ao_pixels) {
-            log_texture_decode_failure(ao_path.view(), "occlusion texture");
-
-            if (mr_pixels) {
-                stbi_image_free(mr_pixels);
-            }
-
-            return false;
-        }
-    }
-
-    const int width = has_metallic_roughness ? mr_width : ao_width;
-    const int height = has_metallic_roughness ? mr_height : ao_height;
-
-    if (width <= 0 || height <= 0) {
-        FR_LOG_ERR("[Cooker] Invalid material extra texture dimensions. Width: {}, height: {}.",
-                   width, height);
-
-        if (mr_pixels) {
-            stbi_image_free(mr_pixels);
-        }
-
-        if (ao_pixels) {
-            stbi_image_free(ao_pixels);
-        }
-
-        return false;
-    }
-
-    if (has_metallic_roughness && has_occlusion &&
-        (mr_width != ao_width || mr_height != ao_height)) {
-        FR_LOG_ERR("[Cooker] Metallic-roughness and occlusion textures have different sizes. "
-                   "Metallic-roughness: {}x{}, occlusion: {}x{}.",
-                   mr_width, mr_height, ao_width, ao_height);
-
-        stbi_image_free(mr_pixels);
-        stbi_image_free(ao_pixels);
         return false;
     }
 
     Alloc *alloc = get_ambient_ctx().alloc;
     FR_ASSERT(alloc, "ambient allocator must be non-null");
 
+    RawTexture mr_raw(alloc);
+    RawTexture ao_raw(alloc);
+
+    RawTexture *mr = nullptr;
+    RawTexture *ao = nullptr;
+
+    if (has_metallic_roughness) {
+        if (!decode_texture_source(metallic_roughness_source, false, mr_raw)) {
+            FR_LOG_ERR("[Cooker] Failed to decode metallic-roughness texture for extra map.");
+            return false;
+        }
+
+        mr = &mr_raw;
+    }
+
+    if (has_occlusion) {
+        if (!decode_texture_source(occlusion_source, false, ao_raw)) {
+            FR_LOG_ERR("[Cooker] Failed to decode occlusion texture for extra map.");
+            return false;
+        }
+
+        ao = &ao_raw;
+    }
+
+    const U32 width = mr ? mr->width : ao->width;
+    const U32 height = mr ? mr->height : ao->height;
+
+    if (width == 0 || height == 0) {
+        FR_LOG_ERR("[Cooker] Invalid material extra texture dimensions.");
+        return false;
+    }
+
+    if (mr && ao && (mr->width != ao->width || mr->height != ao->height)) {
+        FR_LOG_ERR("[Cooker] Metallic-roughness and occlusion textures have different sizes. "
+                   "Metallic-roughness: {}x{}, occlusion: {}x{}.",
+                   mr->width, mr->height, ao->width, ao->height);
+        return false;
+    }
+
     RawTexture raw(alloc);
-    raw.width = static_cast<U32>(width);
-    raw.height = static_cast<U32>(height);
+    raw.width = width;
+    raw.height = height;
     raw.channels = 4;
     raw.bytes_per_pixel = 4;
     raw.format = CookedTextureFormat::RGBA8_UNORM;
-    raw.mip_levels = mip_count_for_size(width, height);
+    raw.mip_levels = mip_count_for_size(static_cast<S32>(width), static_cast<S32>(height));
 
     const USize pixel_count = static_cast<USize>(width) * static_cast<USize>(height);
     raw.pixels.grow_default(pixel_count * 4);
@@ -767,27 +1158,19 @@ static bool bake_material_extra_texture(StringView metallic_roughness_path,
         U8 roughness = 255;
         U8 occlusion = 255;
 
-        if (mr_pixels) {
-            roughness = mr_pixels[src + 1];
-            metallic = mr_pixels[src + 2];
+        if (mr) {
+            roughness = mr->pixels[src + 1];
+            metallic = mr->pixels[src + 2];
         }
 
-        if (ao_pixels) {
-            occlusion = ao_pixels[src + 0];
+        if (ao) {
+            occlusion = ao->pixels[src + 0];
         }
 
         raw.pixels[dst + 0] = metallic;
         raw.pixels[dst + 1] = roughness;
         raw.pixels[dst + 2] = occlusion;
         raw.pixels[dst + 3] = 255;
-    }
-
-    if (mr_pixels) {
-        stbi_image_free(mr_pixels);
-    }
-
-    if (ao_pixels) {
-        stbi_image_free(ao_pixels);
     }
 
     return compile_texture(raw, output_path);
@@ -1073,9 +1456,6 @@ static bool import_primitive(const cgltf_data *data, const cgltf_primitive &prim
     }
 
     const U32 vertex_count = static_cast<U32>(position_accessor->count);
-    const U32 primitive_index_count =
-        primitive.indices ? static_cast<U32>(primitive.indices->count) : vertex_count;
-    (void)primitive_index_count;
 
     const cgltf_accessor *normal_accessor = find_attribute(primitive, cgltf_attribute_type_normal);
     const cgltf_accessor *uv_accessor = find_attribute(primitive, cgltf_attribute_type_texcoord);
@@ -1243,11 +1623,13 @@ static bool import_primitive(const cgltf_data *data, const cgltf_primitive &prim
 
         submesh.material_id = material_id;
 
-        if (primitive.material->alpha_mode == cgltf_alpha_mode_mask) {
-            submesh.pass_type = 1;
-        } else if (primitive.material->alpha_mode == cgltf_alpha_mode_blend) {
-            submesh.pass_type = 2;
+        F32 base_alpha = 1.0f;
+        if (primitive.material->has_pbr_metallic_roughness) {
+            base_alpha = primitive.material->pbr_metallic_roughness.base_color_factor[3];
         }
+
+        const ImportedMaterialAlpha alpha = resolve_material_alpha(*primitive.material, base_alpha);
+        submesh.pass_type = alpha.pass_type;
     }
 
     out_mesh.submeshes.push_back(submesh);
@@ -1290,19 +1672,14 @@ static bool execute_texture_bake_task(const TextureBakeTask &task) noexcept {
     }
 
     if (task.type == TextureBakeTaskType::RegularTexture) {
-        return cook_texture(task.in_path.view(), task.out_path.view(), task.is_srgb);
+        return cook_texture_source(task.source, task.out_path.view(), task.is_srgb);
     }
 
-    return bake_material_extra_texture(task.in_path.view(), task.secondary_path.view(),
-                                       task.out_path.view());
+    return bake_material_extra_texture(task.source, task.secondary_source, task.out_path.view());
 }
 
 /**
  * @brief Processes queued texture baking tasks.
- *
- * @details
- * Texture baking is parallelized because texture import and conversion are independent per output
- * path. Output records are appended sequentially after all worker tasks finish.
  */
 static bool bake_queued_textures(DynamicArray<TextureBakeTask> &texture_tasks,
                                  DynamicArray<CookedAssetOutput> *outputs) {
@@ -1419,9 +1796,8 @@ bool import_gltf(StringView path, RawMesh &out_mesh, DynamicArray<CookedAssetOut
         }
     }
 
-    cgltf_free(data);
-
     if (!import_ok) {
+        cgltf_free(data);
         return false;
     }
 
@@ -1431,11 +1807,17 @@ bool import_gltf(StringView path, RawMesh &out_mesh, DynamicArray<CookedAssetOut
            static_cast<U32>(out_mesh.vertices.size()), static_cast<U32>(out_mesh.indices.size()),
            static_cast<U32>(out_mesh.submeshes.size()), static_cast<U32>(texture_tasks.size()));
 
+    /*
+        Texture baking must happen before cgltf_free(data), because embedded GLB image sources point
+        into cgltf-owned buffer memory.
+    */
     if (!bake_queued_textures(texture_tasks, import_outputs)) {
         FR_LOG_ERR("[Cooker] Failed to bake one or more textures for glTF asset: {}", path);
+        cgltf_free(data);
         return false;
     }
 
+    cgltf_free(data);
     return true;
 }
 

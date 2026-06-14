@@ -153,7 +153,7 @@ inline bool create_default_renderer_pipelines(RenderPipelineCache &pipeline_cach
 
     out_pipelines.forward_transparent = pipeline_cache.get_or_create({
         .shader = shaders.forward_transparent,
-        .cull_mode = CullMode::Back,
+        .cull_mode = CullMode::None,
         .blend_mode = BlendMode::Alpha,
         .depth_test = true,
         .depth_write = false,

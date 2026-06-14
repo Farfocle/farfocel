@@ -663,21 +663,35 @@ private:
 
     static bool is_submesh_visible(const Frustum &frustum, const RenderSubMesh &submesh,
                                    const Mat4 &model) noexcept {
-        Vec3 center = (submesh.aabb_min + submesh.aabb_max) * 0.5f;
-        Vec3 extents = submesh.aabb_max - center;
+        const Vec3 local_min = submesh.aabb_min;
+        const Vec3 local_max = submesh.aabb_max;
 
-        Vec3 transformed_center = Vec3(model * Vec4(center, 1.0f));
+        if (local_min.x > local_max.x || local_min.y > local_max.y || local_min.z > local_max.z) {
+            return false;
+        }
 
-        Vec3 transformed_extents =
-            Vec3(glm::abs(model[0][0]) * extents.x + glm::abs(model[1][0]) * extents.y +
-                     glm::abs(model[2][0]) * extents.z,
-                 glm::abs(model[0][1]) * extents.x + glm::abs(model[1][1]) * extents.y +
-                     glm::abs(model[2][1]) * extents.z,
-                 glm::abs(model[0][2]) * extents.x + glm::abs(model[1][2]) * extents.y +
-                     glm::abs(model[2][2]) * extents.z);
+        const Vec3 corners[8] = {
+            Vec3(local_min.x, local_min.y, local_min.z),
+            Vec3(local_max.x, local_min.y, local_min.z),
+            Vec3(local_min.x, local_max.y, local_min.z),
+            Vec3(local_max.x, local_max.y, local_min.z),
+            Vec3(local_min.x, local_min.y, local_max.z),
+            Vec3(local_max.x, local_min.y, local_max.z),
+            Vec3(local_min.x, local_max.y, local_max.z),
+            Vec3(local_max.x, local_max.y, local_max.z),
+        };
 
-        return frustum.is_aabb_visible(transformed_center - transformed_extents,
-                                       transformed_center + transformed_extents);
+        Vec3 world_min(1.0e30f);
+        Vec3 world_max(-1.0e30f);
+
+        for (U32 i = 0; i < 8; ++i) {
+            const Vec3 world_corner = Vec3(model * Vec4(corners[i], 1.0f));
+
+            world_min = glm::min(world_min, world_corner);
+            world_max = glm::max(world_max, world_corner);
+        }
+
+        return frustum.is_aabb_visible(world_min, world_max);
     }
 
     static U32 build_transparent_depth_key(const RenderSubMesh &submesh, const Mat4 &model,

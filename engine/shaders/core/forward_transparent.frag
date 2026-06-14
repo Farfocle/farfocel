@@ -565,17 +565,19 @@ void main() {
     uint blend_mode = material.params1.y;
     uint texture_flags = material.params1.z;
 
-    vec4 albedo_data = texture(u_albedo, v_uv);
-    albedo_data *= material.base_color_factor;
-    albedo_data.a *= material.params0.z;
+    vec4 albedo_sample = texture(u_albedo, v_uv);
 
-    if (blend_mode == MATERIAL_BLEND_MASKED && albedo_data.a < material.params0.w) {
+    vec3 albedo = albedo_sample.rgb * material.base_color_factor.rgb;
+    float alpha = albedo_sample.a * material.base_color_factor.a * material.params0.z;
+
+    if (blend_mode == MATERIAL_BLEND_MASKED && alpha < material.params0.w) {
         discard;
     }
 
-    if (albedo_data.a <= 0.001) {
+    if (alpha <= 0.001) {
         discard;
     }
+
 
     vec3 normal_map = vec3(0.0, 0.0, 1.0);
     if (material_has_texture(texture_flags, MATERIAL_HAS_NORMAL)) {
@@ -599,8 +601,6 @@ void main() {
     float ambient_ao = material_has_texture(texture_flags, MATERIAL_HAS_EXTRA)
         ? clamp(material_data.b, 0.0, 1.0)
         : 1.0;
-
-    vec3 albedo = albedo_data.rgb;
 
     vec3 view_dir = u_cam_pos.xyz - v_world_pos;
     vec3 V = length(view_dir) > 0.001 ? normalize(view_dir) : vec3(0.0, 0.0, 1.0);
@@ -756,5 +756,5 @@ void main() {
     vec3 mapped = ACESFilm(max(color_out * get_exposure(), vec3(0.0)));
     vec3 encoded = pow(mapped, vec3(1.0 / 2.2));
 
-    FragColor = vec4(encoded, albedo_data.a);
+    FragColor = vec4(encoded, alpha);
 }
