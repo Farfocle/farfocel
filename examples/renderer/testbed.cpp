@@ -1,6 +1,10 @@
 /**
  * @file testbed.cpp
  * @brief Renderer testbed.
+ * NOTE: This is all AI GENERATED SLOP to test the renderer. I've got no time to write this myself
+ * atp, and this is all wrong and a giant anti pattern on how not to do things, especially with the
+ * ECS. The actual good implementation of things in this testbed will arrive once I implement gizmos
+ * and object picking.
  */
 
 #include <chrono>
