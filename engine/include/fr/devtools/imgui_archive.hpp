@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <imgui.h>
+#include <limits>
 #include <type_traits>
 
 #include "fr/core/dynamic_array.hpp"
@@ -121,7 +122,7 @@ public:
             ImGui::InputScalar("##v", ImGuiDataType_S64, &value);
         } else if constexpr (std::is_same_v<RawT, F32>) {
             do_label(label);
-            ImGui::DragFloat("##v", &value, 0.1f);
+            ImGui::DragFloat("##v", &value, 0.01f);
         } else if constexpr (std::is_same_v<RawT, F64>) {
             do_label(label);
             ImGui::InputDouble("##v", &value);
@@ -149,18 +150,15 @@ public:
 
         } else if constexpr (std::is_same_v<RawT, Vec2>) {
             do_label(label);
-            ImGui::SetNextItemWidth(0.1f);
-            ImGui::DragFloat2("##v", &value.x, 0.1f);
+            ImGui::DragFloat2("##v", &value.x, 0.01f);
 
         } else if constexpr (std::is_same_v<RawT, Vec3>) {
             do_label(label);
-            ImGui::SetNextItemWidth(0.1f);
-            ImGui::DragFloat3("##v", &value.x, 0.1f);
+            ImGui::DragFloat3("##v", &value.x, 0.01f);
 
         } else if constexpr (std::is_same_v<RawT, Vec4>) {
             do_label(label);
-            ImGui::SetNextItemWidth(0.1f);
-            ImGui::DragFloat4("##v", &value.x, 0.1f);
+            ImGui::DragFloat4("##v", &value.x, 0.01f);
 
         } else if constexpr (std::is_same_v<RawT, Mat4>) {
             if (do_tree(label)) {
@@ -171,7 +169,7 @@ public:
 
                     F32 vals[4] = {value[0][row], value[1][row], value[2][row], value[3][row]};
                     do_label(row_label);
-                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::SetNextItemWidth(-std::numeric_limits<F32>::min());
 
                     if (ImGui::DragFloat4("##r", vals, 0.01f)) {
                         value[0][row] = vals[0];
@@ -266,7 +264,7 @@ private:
             ImGui::SameLine();
         }
 
-        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::SetNextItemWidth(-std::numeric_limits<F32>::min());
     }
 
     /// @brief Displays `label` inline (no width setup - used for text-only values).
@@ -274,6 +272,7 @@ private:
         if (label[0] == '#') {
             return;
         }
+
         ImGui::AlignTextToFramePadding();
         ImGui::Text("%s", label);
         ImGui::SameLine();
