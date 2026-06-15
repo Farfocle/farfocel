@@ -223,6 +223,11 @@ bool compile_manifest(const ManifestBuildDesc &desc, StringView output_path) noe
 
     String out_path = String::from_view(alloc, output_path);
 
+    if (!file::ensure_parent_directory(out_path.view())) {
+        FR_LOG_ERR("[Cooker] Failed to create asset manifest output directory: {}", output_path);
+        return false;
+    }
+
     if (!file::write_all_bytes(out_path, Slice<const Byte>(output.data(), output.size()))) {
         FR_LOG_ERR("[Cooker] Failed to write asset manifest: {}", output_path);
         return false;

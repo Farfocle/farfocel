@@ -8,9 +8,13 @@
 
 #include <glm/glm.hpp>
 
-#include "fr/core/typedefs.hpp"
 #include "fr/asset/asset_id.hpp"
 #include "fr/asset/asset_manager.hpp"
+#include "fr/core/meta.hpp"
+#include "fr/core/shape.hpp"
+#include "fr/core/string.hpp"
+#include "fr/core/string_view.hpp"
+#include "fr/core/typedefs.hpp"
 
 namespace fr {
 
@@ -24,6 +28,13 @@ struct CameraPart {
     bool is_main{true};
 
     CameraPart() noexcept = default;
+
+    FR_SHAPE({
+        FR_PROP(fov);
+        FR_PROP(near_plane);
+        FR_PROP(far_plane);
+        FR_PROP(is_main);
+    })
 };
 
 /**
@@ -36,17 +47,27 @@ struct FPSControllerPart {
     F32 mouse_sensitivity{0.1f};
 
     FPSControllerPart() noexcept = default;
+
+    FR_SHAPE({
+        FR_PROP(pitch);
+        FR_PROP(yaw);
+        FR_PROP(move_speed);
+        FR_PROP(mouse_sensitivity);
+    })
 };
 
 /**
  * @brief Renderable mesh reference.
  *
  * @details
- * mesh_id is stable scene data. mesh_handle is a runtime cache resolved by
- * RenderAssetSystem.
+ * mesh_path is persistent scene data and should point to a cooked logical .fmesh path.
+ * mesh_id is derived from mesh_path or can be assigned directly by runtime code.
+ * mesh_handle and resolved_mesh_id are runtime caches owned by RenderAssetSystem.
  */
 struct MeshRendererPart {
+    String mesh_path{};
     AssetId mesh_id{};
+
     AssetId resolved_mesh_id{};
     MeshAssetHandle mesh_handle{};
 
@@ -59,6 +80,11 @@ struct MeshRendererPart {
         : mesh_id(id) {
     }
 
+    explicit MeshRendererPart(StringView path)
+        : mesh_path(String::from_view(path)),
+          mesh_id(AssetId::from_logical_path(path)) {
+    }
+
     MeshRendererPart(AssetId id, MeshAssetHandle loaded_mesh) noexcept
         : mesh_id(id),
           resolved_mesh_id(id),
@@ -68,16 +94,26 @@ struct MeshRendererPart {
     [[nodiscard]] bool is_mesh_resolved() const noexcept {
         return mesh_handle.is_valid();
     }
+
+    FR_SHAPE({
+        FR_PROP(mesh_path);
+        FR_PROP(visible);
+        FR_PROP(casts_shadow);
+    })
 };
 
 /**
  * @brief Optional material override for a mesh renderer.
  *
  * @details
- * If resolved, this material replaces submesh materials during extraction.
+ * material_path is persistent scene data and should point to a cooked logical .fmat path.
+ * material_id is derived from material_path or can be assigned directly by runtime code.
+ * material_handle and resolved_material_id are runtime caches owned by RenderAssetSystem.
  */
 struct MaterialOverridePart {
+    String material_path{};
     AssetId material_id{};
+
     AssetId resolved_material_id{};
     MaterialAssetHandle material_handle{};
 
@@ -85,6 +121,11 @@ struct MaterialOverridePart {
 
     explicit MaterialOverridePart(AssetId id) noexcept
         : material_id(id) {
+    }
+
+    explicit MaterialOverridePart(StringView path)
+        : material_path(String::from_view(path)),
+          material_id(AssetId::from_logical_path(path)) {
     }
 
     MaterialOverridePart(AssetId id, MaterialAssetHandle loaded_material) noexcept
@@ -96,6 +137,8 @@ struct MaterialOverridePart {
     [[nodiscard]] bool is_override_resolved() const noexcept {
         return material_handle.is_valid();
     }
+
+    FR_SHAPE({ FR_PROP(material_path); })
 };
 
 /**
@@ -111,6 +154,15 @@ struct PointLightPart {
     F32 shadow_bias{0.005f};
 
     PointLightPart() noexcept = default;
+
+    FR_SHAPE({
+        FR_PROP(color);
+        FR_PROP(intensity);
+        FR_PROP(radius);
+        FR_PROP(casts_shadow);
+        FR_PROP(shadow_strength);
+        FR_PROP(shadow_bias);
+    })
 };
 
 /**
@@ -129,6 +181,17 @@ struct SpotLightPart {
     F32 shadow_bias{0.002f};
 
     SpotLightPart() noexcept = default;
+
+    FR_SHAPE({
+        FR_PROP(color);
+        FR_PROP(intensity);
+        FR_PROP(radius);
+        FR_PROP(inner_angle_deg);
+        FR_PROP(outer_angle_deg);
+        FR_PROP(casts_shadow);
+        FR_PROP(shadow_strength);
+        FR_PROP(shadow_bias);
+    })
 };
 
 /**
@@ -139,6 +202,19 @@ struct DirectionalLightPart {
     F32 intensity{5.0f};
 
     DirectionalLightPart() noexcept = default;
+
+    FR_SHAPE({
+        FR_PROP(color);
+        FR_PROP(intensity);
+    })
 };
 
 } // namespace fr
+
+FR_TYPE(fr::CameraPart);
+FR_TYPE(fr::FPSControllerPart);
+FR_TYPE(fr::MeshRendererPart);
+FR_TYPE(fr::MaterialOverridePart);
+FR_TYPE(fr::PointLightPart);
+FR_TYPE(fr::SpotLightPart);
+FR_TYPE(fr::DirectionalLightPart);

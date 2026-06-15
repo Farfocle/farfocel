@@ -566,7 +566,7 @@ static void queue_material_extra_texture(DynamicArray<TextureBakeTask> &tasks,
 }
 
 static String make_regular_ftex_path(const cgltf_data *data, const cgltf_texture_view &view,
-                                     StringView base_dir, StringView semantic) {
+                                     StringView output_base_dir, StringView semantic) {
     if (!view.texture || !view.texture->image) {
         return String::from_chars("");
     }
@@ -574,22 +574,34 @@ static String make_regular_ftex_path(const cgltf_data *data, const cgltf_texture
     const cgltf_image *image = view.texture->image;
 
     if (image->uri) {
-        String source_path = join_paths(base_dir, StringView(image->uri));
-        String cooked_path = replace_extension(source_path.view(), ".ftex");
+        StringView uri(image->uri);
+        StringView stem = file::get_stem(uri);
 
+        String filename = String::with_capacity(stem.size() + semantic.size() + 16);
+        filename.append(stem);
+
+        if (!semantic.is_empty()) {
+            filename.push_back('_');
+            filename.append(semantic);
+        }
+
+        filename.append(".ftex");
+        sanitize_filename(filename);
+
+        String cooked_path = join_paths(output_base_dir, filename.view());
         warn_if_unstable_logical_path(cooked_path.view(), "texture cooked output");
         return cooked_path;
     }
 
     String filename = make_embedded_texture_filename(data, image, semantic);
-    String cooked_path = join_paths(base_dir, filename.view());
+    String cooked_path = join_paths(output_base_dir, filename.view());
 
     warn_if_unstable_logical_path(cooked_path.view(), "texture cooked output");
     return cooked_path;
 }
 
 static String make_extra_ftex_path(const cgltf_data *data, const cgltf_material &material,
-                                   StringView base_dir) {
+                                   StringView output_base_dir) {
     const cgltf_texture_view *source_view = nullptr;
 
     if (material.has_pbr_metallic_roughness &&
@@ -605,14 +617,15 @@ static String make_extra_ftex_path(const cgltf_data *data, const cgltf_material 
     }
 
     if (source_view->texture->image->uri) {
-        String source_path = join_paths(base_dir, StringView(source_view->texture->image->uri));
-        StringView stem = file::get_stem(source_path.view());
+        StringView uri(source_view->texture->image->uri);
+        StringView stem = file::get_stem(uri);
 
-        String filename = String::with_capacity(stem.size() + 12);
+        String filename = String::with_capacity(stem.size() + 16);
         filename.append(stem);
         filename.append("_extra.ftex");
+        sanitize_filename(filename);
 
-        String cooked_path = replace_filename(source_path.view(), filename.view());
+        String cooked_path = join_paths(output_base_dir, filename.view());
 
         warn_if_unstable_logical_path(cooked_path.view(), "material extra texture output");
         return cooked_path;
@@ -629,7 +642,7 @@ static String make_extra_ftex_path(const cgltf_data *data, const cgltf_material 
     append_decimal(filename, find_image_index(data, source_view->texture->image));
     filename.append("_extra.ftex");
 
-    String cooked_path = join_paths(base_dir, filename.view());
+    String cooked_path = join_paths(output_base_dir, filename.view());
 
     warn_if_unstable_logical_path(cooked_path.view(), "material extra texture output");
     return cooked_path;
@@ -752,10 +765,11 @@ static ImportedMaterialAlpha resolve_material_alpha(const cgltf_material &materi
 }
 
 static String resolve_regular_texture(const cgltf_data *data, const cgltf_texture_view &view,
-                                      StringView base_dir, DynamicArray<TextureBakeTask> &tasks,
-                                      bool is_srgb, bool force, StringView semantic) {
-    TextureBakeSource source = make_texture_source(view, base_dir, semantic);
-    String output_path = make_regular_ftex_path(data, view, base_dir, semantic);
+                                      StringView source_base_dir, StringView output_base_dir,
+                                      DynamicArray<TextureBakeTask> &tasks, bool is_srgb,
+                                      bool force, StringView semantic) {
+    TextureBakeSource source = make_texture_source(view, source_base_dir, semantic);
+    String output_path = make_regular_ftex_path(data, view, output_base_dir, semantic);
 
     queue_regular_texture(tasks, source, output_path, is_srgb, force);
 
@@ -763,7 +777,7 @@ static String resolve_regular_texture(const cgltf_data *data, const cgltf_textur
 }
 
 static String resolve_material_extra_texture(const cgltf_data *data, const cgltf_material &material,
-                                             StringView base_dir,
+                                             StringView source_base_dir, StringView output_base_dir,
                                              DynamicArray<TextureBakeTask> &tasks, bool force) {
     bool has_metallic_roughness = false;
     bool has_occlusion = false;
@@ -789,14 +803,14 @@ static String resolve_material_extra_texture(const cgltf_data *data, const cgltf
 
     TextureBakeSource metallic_roughness_source =
         has_metallic_roughness
-            ? make_texture_source(metallic_roughness_view, base_dir, "metallic_roughness")
+            ? make_texture_source(metallic_roughness_view, source_base_dir, "metallic_roughness")
             : TextureBakeSource{};
 
     TextureBakeSource occlusion_source =
-        has_occlusion ? make_texture_source(occlusion_view, base_dir, "occlusion")
+        has_occlusion ? make_texture_source(occlusion_view, source_base_dir, "occlusion")
                       : TextureBakeSource{};
 
-    String output_path = make_extra_ftex_path(data, material, base_dir);
+    String output_path = make_extra_ftex_path(data, material, output_base_dir);
 
     queue_material_extra_texture(tasks, metallic_roughness_source, occlusion_source, output_path,
                                  force);
@@ -805,13 +819,13 @@ static String resolve_material_extra_texture(const cgltf_data *data, const cgltf
 }
 
 static bool cook_gltf_material_asset(const cgltf_data *data, const cgltf_material &material,
-                                     StringView base_dir,
+                                     StringView source_base_dir, StringView output_base_dir,
                                      DynamicArray<TextureBakeTask> &texture_tasks,
                                      DynamicArray<CookedAssetOutput> *outputs, bool force,
                                      String &out_material_path, AssetId &out_material_id) {
     const USize material_index = find_material_index(data, &material);
 
-    out_material_path = make_material_fmat_path(material, base_dir, material_index);
+    out_material_path = make_material_fmat_path(material, output_base_dir, material_index);
     out_material_id = asset_id_from_logical_path(out_material_path.view());
 
     String albedo_path;
@@ -826,9 +840,9 @@ static bool cook_gltf_material_asset(const cgltf_data *data, const cgltf_materia
     F32 imported_base_alpha = raw.base_color_factor[3];
 
     if (material.has_pbr_metallic_roughness) {
-        albedo_path =
-            resolve_regular_texture(data, material.pbr_metallic_roughness.base_color_texture,
-                                    base_dir, texture_tasks, true, force, "albedo");
+        albedo_path = resolve_regular_texture(
+            data, material.pbr_metallic_roughness.base_color_texture, source_base_dir,
+            output_base_dir, texture_tasks, true, force, "albedo");
 
         raw.base_color_factor[0] = material.pbr_metallic_roughness.base_color_factor[0];
         raw.base_color_factor[1] = material.pbr_metallic_roughness.base_color_factor[1];
@@ -841,10 +855,11 @@ static bool cook_gltf_material_asset(const cgltf_data *data, const cgltf_materia
         imported_base_alpha = raw.base_color_factor[3];
     }
 
-    normal_path = resolve_regular_texture(data, material.normal_texture, base_dir, texture_tasks,
-                                          false, force, "normal");
+    normal_path = resolve_regular_texture(data, material.normal_texture, source_base_dir,
+                                          output_base_dir, texture_tasks, false, force, "normal");
 
-    extra_path = resolve_material_extra_texture(data, material, base_dir, texture_tasks, force);
+    extra_path = resolve_material_extra_texture(data, material, source_base_dir, output_base_dir,
+                                                texture_tasks, force);
 
     if (albedo_path.size() > 0) {
         raw.albedo_texture = asset_id_from_logical_path(albedo_path.view());
@@ -921,7 +936,7 @@ static bool decode_texture_source(const TextureBakeSource &source, bool is_srgb,
             out_texture.channels = 4;
             out_texture.bytes_per_pixel = sizeof(F32) * 4;
             out_texture.format = CookedTextureFormat::RGBA32F_HDR;
-            out_texture.mip_levels = mip_count_for_size(width, height);
+            out_texture.mip_levels = 1;
 
             const USize size = static_cast<USize>(width) * static_cast<USize>(height) *
                                out_texture.bytes_per_pixel;
@@ -955,7 +970,7 @@ static bool decode_texture_source(const TextureBakeSource &source, bool is_srgb,
         out_texture.bytes_per_pixel = 4;
         out_texture.format =
             is_srgb ? CookedTextureFormat::RGBA8_SRGB : CookedTextureFormat::RGBA8_UNORM;
-        out_texture.mip_levels = mip_count_for_size(width, height);
+        out_texture.mip_levels = 1;
 
         const USize size =
             static_cast<USize>(width) * static_cast<USize>(height) * out_texture.bytes_per_pixel;
@@ -972,6 +987,11 @@ static bool decode_texture_source(const TextureBakeSource &source, bool is_srgb,
 
     if (source.has_memory()) {
         stbi_set_flip_vertically_on_load(false);
+
+        if (source.memory_size > static_cast<USize>(0x7FFFFFFF)) {
+            FR_LOG_ERR("[Cooker] Embedded texture '{}' is too large for stb.", source.label.view());
+            return false;
+        }
 
         const int memory_size = static_cast<int>(source.memory_size);
         const stbi_uc *memory = reinterpret_cast<const stbi_uc *>(source.memory);
@@ -997,7 +1017,7 @@ static bool decode_texture_source(const TextureBakeSource &source, bool is_srgb,
             out_texture.channels = 4;
             out_texture.bytes_per_pixel = sizeof(F32) * 4;
             out_texture.format = CookedTextureFormat::RGBA32F_HDR;
-            out_texture.mip_levels = mip_count_for_size(width, height);
+            out_texture.mip_levels = 1;
 
             const USize size = static_cast<USize>(width) * static_cast<USize>(height) *
                                out_texture.bytes_per_pixel;
@@ -1030,7 +1050,7 @@ static bool decode_texture_source(const TextureBakeSource &source, bool is_srgb,
         out_texture.bytes_per_pixel = 4;
         out_texture.format =
             is_srgb ? CookedTextureFormat::RGBA8_SRGB : CookedTextureFormat::RGBA8_UNORM;
-        out_texture.mip_levels = mip_count_for_size(width, height);
+        out_texture.mip_levels = 1;
 
         const USize size =
             static_cast<USize>(width) * static_cast<USize>(height) * out_texture.bytes_per_pixel;
@@ -1145,7 +1165,7 @@ static bool bake_material_extra_texture(const TextureBakeSource &metallic_roughn
     raw.channels = 4;
     raw.bytes_per_pixel = 4;
     raw.format = CookedTextureFormat::RGBA8_UNORM;
-    raw.mip_levels = mip_count_for_size(static_cast<S32>(width), static_cast<S32>(height));
+    raw.mip_levels = 1;
 
     const USize pixel_count = static_cast<USize>(width) * static_cast<USize>(height);
     raw.pixels.grow_default(pixel_count * 4);
@@ -1243,6 +1263,16 @@ static void expand_aabb(F32 (&min_extents)[3], F32 (&max_extents)[3],
         min_extents[i] = fr::math::min(min_extents[i], position[i]);
         max_extents[i] = fr::math::max(max_extents[i], position[i]);
     }
+}
+
+static void transform_position(const glm::mat4 &transform, const F32 (&position)[3],
+                               F32 (&out_position)[3]) noexcept {
+    const glm::vec4 transformed =
+        transform * glm::vec4(position[0], position[1], position[2], 1.0f);
+
+    out_position[0] = transformed.x;
+    out_position[1] = transformed.y;
+    out_position[2] = transformed.z;
 }
 
 static void finalize_aabb(F32 (&min_extents)[3], F32 (&max_extents)[3]) noexcept {
@@ -1422,7 +1452,8 @@ static bool validate_primitive_index_range(const RawMesh &mesh,
 }
 
 static bool import_primitive(const cgltf_data *data, const cgltf_primitive &primitive,
-                             const glm::mat4 &node_transform, StringView base_dir,
+                             const glm::mat4 &node_transform, StringView source_base_dir,
+                             StringView output_base_dir,
                              DynamicArray<TextureBakeTask> &texture_tasks,
                              DynamicArray<ImportedMaterialRecord> &imported_materials,
                              DynamicArray<CookedAssetOutput> *outputs, bool force,
@@ -1543,8 +1574,11 @@ static bool import_primitive(const cgltf_data *data, const cgltf_primitive &prim
 
         out_mesh.vertices.push_back(vertex);
 
+        F32 transformed_position[3]{};
+        transform_position(node_transform, vertex.position, transformed_position);
+
         expand_aabb(submesh.aabb_min, submesh.aabb_max, vertex.position);
-        expand_aabb(out_mesh.aabb_min, out_mesh.aabb_max, vertex.position);
+        expand_aabb(out_mesh.aabb_min, out_mesh.aabb_max, transformed_position);
     }
 
     if (primitive.indices) {
@@ -1607,8 +1641,9 @@ static bool import_primitive(const cgltf_data *data, const cgltf_primitive &prim
         if (!find_imported_material(imported_materials, primitive.material, material_id)) {
             String material_path;
 
-            if (!cook_gltf_material_asset(data, *primitive.material, base_dir, texture_tasks,
-                                          outputs, force, material_path, material_id)) {
+            if (!cook_gltf_material_asset(data, *primitive.material, source_base_dir,
+                                          output_base_dir, texture_tasks, outputs, force,
+                                          material_path, material_id)) {
                 FR_LOG_ERR("[Cooker] Failed to cook glTF material for primitive.");
                 return false;
             }
@@ -1637,8 +1672,8 @@ static bool import_primitive(const cgltf_data *data, const cgltf_primitive &prim
 }
 
 static bool import_node(const cgltf_data *data, const cgltf_node *node,
-                        const glm::mat4 &parent_transform, StringView base_dir,
-                        DynamicArray<TextureBakeTask> &texture_tasks,
+                        const glm::mat4 &parent_transform, StringView source_base_dir,
+                        StringView output_base_dir, DynamicArray<TextureBakeTask> &texture_tasks,
                         DynamicArray<ImportedMaterialRecord> &imported_materials,
                         DynamicArray<CookedAssetOutput> *outputs, bool force, RawMesh &out_mesh) {
     if (!node) {
@@ -1649,16 +1684,17 @@ static bool import_node(const cgltf_data *data, const cgltf_node *node,
 
     if (node->mesh) {
         for (cgltf_size i = 0; i < node->mesh->primitives_count; ++i) {
-            if (!import_primitive(data, node->mesh->primitives[i], node_transform, base_dir,
-                                  texture_tasks, imported_materials, outputs, force, out_mesh)) {
+            if (!import_primitive(data, node->mesh->primitives[i], node_transform, source_base_dir,
+                                  output_base_dir, texture_tasks, imported_materials, outputs,
+                                  force, out_mesh)) {
                 return false;
             }
         }
     }
 
     for (cgltf_size i = 0; i < node->children_count; ++i) {
-        if (!import_node(data, node->children[i], node_transform, base_dir, texture_tasks,
-                         imported_materials, outputs, force, out_mesh)) {
+        if (!import_node(data, node->children[i], node_transform, source_base_dir, output_base_dir,
+                         texture_tasks, imported_materials, outputs, force, out_mesh)) {
             return false;
         }
     }
@@ -1754,10 +1790,21 @@ bool import_gltf(StringView path, RawMesh &out_mesh, DynamicArray<CookedAssetOut
            static_cast<U32>(data->nodes_count), static_cast<U32>(data->meshes_count),
            static_cast<U32>(data->materials_count), static_cast<U32>(data->images_count));
 
-    String base_dir = String::from_view(file::get_parent_path(path_string.view()));
-    file::normalize_unix(base_dir);
+    String source_base_dir = String::from_view(file::get_parent_path(path_string.view()));
+    file::normalize_unix(source_base_dir);
 
-    warn_if_unstable_logical_path(base_dir.view(), "glTF base directory");
+    String output_base_dir;
+
+    if (!options.generated_asset_dir.is_empty()) {
+        output_base_dir = normalize_slash_path(options.generated_asset_dir);
+    } else {
+        output_base_dir = String::from_view(source_base_dir.view());
+    }
+
+    warn_if_unstable_logical_path(source_base_dir.view(), "glTF base directory");
+    warn_if_unstable_logical_path(output_base_dir.view(), "material cooked output");
+    warn_if_unstable_logical_path(output_base_dir.view(), "texture cooked output");
+    warn_if_unstable_logical_path(output_base_dir.view(), "material extra texture output");
 
     out_mesh.vertices.clear();
     out_mesh.indices.clear();
@@ -1776,8 +1823,9 @@ bool import_gltf(StringView path, RawMesh &out_mesh, DynamicArray<CookedAssetOut
 
     if (data->scene) {
         for (cgltf_size i = 0; i < data->scene->nodes_count; ++i) {
-            if (!import_node(data, data->scene->nodes[i], glm::mat4(1.0f), base_dir, texture_tasks,
-                             imported_materials, import_outputs, options.force, out_mesh)) {
+            if (!import_node(data, data->scene->nodes[i], glm::mat4(1.0f), source_base_dir,
+                             output_base_dir, texture_tasks, imported_materials, import_outputs,
+                             options.force, out_mesh)) {
                 import_ok = false;
                 break;
             }
@@ -1788,8 +1836,9 @@ bool import_gltf(StringView path, RawMesh &out_mesh, DynamicArray<CookedAssetOut
                 continue;
             }
 
-            if (!import_node(data, &data->nodes[i], glm::mat4(1.0f), base_dir, texture_tasks,
-                             imported_materials, import_outputs, options.force, out_mesh)) {
+            if (!import_node(data, &data->nodes[i], glm::mat4(1.0f), source_base_dir,
+                             output_base_dir, texture_tasks, imported_materials, import_outputs,
+                             options.force, out_mesh)) {
                 import_ok = false;
                 break;
             }

@@ -19,6 +19,11 @@ set(COOKER_HEADERS
 
     "src/importers/gltf_importer.hpp"
     "src/importers/stb_importer.hpp"
+
+    "include/fr/asscooker/dev_asset_catalog.hpp"
+    "include/fr/asscooker/dev_asset_importer.hpp"
+
+    "include/fr/asscooker/imgui/gltf_import_panel.hpp"
 )
 
 set(COOKER_SOURCES
@@ -32,7 +37,10 @@ set(COOKER_SOURCES
     "src/importers/gltf_importer.cpp"
     "src/importers/stb_importer.cpp"
 
+    "src/dev_asset_catalog.cpp"
+
     "src/asscooker.cpp"
+    "src/dev_asset_importer.cpp"
 )
 
 add_library(asscooker STATIC ${COOKER_SOURCES} ${COOKER_HEADERS})

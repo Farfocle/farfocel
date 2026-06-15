@@ -154,8 +154,17 @@ bool cook_mesh_ex(StringView input_path, StringView output_path,
     Alloc *alloc = get_ambient_ctx().alloc;
     FR_ASSERT(alloc, "ambient allocator must be non-null");
 
+    CookOptions import_options = options;
+
+    String generated_asset_dir;
+    if (import_options.generated_asset_dir.is_empty()) {
+        generated_asset_dir = String::from_view(file::get_parent_path(output_path));
+        file::normalize_unix(generated_asset_dir);
+        import_options.generated_asset_dir = generated_asset_dir.view();
+    }
+
     RawMesh raw(alloc);
-    if (!import_gltf(input_path, raw, outputs, options)) {
+    if (!import_gltf(input_path, raw, outputs, import_options)) {
         FR_LOG_ERR("[Cooker] Failed to import glTF mesh: {}", input_path);
         return false;
     }

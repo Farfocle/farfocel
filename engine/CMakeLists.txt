@@ -92,8 +92,14 @@ set(ENGINE_HEADERS
     "include/fr/platform/window.hpp"
 
 #### devtools
+    "include/fr/devtools/devtools_state.hpp"
+    "include/fr/devtools/editor_commands.hpp"
     "include/fr/devtools/imgui_archive.hpp"
     "include/fr/devtools/inspector.hpp"
+    "include/fr/devtools/inspector_state.hpp"
+    "include/fr/devtools/scene_io.hpp"
+    "include/fr/devtools/world_actions.hpp"
+    "include/fr/devtools/imgui/spawn_panel.hpp"
 
 #### renderer
     "include/fr/renderer/default_renderer_assets.hpp"
@@ -120,6 +126,7 @@ set(ENGINE_HEADERS
     "include/fr/scene/render_extractor.hpp"
     "include/fr/scene/render_parts.hpp"
     "include/fr/scene/render_scene_extractor.hpp"
+    "include/fr/scene/transform_system.hpp"
 )
 
 set(ENGINE_SOURCES

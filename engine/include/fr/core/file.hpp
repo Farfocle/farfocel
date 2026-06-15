@@ -11,8 +11,13 @@
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/typedefs.hpp"
+#include <cerrno>
 #include <cstdio>
 #include <sys/stat.h>
+
+#if defined(_WIN32) || defined(_WIN64)
+#include <direct.h>
+#endif
 
 namespace fr::file {
 
@@ -299,6 +304,137 @@ inline bool write_all_bytes(const fr::String &path, fr::Slice<const Byte> bytes)
 [[nodiscard]] inline bool exists(const fr::String &path) noexcept {
     struct stat stat_buf;
     return stat(path.c_str(), &stat_buf) == 0;
+}
+
+/**
+ * @brief Checks if a path exists and is a directory.
+ */
+[[nodiscard]] inline bool is_directory(const fr::String &path) noexcept {
+    struct stat stat_buf;
+    if (stat(path.c_str(), &stat_buf) != 0) {
+        return false;
+    }
+
+#if defined(_WIN32) || defined(_WIN64)
+    return (stat_buf.st_mode & _S_IFDIR) != 0;
+#else
+    return S_ISDIR(stat_buf.st_mode);
+#endif
+}
+
+/**
+ * @brief Creates a single directory.
+ *
+ * @details
+ * Returns true when the directory was created or already exists.
+ */
+inline bool create_directory(const fr::String &path) noexcept {
+    if (path.size() == 0) {
+        return false;
+    }
+
+    if (is_directory(path)) {
+        return true;
+    }
+
+#if defined(_WIN32) || defined(_WIN64)
+    const int result = _mkdir(path.c_str());
+#else
+    const int result = mkdir(path.c_str(), 0755);
+#endif
+
+    if (result == 0) {
+        return true;
+    }
+
+    return errno == EEXIST && is_directory(path);
+}
+
+/**
+ * @brief Creates all missing directories in a path.
+ *
+ * @details
+ * Accepts slash-normalized or platform-native paths. File names should not be passed here; use
+ * ensure_parent_directory() for output files.
+ */
+inline bool create_directories(StringView path) noexcept {
+    if (path.is_empty()) {
+        return false;
+    }
+
+    fr::String normalized = get_normalized_unix(path);
+
+    if (normalized.size() == 0) {
+        return false;
+    }
+
+    while (normalized.size() > 1 && normalized.back() == '/') {
+        normalized.shrink(normalized.size() - 1);
+    }
+
+    if (normalized.size() == 0) {
+        return false;
+    }
+
+    fr::String current;
+
+    USize start = 0;
+
+    if (normalized[0] == '/') {
+        current.push_back('/');
+        start = 1;
+    } else if (normalized.size() >= 2 && normalized[1] == ':') {
+        current.push_back(normalized[0]);
+        current.push_back(':');
+
+        if (normalized.size() >= 3 && normalized[2] == '/') {
+            current.push_back('/');
+            start = 3;
+        } else {
+            start = 2;
+        }
+    }
+
+    for (USize i = start; i <= normalized.size(); ++i) {
+        if (i != normalized.size() && normalized[i] != '/') {
+            continue;
+        }
+
+        if (i == start) {
+            continue;
+        }
+
+        StringView part = normalized.view_to(i - 1);
+
+        if (part.is_empty()) {
+            continue;
+        }
+
+        current = String::from_view(part);
+
+        if (current.size() == 2 && current[1] == ':') {
+            continue;
+        }
+
+        if (!create_directory(current)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * @brief Creates the parent directory chain for an output file path.
+ */
+inline bool ensure_parent_directory(StringView file_path) noexcept {
+    StringView parent = get_parent_path(file_path);
+
+    if (parent.is_empty()) {
+        return true;
+    }
+
+    return create_directories(parent);
 }
 
 } // namespace fr::file

@@ -173,6 +173,11 @@ bool compile_texture(const RawTexture &raw, StringView output_path) noexcept {
 
     String out_path = String::from_view(alloc, output_path);
 
+    if (!file::ensure_parent_directory(out_path.view())) {
+        FR_LOG_ERR("[Cooker] Failed to create cooked texture output directory: {}", output_path);
+        return false;
+    }
+
     if (!file::write_all_bytes(out_path, Slice<const Byte>(output.data(), output.size()))) {
         FR_LOG_ERR("[Cooker] Failed to write cooked texture: {}", output_path);
         return false;

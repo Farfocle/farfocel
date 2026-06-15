@@ -112,6 +112,11 @@ bool compile_material(const RawMaterial &material, StringView output_path) noexc
 
     String out_path = String::from_view(alloc, output_path);
 
+    if (!file::ensure_parent_directory(out_path.view())) {
+        FR_LOG_ERR("[Cooker] Failed to create cooked material output directory: {}", output_path);
+        return false;
+    }
+
     if (!file::write_all_bytes(out_path, Slice<const Byte>(reinterpret_cast<const Byte *>(&header),
                                                            sizeof(CookedMaterialHeader)))) {
         FR_LOG_ERR("[Cooker] Failed to write cooked material: {}", output_path);

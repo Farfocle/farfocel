@@ -31,6 +31,15 @@ struct CookOptions {
     AssetId output_id{};
 
     /**
+     * @brief Output directory for generated dependency assets.
+     *
+     * @details
+     * Mesh imports may generate .fmat and .ftex files. When this path is empty, cook_mesh_ex()
+     * places generated dependencies next to the primary .fmesh output.
+     */
+    StringView generated_asset_dir{};
+
+    /**
      * @brief Rebuild generated dependencies even if their cooked output already exists.
      */
     bool force{false};

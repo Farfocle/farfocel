@@ -20,8 +20,8 @@
 #include "fr/core/meta.hpp"
 #include "fr/data/cmd.hpp"
 #include "fr/data/part.hpp"
-#include "fr/data/registry.hpp"
 #include "fr/data/parts.hpp"
+#include "fr/data/registry.hpp"
 #include "fr/data/resource.hpp"
 #include "fr/data/thing.hpp"
 
@@ -485,6 +485,14 @@ public:
     void kill_deferred(Thing thing) noexcept;
 
     /**
+     * @brief Clears all scene things and their parts while preserving systems and resources.
+     *
+     * @details
+     * This is intended for scene reloads in runtime devtools. Runtime resources, scheduled systems
+     * and part pool registrations stay alive. Pending deferred commands are discarded.
+     */
+    void clear_scene() noexcept;
+    /**
      * @brief Returns true if a thing is alive.
      * @note The nil thing is alive.
      */
@@ -901,6 +909,12 @@ public:
     /// @brief Renders the world (things, parts, resources) via ImGui.
     void shape(ImGuiWriterArchive &archive) noexcept;
 
+    /// @brief Serializes only persistent scene data. Runtime resources are intentionally skipped.
+    void shape_scene(JsonWriterArchive &archive) noexcept;
+
+    /// @brief Deserializes only persistent scene data. Runtime resources are intentionally skipped.
+    void shape_scene(JsonReaderArchive &archive) noexcept;
+
     // ----------------------------------------------------------------- Systems
 
     /// @brief Schedules a system for synchronous execution in the given stage.
@@ -1085,6 +1099,25 @@ inline void World::kill_deferred(Thing thing) noexcept {
     if (thing.is_nil()) [[unlikely]]
         return;
     m_cmd_batch.record_kill(thing);
+}
+
+inline void World::clear_scene() noexcept {
+    m_cmd_batch.reset();
+
+    DynamicArray<Thing> things(m_options.registry_alloc);
+    things.reserve(alive_thing_count());
+
+    for_each_alive_thing([&](Thing thing) {
+        if (!thing.is_nil()) {
+            things.push_back(thing);
+        }
+    });
+
+    for (Thing thing : things) {
+        kill(thing);
+    }
+
+    m_cmd_batch.reset();
 }
 
 inline bool World::is_alive(Thing thing) const noexcept {
@@ -1649,7 +1682,7 @@ inline bool World::detach_child_now(Thing parent, Thing child) noexcept {
     }
 
     RelationsPart &child_rel = m_registry.get_unchecked<RelationsPart>(child);
-  
+
     if (child_rel.parent != parent) {
         return false;
     }
@@ -1726,7 +1759,8 @@ inline void World::do_detach_from_hierarchy_unchecked(Thing thing) noexcept {
 
         parent_rel.first_child = thing_rel.next_sibling;
         if (!parent_rel.first_child.is_nil()) {
-            RelationsPart &next_rel = m_registry.get_unchecked<RelationsPart>(thing_rel.next_sibling);
+            RelationsPart &next_rel =
+                m_registry.get_unchecked<RelationsPart>(thing_rel.next_sibling);
             next_rel.prev_sibling = Thing::nil();
             thing_rel.next_sibling = Thing::nil();
         }
@@ -1816,6 +1850,14 @@ inline void World::shape(JsonReaderArchive &archive) noexcept {
 inline void World::shape(ImGuiWriterArchive &archive) noexcept {
     archive.prop("registry", m_registry);
     archive.prop("resources", m_resource_pool);
+}
+
+inline void World::shape_scene(JsonWriterArchive &archive) noexcept {
+    archive.prop("registry", m_registry);
+}
+
+inline void World::shape_scene(JsonReaderArchive &archive) noexcept {
+    archive.prop("registry", m_registry);
 }
 
 inline void World::run() noexcept {

@@ -191,6 +191,39 @@ validate_manifest_header(Slice<const Byte> bytes,
     return normalize_manifest_path(alloc, joined.view());
 }
 
+/**
+ * @brief Resolves a manifest file path against the manifest directory.
+ *
+ * @details
+ * Manifest entries are normally relative to the manifest directory. Development manifests may also
+ * contain project-root-relative paths such as "assets/models/...", so this helper falls back to the
+ * raw normalized path when the joined path does not exist.
+ */
+[[nodiscard]] inline String resolve_manifest_file_path(Alloc *alloc, StringView base,
+                                                       StringView path) noexcept {
+    FR_ASSERT(alloc, "allocator must be non-null");
+
+    if (path.is_empty()) {
+        return String(alloc);
+    }
+
+    if (is_manifest_absolute_path(path)) {
+        return normalize_manifest_path(alloc, path);
+    }
+
+    String joined = join_manifest_paths(alloc, base, path);
+    if (file::exists(joined)) {
+        return joined;
+    }
+
+    String raw = normalize_manifest_path(alloc, path);
+    if (file::exists(raw)) {
+        return raw;
+    }
+
+    return joined;
+}
+
 [[nodiscard]] inline String manifest_base_dir(Alloc *alloc, StringView manifest_path) noexcept {
     FR_ASSERT(alloc, "allocator must be non-null");
 
@@ -267,7 +300,7 @@ validate_manifest_header(Slice<const Byte> bytes,
         }
 
         String resolved_pack_path =
-            impl::join_manifest_paths(alloc, manifest_base_dir.view(), pack_path);
+            impl::resolve_manifest_file_path(alloc, manifest_base_dir.view(), pack_path);
 
         U32 pack_index = 0;
         if (!storage.mount_pack(resolved_pack_path.view(), pack_index)) {
@@ -306,7 +339,7 @@ validate_manifest_header(Slice<const Byte> bytes,
         }
 
         String resolved_loose_path =
-            impl::join_manifest_paths(alloc, manifest_base_dir.view(), loose_path);
+            impl::resolve_manifest_file_path(alloc, manifest_base_dir.view(), loose_path);
 
         if (!registry.register_loose_asset(record.id, record.kind, resolved_loose_path.view(),
                                            record.content_hash)) {
