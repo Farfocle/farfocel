@@ -36,9 +36,10 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 if(MSVC)
-  target_compile_options(farfocel_compiler_options INTERFACE
-        /W4 /WX /permissive- /Zc:preprocessor
-    )
+# MSVC didn't like that stuff so it was removed
+#  target_compile_options(farfocel_compiler_options INTERFACE
+#        /W4 /WX /permissive- /Zc:preprocessor
+#    )
 else()
   target_compile_options(farfocel_compiler_options INTERFACE
     -Wall -Wextra -Wpedantic -Werror
