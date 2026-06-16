@@ -24,6 +24,7 @@ set(COOKER_HEADERS
     "include/fr/asscooker/dev_asset_importer.hpp"
 
     "include/fr/asscooker/imgui/gltf_import_panel.hpp"
+    "include/fr/asscooker/imgui/material_override_panel.hpp"
 )
 
 set(COOKER_SOURCES

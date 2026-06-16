@@ -18,10 +18,11 @@
 #include "fr/data/parts.hpp"
 #include "fr/data/world.hpp"
 #include "fr/logger/logger.hpp"
+#include "fr/scene/environment_system.hpp"
+#include "fr/scene/primitive_mesh_system.hpp"
 #include "fr/scene/render_asset_system.hpp"
 #include "fr/scene/render_parts.hpp"
-#include "fr/scene/transform_system.hpp"
-
+#include "fr/scene/scene_render_settings.hpp"
 namespace fr::devtools {
 
 /**
@@ -39,12 +40,16 @@ inline void ensure_default_scene_part_types(World &world) noexcept {
     world.ensure<CameraPart>();
     world.ensure<FPSControllerPart>();
 
+    world.ensure<PrimitiveMeshPart>();
     world.ensure<MeshRendererPart>();
     world.ensure<MaterialOverridePart>();
 
     world.ensure<PointLightPart>();
     world.ensure<SpotLightPart>();
     world.ensure<DirectionalLightPart>();
+
+    world.ensure<EnvironmentPart>();
+    world.ensure<SceneRenderSettingsPart>();
 }
 
 /**
@@ -87,13 +92,6 @@ inline bool save_scene(World &world, StringView output_path) noexcept {
     return true;
 }
 
-/**
- * @brief Loads persistent scene data into an already empty/prepared world.
- *
- * @warning
- * This does not clear the current world. Prefer load_scene_replacing_world() for editor/runtime
- * reload workflows.
- */
 inline bool load_scene_into_prepared_world(World &world, AssetManager &assets,
                                            StringView input_path) noexcept {
     if (input_path.is_empty()) {
@@ -128,7 +126,9 @@ inline bool load_scene_into_prepared_world(World &world, AssetManager &assets,
     }
 
     TransformSystem::rebuild_world_transforms(world);
+    PrimitiveMeshSystem::resolve(world, assets, get_ambient_ctx().alloc);
     RenderAssetSystem::resolve(world, assets);
+    EnvironmentSystem::resolve(world, assets);
 
     FR_LOG("[SceneIO] Loaded scene: {}", input_path);
     return true;
@@ -173,7 +173,10 @@ inline bool load_scene_replacing_world(World &world, AssetManager &assets,
     }
 
     TransformSystem::rebuild_world_transforms(world);
-    RenderAssetSystem::resolve(world, assets);
+    PrimitiveMeshSystem::resolve(world, assets, get_ambient_ctx().alloc);
+    EnvironmentSystem::release(world, assets);
+    RenderAssetSystem::release(world, assets);
+    world.clear_scene();
 
     FR_LOG("[SceneIO] Replaced scene from file: {}", input_path);
     return true;

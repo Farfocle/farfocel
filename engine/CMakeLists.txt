@@ -100,6 +100,15 @@ set(ENGINE_HEADERS
     "include/fr/devtools/scene_io.hpp"
     "include/fr/devtools/world_actions.hpp"
     "include/fr/devtools/imgui/spawn_panel.hpp"
+    "include/fr/devtools/imgui/render_settings_panel.hpp"
+    "include/fr/devtools/imgui/stats_panel.hpp"
+    "include/fr/scene/primitive_mesh_system.hpp"
+    "include/fr/devtools/imgui/primitive_panel.hpp"
+    "include/fr/renderer/primitive_meshes.hpp"
+    "include/fr/scene/environment_parts.hpp"
+    "include/fr/scene/environment_system.hpp"
+    "include/fr/scene/scene_render_settings.hpp"
+    "include/fr/devtools/object_picking.hpp"
 
 #### renderer
     "include/fr/renderer/default_renderer_assets.hpp"
@@ -172,6 +181,7 @@ target_link_libraries(engine PRIVATE stb)
 target_link_libraries(engine PUBLIC wyhash)
 target_link_libraries(engine PUBLIC imgui)
 target_link_libraries(engine PUBLIC yyjson)
+target_link_libraries(engine PUBLIC imguizmo)
 
 
 target_include_directories(engine

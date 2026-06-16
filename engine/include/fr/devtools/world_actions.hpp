@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "fr/core/ctx.hpp"
 #include "fr/core/string.hpp"
 #include "fr/core/string_view.hpp"
 #include "fr/core/typedefs.hpp"
@@ -15,6 +16,7 @@
 #include "fr/data/thing.hpp"
 #include "fr/devtools/editor_commands.hpp"
 #include "fr/logger/logger.hpp"
+#include "fr/scene/primitive_mesh_system.hpp"
 #include "fr/scene/render_asset_system.hpp"
 #include "fr/scene/render_parts.hpp"
 #include "fr/scene/transform_system.hpp"
@@ -158,6 +160,52 @@ inline Thing spawn_spot_light(EditorContext &ctx,
     select_thing(ctx, thing);
 
     return thing;
+}
+
+/**
+ * @brief Spawns a persistent runtime primitive entity.
+ */
+inline Thing spawn_primitive(EditorContext &ctx, PrimitiveMeshKind kind,
+                             const SpawnTransformDesc &transform_desc = {}) noexcept {
+    FR_ASSERT(ctx.is_valid(), "EditorContext must be valid");
+
+    Thing thing = spawn_empty(ctx, transform_desc);
+
+    PrimitiveMeshPart primitive{};
+    primitive.kind = static_cast<U32>(kind);
+
+    ctx.world->emplace_now<PrimitiveMeshPart>(thing, primitive);
+    ctx.world->emplace_now<MeshRendererPart>(thing);
+
+    TransformSystem::rebuild_world_transforms(*ctx.world);
+    PrimitiveMeshSystem::resolve(*ctx.world, *ctx.assets, get_ambient_ctx().alloc);
+    select_thing(ctx, thing);
+
+    return thing;
+}
+
+/**
+ * @brief Spawns a cube primitive.
+ */
+inline Thing spawn_cube(EditorContext &ctx,
+                        const SpawnTransformDesc &transform_desc = {}) noexcept {
+    return spawn_primitive(ctx, PrimitiveMeshKind::Cube, transform_desc);
+}
+
+/**
+ * @brief Spawns a plane primitive.
+ */
+inline Thing spawn_plane(EditorContext &ctx,
+                         const SpawnTransformDesc &transform_desc = {}) noexcept {
+    return spawn_primitive(ctx, PrimitiveMeshKind::Plane, transform_desc);
+}
+
+/**
+ * @brief Spawns a grid primitive.
+ */
+inline Thing spawn_grid(EditorContext &ctx,
+                        const SpawnTransformDesc &transform_desc = {}) noexcept {
+    return spawn_primitive(ctx, PrimitiveMeshKind::Grid, transform_desc);
 }
 
 } // namespace fr::devtools

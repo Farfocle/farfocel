@@ -1,12 +1,8 @@
 /**
- * @file devtools_demo.cpp
+ * @file inspector.cpp
  * @author Tfoedy
- * @brief Runtime devtools demo with glTF import, ECS inspector and renderer integration.
+ * made by AI to be replaced by good code by humans
  */
-
-#include <chrono>
-#include <cstdlib>
-#include <utility>
 
 #include <SDL3/SDL.h>
 
@@ -19,14 +15,20 @@
 #include "fr/asscooker/asscooker.hpp"
 #include "fr/asscooker/dev_asset_catalog.hpp"
 #include "fr/asscooker/imgui/gltf_import_panel.hpp"
+#include "fr/asscooker/imgui/material_override_panel.hpp"
 
 #include "fr/asset/asset_manager.hpp"
+#include "fr/asset/asset_manifest.hpp"
 #include "fr/asset/asset_registry.hpp"
 #include "fr/asset/asset_storage.hpp"
+#include "fr/asset/material_format.hpp"
 
 #include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
+#include "fr/core/file.hpp"
 #include "fr/core/macros.hpp"
+#include "fr/core/string.hpp"
+#include "fr/core/time.hpp"
 #include "fr/core/typedefs.hpp"
 
 #include "fr/data/parts.hpp"
@@ -34,8 +36,13 @@
 
 #include "fr/devtools/devtools_state.hpp"
 #include "fr/devtools/editor_commands.hpp"
+#include "fr/devtools/imgui/primitive_panel.hpp"
+#include "fr/devtools/imgui/render_settings_panel.hpp"
 #include "fr/devtools/imgui/spawn_panel.hpp"
+#include "fr/devtools/imgui/stats_panel.hpp"
+#include "fr/devtools/imgui/transform_gizmo.hpp"
 #include "fr/devtools/inspector.hpp"
+#include "fr/devtools/object_picking.hpp"
 #include "fr/devtools/scene_io.hpp"
 #include "fr/devtools/world_actions.hpp"
 
@@ -51,18 +58,32 @@
 #include "fr/renderer/render_pipeline_cache.hpp"
 #include "fr/renderer/renderer.hpp"
 
+#include "fr/scene/environment_parts.hpp"
+#include "fr/scene/environment_system.hpp"
+#include "fr/scene/primitive_mesh_system.hpp"
 #include "fr/scene/render_asset_system.hpp"
 #include "fr/scene/render_extractor.hpp"
 #include "fr/scene/render_parts.hpp"
+#include "fr/scene/scene_render_settings.hpp"
 #include "fr/scene/transform_system.hpp"
-
-#include "fr/asset/asset_manifest.hpp"
 
 namespace {
 
+constexpr S32 DEMO_EXIT_SUCCESS = 0;
+constexpr S32 DEMO_EXIT_FAILURE = 1;
+
 constexpr USize ASYNC_UPLOAD_BUDGET_PER_FRAME = 8;
 constexpr F32 CAMERA_PRECISION_SPEED_SCALE = 0.15f;
+
 constexpr fr::MouseButton CAMERA_MOUSE_BUTTON = static_cast<fr::MouseButton>(3);
+constexpr fr::MouseButton PICK_MOUSE_BUTTON = fr::MouseButton::Left;
+
+enum class DemoShadingOverride : S32 {
+    MaterialDefault = 0,
+    Unlit = 1,
+    Standard = 2,
+    PBR = 3,
+};
 
 struct DefaultShaderCookInput {
     fr::AssetId id{};
@@ -71,21 +92,44 @@ struct DefaultShaderCookInput {
     fr::StringView output_path{};
 };
 
-/**
- * @brief Non-owning runtime services exposed to ECS devtools systems.
- */
+struct DemoRendererDebugState {
+    S32 shading_override{static_cast<S32>(DemoShadingOverride::MaterialDefault)};
+
+    template <typename Archive>
+    void shape(Archive &) noexcept {
+        // Runtime-only debug UI state. Intentionally not serialized.
+    }
+};
+
+struct DemoEnvironmentState {
+    char source_hdr_path[512]{};
+    char output_ftex_path[512]{"assets/environments/environment.ftex"};
+    bool force{true};
+
+    template <typename Archive>
+    void shape(Archive &) noexcept {
+        // Runtime-only UI state. Intentionally not serialized.
+    }
+};
+
 struct DevToolsRuntimeResource {
     fr::Alloc *alloc{nullptr};
 
     fr::AssetRegistry *registry{nullptr};
     fr::AssetStorage *storage{nullptr};
     fr::AssetManager *assets{nullptr};
-
     fr::asscooker::DevAssetCatalog *asset_catalog{nullptr};
 
     fr::devtools::DevToolsState *tools{nullptr};
     fr::devtools::SpawnPanelState *spawn_panel{nullptr};
+    fr::devtools::PrimitivePanelState *primitive_panel{nullptr};
+    fr::devtools::TransformGizmoState *gizmo{nullptr};
+
     fr::asscooker::imgui::GltfImportPanelState *gltf_import_panel{nullptr};
+    fr::asscooker::imgui::MaterialOverridePanelState *material_override_panel{nullptr};
+
+    DemoRendererDebugState *renderer_debug{nullptr};
+    DemoEnvironmentState *environment{nullptr};
 
     template <typename Archive>
     void shape(Archive &) noexcept {
@@ -93,15 +137,14 @@ struct DevToolsRuntimeResource {
     }
 };
 
-/**
- * @brief Per-frame input state exposed to ECS systems.
- */
 struct DemoFrameResource {
     fr::Window *window{nullptr};
     fr::WindowInput *input{nullptr};
 
     F32 dt{0.0f};
     bool camera_active{false};
+
+    fr::devtools::DevToolsFrameStats stats{};
 
     template <typename Archive>
     void shape(Archive &) noexcept {
@@ -111,14 +154,16 @@ struct DemoFrameResource {
 
 } // namespace
 
+FR_TYPE(DemoRendererDebugState);
+FR_TYPE(DemoEnvironmentState);
 FR_TYPE(DevToolsRuntimeResource);
 FR_TYPE(DemoFrameResource);
 
 namespace {
 
 void setup_logger() {
-    auto standard_sink = fr::make_unique<fr::StandardSink>(fr::StandardSink::Options{});
-    fr::get_ambient_ctx().logger->add_sink(std::move(standard_sink));
+    fr::get_ambient_ctx().logger->add_sink(
+        fr::make_unique<fr::StandardSink>(fr::StandardSink::Options{}));
 }
 
 static void imgui_event_callback(void *event_data, void *) {
@@ -290,6 +335,107 @@ void init_devtools_defaults(fr::devtools::DevToolsState &tools) noexcept {
     tools.debug.flags = 0;
 }
 
+fr::SceneRenderSettingsPart *find_scene_render_settings(fr::World &world) noexcept {
+    fr::SceneRenderSettingsPart *result = nullptr;
+
+    world.for_each_alive_thing([&](fr::Thing thing) noexcept {
+        if (result || thing.is_nil()) {
+            return;
+        }
+
+        result = world.try_get<fr::SceneRenderSettingsPart>(thing);
+    });
+
+    return result;
+}
+
+fr::SceneRenderSettingsPart &
+ensure_scene_render_settings(fr::World &world, const fr::devtools::DevToolsState &tools) noexcept {
+    if (fr::SceneRenderSettingsPart *existing = find_scene_render_settings(world)) {
+        return *existing;
+    }
+
+    fr::Thing thing = world.spawn();
+    fr::SceneRenderSettingsPart &settings = world.emplace_now<fr::SceneRenderSettingsPart>(thing);
+
+    settings.lighting = tools.lighting;
+    settings.ao = tools.ao;
+    settings.ibl = tools.ibl;
+    settings.debug = tools.debug;
+    settings.directional_shadow_settings = tools.directional_shadow_settings;
+
+    return settings;
+}
+
+void copy_scene_settings_to_tools(const fr::SceneRenderSettingsPart &settings,
+                                  fr::devtools::DevToolsState &tools) noexcept {
+    tools.lighting = settings.lighting;
+    tools.ao = settings.ao;
+    tools.ibl = settings.ibl;
+    tools.debug = settings.debug;
+    tools.directional_shadow_settings = settings.directional_shadow_settings;
+}
+
+void copy_tools_to_scene_settings(const fr::devtools::DevToolsState &tools,
+                                  fr::SceneRenderSettingsPart &settings) noexcept {
+    settings.lighting = tools.lighting;
+    settings.ao = tools.ao;
+    settings.ibl = tools.ibl;
+    settings.debug = tools.debug;
+    settings.directional_shadow_settings = tools.directional_shadow_settings;
+}
+
+fr::EnvironmentPart *find_environment_part(fr::World &world) noexcept {
+    fr::EnvironmentPart *result = nullptr;
+
+    world.for_each_alive_thing([&](fr::Thing thing) noexcept {
+        if (result || thing.is_nil()) {
+            return;
+        }
+
+        result = world.try_get<fr::EnvironmentPart>(thing);
+    });
+
+    return result;
+}
+
+fr::EnvironmentPart &ensure_environment_part(fr::World &world) noexcept {
+    if (fr::EnvironmentPart *existing = find_environment_part(world)) {
+        return *existing;
+    }
+
+    fr::Thing thing = world.spawn();
+    return world.emplace_now<fr::EnvironmentPart>(thing);
+}
+
+void process_scene_io_requests(fr::World &world, fr::AssetManager &assets,
+                               fr::devtools::DevToolsState &tools,
+                               fr::devtools::SpawnPanelState &panel) noexcept {
+    if (panel.request_save_scene) {
+        panel.request_save_scene = false;
+
+        if (panel.scene_path[0] == '\0') {
+            FR_LOG_ERR("[DevToolsDemo] Cannot save scene to an empty path.");
+        } else {
+            fr::devtools::save_scene(world, fr::StringView(panel.scene_path));
+        }
+    }
+
+    if (panel.request_load_scene) {
+        panel.request_load_scene = false;
+
+        if (panel.scene_path[0] == '\0') {
+            FR_LOG_ERR("[DevToolsDemo] Cannot load scene from an empty path.");
+            return;
+        }
+
+        if (fr::devtools::load_scene_replacing_world(world, assets,
+                                                     fr::StringView(panel.scene_path))) {
+            fr::devtools::set_selected_thing(tools, fr::Thing::nil());
+        }
+    }
+}
+
 void setup_default_scene(fr::devtools::EditorContext &ctx) noexcept {
     fr::devtools::ensure_default_scene_part_types(*ctx.world);
 
@@ -325,6 +471,9 @@ void setup_default_scene(fr::devtools::EditorContext &ctx) noexcept {
         point->radius = 24.0f;
         point->casts_shadow = false;
     }
+
+    ensure_scene_render_settings(*ctx.world, *ctx.tools);
+    ensure_environment_part(*ctx.world);
 
     fr::TransformSystem::rebuild_world_transforms(*ctx.world);
     fr::devtools::clear_selection(ctx);
@@ -399,6 +548,216 @@ static void camera_control_system(fr::Scope scope) {
     fr::TransformSystem::rebuild_world_transforms(scope.world());
 }
 
+void process_object_picking(fr::World &world, fr::Window &window, fr::WindowInput &input,
+                            fr::AssetManager &assets, fr::devtools::DevToolsState &tools,
+                            bool camera_active) noexcept {
+    if (camera_active || !window.is_focused()) {
+        return;
+    }
+
+    if (window.is_minimized() || window.get_width() == 0 || window.get_height() == 0) {
+        return;
+    }
+
+    ImGuiIO &io = ImGui::GetIO();
+
+    if (io.WantCaptureMouse || ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) ||
+        ImGui::IsAnyItemHovered()) {
+        return;
+    }
+
+    if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) {
+        return;
+    }
+
+    if (!input.is_mouse_pressed(PICK_MOUSE_BUTTON)) {
+        return;
+    }
+
+    const F32 width = static_cast<F32>(window.get_width());
+    const F32 height = static_cast<F32>(window.get_height());
+    const F32 aspect = width / height;
+
+    fr::devtools::EditorCameraMatrices camera =
+        fr::devtools::extract_editor_camera_matrices(world, aspect);
+
+    if (!camera.found) {
+        return;
+    }
+
+    fr::devtools::PickingRay ray =
+        fr::devtools::make_picking_ray(input.mouse_x, input.mouse_y, width, height, camera);
+
+    fr::devtools::PickingHit hit = fr::devtools::pick_scene_mesh_aabbs(world, assets, ray);
+
+    fr::devtools::set_selected_thing(tools, hit.is_valid() ? hit.thing : fr::Thing::nil());
+}
+
+const char *shading_override_name(DemoShadingOverride mode) noexcept {
+    switch (mode) {
+    case DemoShadingOverride::MaterialDefault:
+        return "Material Default";
+    case DemoShadingOverride::Unlit:
+        return "Force Unlit";
+    case DemoShadingOverride::Standard:
+        return "Force Standard";
+    case DemoShadingOverride::PBR:
+        return "Force PBR";
+    default:
+        return "Unknown";
+    }
+}
+
+void draw_shading_override_combo(DemoRendererDebugState &state) noexcept {
+    ImGui::PushID("demo_shading_override");
+
+    S32 selected = state.shading_override;
+
+    const char *items[] = {
+        "Material Default",
+        "Force Unlit",
+        "Force Standard",
+        "Force PBR",
+    };
+
+    if (ImGui::Combo("Shading Override##combo", &selected, items, 4)) {
+        state.shading_override = glm::clamp(selected, 0, 3);
+    }
+
+    ImGui::TextDisabled(
+        "%s", shading_override_name(static_cast<DemoShadingOverride>(state.shading_override)));
+
+    ImGui::PopID();
+}
+
+void apply_shading_override(fr::RenderFrameSubmission &submission,
+                            DemoShadingOverride override_mode) noexcept {
+    if (override_mode == DemoShadingOverride::MaterialDefault) {
+        return;
+    }
+
+    U32 shading_model = static_cast<U32>(fr::MaterialShadingModel::PBR);
+
+    if (override_mode == DemoShadingOverride::Unlit) {
+        shading_model = static_cast<U32>(fr::MaterialShadingModel::Unlit);
+    } else if (override_mode == DemoShadingOverride::Standard) {
+        shading_model = static_cast<U32>(fr::MaterialShadingModel::Standard);
+    }
+
+    for (USize i = 0; i < submission.materials.size(); ++i) {
+        submission.materials[i].shading_model = shading_model;
+    }
+}
+
+bool cook_and_apply_hdr_environment(fr::World &world, DevToolsRuntimeResource &runtime,
+                                    DemoEnvironmentState &state) noexcept {
+    FR_ASSERT(runtime.alloc, "allocator must be available");
+    FR_ASSERT(runtime.registry, "AssetRegistry must be available");
+    FR_ASSERT(runtime.assets, "AssetManager must be available");
+    FR_ASSERT(runtime.asset_catalog, "DevAssetCatalog must be available");
+
+    if (state.source_hdr_path[0] == '\0' || state.output_ftex_path[0] == '\0') {
+        FR_LOG_ERR("[Environment] HDR source/output path is empty.");
+        return false;
+    }
+
+    fr::String source_path =
+        fr::String::from_view(runtime.alloc, fr::StringView(state.source_hdr_path));
+
+    if (!fr::file::exists(source_path)) {
+        FR_LOG_ERR("[Environment] HDR source file does not exist: {}", source_path.view());
+        return false;
+    }
+
+    fr::DynamicArray<fr::asscooker::CookedAssetOutput> outputs(runtime.alloc);
+
+    fr::asscooker::CookOptions options{};
+    options.force = state.force;
+    options.output_id = fr::AssetId::from_logical_path(fr::StringView(state.output_ftex_path));
+
+    if (!fr::asscooker::cook_texture_ex(fr::StringView(state.source_hdr_path),
+                                        fr::StringView(state.output_ftex_path), false, &outputs,
+                                        options)) {
+        FR_LOG_ERR("[Environment] Failed to cook HDR environment: {}",
+                   fr::StringView(state.source_hdr_path));
+        return false;
+    }
+
+    if (!register_cooked_outputs(*runtime.registry, outputs.slice())) {
+        FR_LOG_ERR("[Environment] Failed to register cooked HDR environment output.");
+        return false;
+    }
+
+    runtime.asset_catalog->add_or_replace(outputs.slice(), fr::StringView(state.source_hdr_path));
+
+    if (!runtime.asset_catalog->build_loose_manifest(fr::StringView("assets/dev.fmanifest"))) {
+        FR_LOG_ERR("[Environment] Failed to rebuild development asset manifest.");
+        return false;
+    }
+
+    fr::EnvironmentPart &env = ensure_environment_part(world);
+
+    if (env.texture_handle.is_valid()) {
+        runtime.assets->unload_texture(env.texture_handle);
+    }
+
+    env.texture_path = fr::String::from_view(fr::StringView(state.output_ftex_path));
+    env.texture_id = fr::AssetId::from_logical_path(env.texture_path.view());
+    env.resolved_texture_id = {};
+    env.texture_handle = {};
+    env.enabled = true;
+
+    if (runtime.tools) {
+        fr::SceneRenderSettingsPart &settings = ensure_scene_render_settings(world, *runtime.tools);
+        settings.ibl.enabled = true;
+        copy_scene_settings_to_tools(settings, *runtime.tools);
+    }
+
+    fr::EnvironmentSystem::resolve(world, *runtime.assets);
+
+    FR_LOG_OK("[Environment] Imported HDR environment: {}", fr::StringView(state.output_ftex_path));
+    return true;
+}
+
+void draw_environment_panel(fr::World &world, DevToolsRuntimeResource &runtime) noexcept {
+    FR_ASSERT(runtime.environment, "Environment state must be available");
+
+    DemoEnvironmentState &state = *runtime.environment;
+    fr::EnvironmentPart &env = ensure_environment_part(world);
+
+    ImGui::PushID("environment_panel");
+
+    ImGui::InputText("Source HDR##source_hdr", state.source_hdr_path,
+                     sizeof(state.source_hdr_path));
+    ImGui::InputText("Output .ftex##output_ftex", state.output_ftex_path,
+                     sizeof(state.output_ftex_path));
+
+    ImGui::Checkbox("Force Recook##force_hdr", &state.force);
+    ImGui::Separator();
+
+    ImGui::Checkbox("Scene Environment Enabled##scene_env_enabled", &env.enabled);
+
+    if (env.texture_path.size() != 0) {
+        ImGui::TextWrapped("Scene environment: %s", env.texture_path.c_str());
+    } else {
+        ImGui::TextDisabled("Scene has no environment texture.");
+    }
+
+    ImGui::Text("Handle: %s", env.texture_handle.is_valid() ? "valid" : "invalid");
+
+    if (ImGui::Button("Import / Apply HDR##import_hdr")) {
+        cook_and_apply_hdr_environment(world, runtime, state);
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Resolve Scene Environment##resolve_scene_env")) {
+        fr::EnvironmentSystem::resolve(world, *runtime.assets);
+    }
+
+    ImGui::PopID();
+}
+
 static void devtools_ui_system(fr::Scope scope) {
     DevToolsRuntimeResource &runtime = scope.get_resource<DevToolsRuntimeResource>();
 
@@ -407,7 +766,12 @@ static void devtools_ui_system(fr::Scope scope) {
     FR_ASSERT(runtime.asset_catalog, "DevAssetCatalog must be available");
     FR_ASSERT(runtime.tools, "DevToolsState must be available");
     FR_ASSERT(runtime.spawn_panel, "SpawnPanelState must be available");
+    FR_ASSERT(runtime.primitive_panel, "PrimitivePanelState must be available");
+    FR_ASSERT(runtime.gizmo, "TransformGizmoState must be available");
     FR_ASSERT(runtime.gltf_import_panel, "GltfImportPanelState must be available");
+    FR_ASSERT(runtime.material_override_panel, "MaterialOverridePanelState must be available");
+    FR_ASSERT(runtime.renderer_debug, "DemoRendererDebugState must be available");
+    FR_ASSERT(runtime.environment, "DemoEnvironmentState must be available");
 
     fr::devtools::EditorContext editor_ctx{};
     editor_ctx.world = &scope.world();
@@ -418,59 +782,143 @@ static void devtools_ui_system(fr::Scope scope) {
         ImGui::SetNextWindowSize(ImVec2(1100.0f, 660.0f), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(20.0f, 20.0f), ImGuiCond_FirstUseEver);
 
-        if (ImGui::Begin("World Inspector", &runtime.tools->show_inspector)) {
+        ImGui::PushID("world_inspector_window");
+        if (ImGui::Begin("World Inspector##main_world_inspector", &runtime.tools->show_inspector)) {
             fr::devtools::inspector(editor_ctx);
         }
-
         ImGui::End();
+        ImGui::PopID();
     }
 
     if (runtime.tools->show_spawn_panel) {
-        ImGui::SetNextWindowSize(ImVec2(440.0f, 520.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(460.0f, 720.0f), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(1140.0f, 20.0f), ImGuiCond_FirstUseEver);
 
-        if (ImGui::Begin("Spawn / Scene", &runtime.tools->show_spawn_panel)) {
+        ImGui::PushID("spawn_scene_window");
+        if (ImGui::Begin("Spawn / Scene##main_spawn_scene", &runtime.tools->show_spawn_panel)) {
+            ImGui::PushID("spawn_panel");
             fr::devtools::spawn_panel(editor_ctx, *runtime.spawn_panel);
-        }
+            ImGui::PopID();
 
+            ImGui::SeparatorText("Primitives##primitive_separator");
+
+            ImGui::PushID("primitive_spawn");
+            fr::devtools::primitive_spawn_panel(editor_ctx, *runtime.primitive_panel,
+                                                runtime.spawn_panel->transform);
+            ImGui::PopID();
+
+            ImGui::SeparatorText("Selected Primitive##selected_primitive_separator");
+
+            ImGui::PushID("selected_primitive");
+            fr::devtools::selected_primitive_panel(editor_ctx);
+            ImGui::PopID();
+        }
         ImGui::End();
+        ImGui::PopID();
     }
 
-    ImGui::SetNextWindowSize(ImVec2(520.0f, 340.0f), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(1140.0f, 560.0f), ImGuiCond_FirstUseEver);
+    if (runtime.tools->show_render_settings) {
+        DemoFrameResource &frame = scope.get_resource<DemoFrameResource>();
 
-    if (ImGui::Begin("Asset Import")) {
+        ImGui::SetNextWindowSize(ImVec2(480.0f, 720.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(ImVec2(20.0f, 700.0f), ImGuiCond_FirstUseEver);
+
+        ImGui::PushID("renderer_stats_window");
+        if (ImGui::Begin("Renderer / Stats##main_renderer_stats",
+                         &runtime.tools->show_render_settings)) {
+            if (ImGui::BeginTabBar("##renderer_stats_tabs")) {
+                if (ImGui::BeginTabItem("Renderer##renderer_settings_tab")) {
+                    fr::SceneRenderSettingsPart &scene_settings =
+                        ensure_scene_render_settings(scope.world(), *runtime.tools);
+
+                    copy_scene_settings_to_tools(scene_settings, *runtime.tools);
+
+                    ImGui::PushID("render_settings_panel");
+                    fr::devtools::render_settings_panel(*runtime.tools);
+                    ImGui::PopID();
+
+                    copy_tools_to_scene_settings(*runtime.tools, scene_settings);
+
+                    ImGui::SeparatorText("Material Debug##material_debug_separator");
+                    draw_shading_override_combo(*runtime.renderer_debug);
+
+                    ImGui::SeparatorText("Transform Gizmo##transform_gizmo_separator");
+                    fr::devtools::draw_transform_gizmo_toolbar(*runtime.gizmo);
+
+                    ImGui::EndTabItem();
+                }
+
+                if (ImGui::BeginTabItem("Stats##stats_tab")) {
+                    ImGui::PushID("stats_panel");
+                    fr::devtools::stats_panel(scope.world(), frame.stats);
+                    ImGui::PopID();
+                    ImGui::EndTabItem();
+                }
+
+                ImGui::EndTabBar();
+            }
+        }
+        ImGui::End();
+        ImGui::PopID();
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(540.0f, 700.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(1140.0f, 760.0f), ImGuiCond_FirstUseEver);
+
+    ImGui::PushID("assets_materials_window");
+    if (ImGui::Begin("Assets / Materials##main_assets_materials")) {
         fr::asscooker::DevAssetImportContext import_ctx{};
         import_ctx.alloc = runtime.alloc;
         import_ctx.registry = runtime.registry;
         import_ctx.catalog = runtime.asset_catalog;
+        import_ctx.cooked_root = "assets";
+        import_ctx.manifest_path = "assets/dev.fmanifest";
 
-        [[maybe_unused]] fr::asscooker::ImportedModelResult imported =
-            fr::asscooker::imgui::draw_gltf_import_panel(import_ctx, editor_ctx,
-                                                         *runtime.gltf_import_panel);
+        if (ImGui::BeginTabBar("##assets_materials_tabs")) {
+            if (ImGui::BeginTabItem("glTF##gltf_tab")) {
+                ImGui::PushID("gltf_import_panel");
+                [[maybe_unused]] fr::asscooker::ImportedModelResult imported =
+                    fr::asscooker::imgui::draw_gltf_import_panel(import_ctx, editor_ctx,
+                                                                 *runtime.gltf_import_panel);
+                ImGui::PopID();
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Material Override##material_override_tab")) {
+                ImGui::PushID("material_override_panel");
+                fr::asscooker::imgui::material_override_panel(import_ctx, editor_ctx,
+                                                              *runtime.material_override_panel);
+                ImGui::PopID();
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Environment HDR##environment_hdr_tab")) {
+                draw_environment_panel(scope.world(), runtime);
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
+        }
     }
-
     ImGui::End();
+    ImGui::PopID();
 }
 
-fr::RenderFrameDesc build_frame_desc(const fr::RenderExtractResult &extract_result,
+fr::RenderFrameDesc build_frame_desc(fr::World &world,
+                                     const fr::RenderExtractResult &extract_result,
                                      const fr::RenderFrameSubmission &submission, U32 width,
-                                     U32 height,
-                                     const fr::devtools::DevToolsState &tools) noexcept {
+                                     U32 height, const fr::devtools::DevToolsState &tools,
+                                     const fr::AssetManager &assets) noexcept {
     fr::RenderFrameDesc frame{};
     frame.submission = &submission;
-
     frame.viewport.width = width;
     frame.viewport.height = height;
-
     frame.camera = extract_result.camera;
-    frame.environment_source = {};
-
+    frame.environment_source = fr::EnvironmentSystem::active_environment_texture(world, assets);
     frame.lighting = tools.lighting;
     frame.ao = tools.ao;
     frame.ibl = tools.ibl;
     frame.debug = tools.debug;
-
     return frame;
 }
 
@@ -483,7 +931,7 @@ S32 main(S32 argc, char **argv) {
     fr::init_core_ctx();
     setup_logger();
 
-    S32 exit_code = EXIT_SUCCESS;
+    S32 exit_code = DEMO_EXIT_SUCCESS;
 
     {
         fr::Alloc *alloc = fr::get_ambient_ctx().alloc;
@@ -505,41 +953,41 @@ S32 main(S32 argc, char **argv) {
 
         if (!window.init(props)) {
             FR_LOG_ERR("[DevToolsDemo] Failed to initialize window.");
-            exit_code = EXIT_FAILURE;
+            exit_code = DEMO_EXIT_FAILURE;
         }
 
-        if (exit_code == EXIT_SUCCESS) {
+        if (exit_code == DEMO_EXIT_SUCCESS) {
             device = fr::create_opengl_render_device(alloc);
             if (!device) {
                 FR_LOG_ERR("[DevToolsDemo] Failed to create OpenGL render device.");
-                exit_code = EXIT_FAILURE;
+                exit_code = DEMO_EXIT_FAILURE;
             }
         }
 
-        if (exit_code == EXIT_SUCCESS) {
+        if (exit_code == DEMO_EXIT_SUCCESS) {
             imgui_initialized = init_imgui(window);
             if (!imgui_initialized) {
-                exit_code = EXIT_FAILURE;
+                exit_code = DEMO_EXIT_FAILURE;
             }
         }
 
-        if (exit_code == EXIT_SUCCESS) {
+        if (exit_code == DEMO_EXIT_SUCCESS) {
             fr::AssetRegistry registry(alloc);
             fr::AssetStorage storage(alloc);
 
             if (!cook_default_renderer_shaders(alloc, registry)) {
                 FR_LOG_ERR("[DevToolsDemo] Failed to prepare default renderer shaders.");
-                exit_code = EXIT_FAILURE;
+                exit_code = DEMO_EXIT_FAILURE;
             }
 
-            if (exit_code == EXIT_SUCCESS) {
+            if (exit_code == DEMO_EXIT_SUCCESS) {
                 if (!load_dev_asset_manifest_if_exists(alloc, registry, storage,
                                                        "assets/dev.fmanifest")) {
-                    exit_code = EXIT_FAILURE;
+                    exit_code = DEMO_EXIT_FAILURE;
                 }
             }
 
-            if (exit_code == EXIT_SUCCESS) {
+            if (exit_code == DEMO_EXIT_SUCCESS) {
                 fr::AssetManager assets(device, alloc, &registry, &storage);
 
                 fr::DefaultRendererShaderIds shader_ids{};
@@ -548,22 +996,22 @@ S32 main(S32 argc, char **argv) {
 
                 if (!fr::load_default_renderer_shaders(assets, shader_ids, shaders)) {
                     FR_LOG_ERR("[DevToolsDemo] Failed to load default renderer shaders.");
-                    exit_code = EXIT_FAILURE;
+                    exit_code = DEMO_EXIT_FAILURE;
                 } else {
                     shaders_loaded = true;
                 }
 
-                if (exit_code == EXIT_SUCCESS) {
+                if (exit_code == DEMO_EXIT_SUCCESS) {
                     fr::RenderPipelineCache pipeline_cache(device, &assets, alloc);
 
                     fr::RendererPipelineSet pipelines{};
                     if (!fr::create_default_renderer_pipelines(pipeline_cache, shaders,
                                                                pipelines)) {
                         FR_LOG_ERR("[DevToolsDemo] Failed to create renderer pipelines.");
-                        exit_code = EXIT_FAILURE;
+                        exit_code = DEMO_EXIT_FAILURE;
                     }
 
-                    if (exit_code == EXIT_SUCCESS) {
+                    if (exit_code == DEMO_EXIT_SUCCESS) {
                         fr::RendererCreateDesc renderer_desc{};
                         renderer_desc.alloc = alloc;
                         renderer_desc.pipelines = pipelines;
@@ -571,16 +1019,23 @@ S32 main(S32 argc, char **argv) {
                         fr::Renderer renderer(device, renderer_desc);
                         if (!renderer.is_ready()) {
                             FR_LOG_ERR("[DevToolsDemo] Renderer failed to initialize.");
-                            exit_code = EXIT_FAILURE;
+                            exit_code = DEMO_EXIT_FAILURE;
                         }
 
-                        if (exit_code == EXIT_SUCCESS) {
+                        if (exit_code == DEMO_EXIT_SUCCESS) {
                             fr::World world{};
 
                             fr::devtools::DevToolsState tools{};
                             fr::devtools::SpawnPanelState spawn_panel_state{};
+                            fr::devtools::PrimitivePanelState primitive_panel_state{};
+                            fr::devtools::TransformGizmoState gizmo_state{};
+
                             fr::asscooker::imgui::GltfImportPanelState gltf_panel_state{};
+                            fr::asscooker::imgui::MaterialOverridePanelState material_panel_state{};
                             fr::asscooker::DevAssetCatalog asset_catalog(alloc);
+
+                            DemoRendererDebugState renderer_debug_state{};
+                            DemoEnvironmentState environment_state{};
 
                             init_devtools_defaults(tools);
 
@@ -592,7 +1047,12 @@ S32 main(S32 argc, char **argv) {
                             runtime_resource.asset_catalog = &asset_catalog;
                             runtime_resource.tools = &tools;
                             runtime_resource.spawn_panel = &spawn_panel_state;
+                            runtime_resource.primitive_panel = &primitive_panel_state;
+                            runtime_resource.gizmo = &gizmo_state;
                             runtime_resource.gltf_import_panel = &gltf_panel_state;
+                            runtime_resource.material_override_panel = &material_panel_state;
+                            runtime_resource.renderer_debug = &renderer_debug_state;
+                            runtime_resource.environment = &environment_state;
 
                             fr::WindowInput input{};
 
@@ -617,18 +1077,14 @@ S32 main(S32 argc, char **argv) {
 
                             window.set_mouse_mode(fr::MouseMode::Normal);
 
-                            using Clock = std::chrono::steady_clock;
-                            Clock::time_point last_frame_time = Clock::now();
-
+                            auto last_frame_time = fr::time::get_steady_now_ms();
                             bool running = true;
 
                             while (running) {
-                                const Clock::time_point now = Clock::now();
-                                const std::chrono::duration<F32> frame_delta =
-                                    now - last_frame_time;
+                                const auto now = fr::time::get_steady_now_ms();
+                                F32 dt = static_cast<F32>(now - last_frame_time) * 0.001f;
                                 last_frame_time = now;
 
-                                F32 dt = frame_delta.count();
                                 if (dt > 0.1f) {
                                     dt = 0.1f;
                                 }
@@ -641,16 +1097,26 @@ S32 main(S32 argc, char **argv) {
 
                                 DemoFrameResource &frame = world.get_resource<DemoFrameResource>();
                                 frame.dt = dt;
+                                frame.stats.dt = dt;
+                                frame.stats.fps = dt > 0.0f ? 1.0f / dt : 0.0f;
+                                frame.stats.viewport_width = window.get_width();
+                                frame.stats.viewport_height = window.get_height();
 
                                 ImGui_ImplOpenGL3_NewFrame();
                                 ImGui_ImplSDL3_NewFrame();
                                 ImGui::NewFrame();
 
+                                fr::devtools::update_transform_gizmo_shortcuts(gizmo_state);
+
                                 world.run();
                                 world.commit();
 
+                                process_scene_io_requests(world, assets, tools, spawn_panel_state);
+
                                 fr::TransformSystem::rebuild_world_transforms(world);
+                                fr::PrimitiveMeshSystem::resolve(world, assets, alloc);
                                 fr::RenderAssetSystem::resolve(world, assets);
+                                fr::EnvironmentSystem::resolve(world, assets);
                                 assets.process_async_uploads(ASYNC_UPLOAD_BUDGET_PER_FRAME);
 
                                 if (!window.is_minimized() && window.get_width() > 0 &&
@@ -661,6 +1127,11 @@ S32 main(S32 argc, char **argv) {
                                     const F32 aspect =
                                         static_cast<F32>(width) / static_cast<F32>(height);
 
+                                    fr::SceneRenderSettingsPart &scene_settings =
+                                        ensure_scene_render_settings(world, tools);
+
+                                    copy_scene_settings_to_tools(scene_settings, tools);
+
                                     fr::RenderExtractDesc extract_desc{};
                                     extract_desc.aspect_ratio = aspect;
                                     extract_desc.geometry_pipeline =
@@ -668,15 +1139,33 @@ S32 main(S32 argc, char **argv) {
                                     extract_desc.forward_transparent_pipeline =
                                         renderer.forward_transparent_pipeline();
                                     extract_desc.shadow_pipeline = renderer.shadow_pipeline();
+                                    extract_desc.directional_shadow_settings =
+                                        tools.directional_shadow_settings;
 
                                     fr::RenderExtractResult extract_result =
                                         fr::extract_render_frame(world, assets, extract_desc,
                                                                  submission);
 
-                                    fr::RenderFrameDesc frame_desc = build_frame_desc(
-                                        extract_result, submission, width, height, tools);
+                                    apply_shading_override(
+                                        submission, static_cast<DemoShadingOverride>(
+                                                        renderer_debug_state.shading_override));
+
+                                    frame.stats.geometry_stats = extract_result.geometry_stats;
+                                    frame.stats.shadow_stats = extract_result.shadow_stats;
+                                    frame.stats.has_main_camera = extract_result.has_main_camera;
+
+                                    fr::RenderFrameDesc frame_desc =
+                                        build_frame_desc(world, extract_result, submission, width,
+                                                         height, tools, assets);
 
                                     renderer.render(frame_desc);
+
+                                    fr::devtools::draw_transform_gizmo(world, tools, gizmo_state,
+                                                                       static_cast<F32>(width),
+                                                                       static_cast<F32>(height));
+
+                                    process_object_picking(world, window, input, assets, tools,
+                                                           frame.camera_active);
                                 }
 
                                 ImGui::Render();
@@ -687,6 +1176,7 @@ S32 main(S32 argc, char **argv) {
 
                             window.set_mouse_mode(fr::MouseMode::Normal);
 
+                            fr::EnvironmentSystem::release(world, assets);
                             fr::RenderAssetSystem::release(world, assets);
                         }
                     }
@@ -709,7 +1199,7 @@ S32 main(S32 argc, char **argv) {
 
         window.close();
 
-        if (exit_code == EXIT_SUCCESS) {
+        if (exit_code == DEMO_EXIT_SUCCESS) {
             FR_LOG_OK("[DevToolsDemo] Shutdown complete.");
         } else {
             FR_LOG_ERR("[DevToolsDemo] Shutdown after failure.");

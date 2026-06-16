@@ -29,6 +29,9 @@ struct SpawnPanelState {
 
     bool open_spawn_transform{true};
     bool open_scene_io{true};
+
+    bool request_save_scene{false};
+    bool request_load_scene{false};
 };
 
 /**
@@ -121,7 +124,7 @@ inline void draw_scene_io_controls(EditorContext &ctx, SpawnPanelState &state) n
         if (state.scene_path[0] == '\0') {
             FR_LOG_ERR("[DevTools] Cannot save scene to an empty path.");
         } else {
-            save_scene(*ctx.world, StringView(state.scene_path));
+            state.request_save_scene = true;
         }
     }
 
@@ -130,14 +133,13 @@ inline void draw_scene_io_controls(EditorContext &ctx, SpawnPanelState &state) n
     if (ImGui::Button("Load Scene")) {
         if (state.scene_path[0] == '\0') {
             FR_LOG_ERR("[DevTools] Cannot load scene from an empty path.");
-        } else if (load_scene_replacing_world(*ctx.world, *ctx.assets,
-                                              StringView(state.scene_path))) {
-            clear_selection(ctx);
+        } else {
+            state.request_load_scene = true;
         }
     }
 
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Replaces current scene things while preserving runtime resources.");
+        ImGui::SetTooltip("Scene IO is deferred until after ECS systems finish this frame.");
     }
 }
 

@@ -19,6 +19,50 @@
 namespace fr {
 
 /**
+ * @brief Built-in runtime primitive mesh kind.
+ */
+enum class PrimitiveMeshKind : U32 {
+    Cube = 0,
+    Plane = 1,
+    Grid = 2,
+};
+
+/**
+ * @brief Persistent description for a built-in runtime primitive mesh.
+ *
+ * @details
+ * Runtime mesh handles are not serialized. PrimitiveMeshSystem rebuilds them from this description
+ * after scene load or when parameters change.
+ */
+struct PrimitiveMeshPart {
+    U32 kind{static_cast<U32>(PrimitiveMeshKind::Cube)};
+
+    F32 size{1.0f};
+    U32 x_segments{16};
+    U32 z_segments{16};
+
+    U32 pass_type{static_cast<U32>(RenderPass::Opaque)};
+    bool casts_shadow{true};
+
+    U32 resolved_kind{static_cast<U32>(-1)};
+    F32 resolved_size{-1.0f};
+    U32 resolved_x_segments{0};
+    U32 resolved_z_segments{0};
+    U32 resolved_pass_type{static_cast<U32>(-1)};
+
+    PrimitiveMeshPart() noexcept = default;
+
+    FR_SHAPE({
+        FR_PROP(kind);
+        FR_PROP(size);
+        FR_PROP(x_segments);
+        FR_PROP(z_segments);
+        FR_PROP(pass_type);
+        FR_PROP(casts_shadow);
+    })
+};
+
+/**
  * @brief Camera lens properties.
  */
 struct CameraPart {
@@ -218,3 +262,4 @@ FR_TYPE(fr::MaterialOverridePart);
 FR_TYPE(fr::PointLightPart);
 FR_TYPE(fr::SpotLightPart);
 FR_TYPE(fr::DirectionalLightPart);
+FR_TYPE(fr::PrimitiveMeshPart);

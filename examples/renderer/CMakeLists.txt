@@ -14,6 +14,7 @@ foreach(source ${RENDERER_EXAMPLE_SOURCES})
             engine
             asscooker
             imgui 
+            imguizmo
             SDL3::SDL3-static 
             glad
     )
