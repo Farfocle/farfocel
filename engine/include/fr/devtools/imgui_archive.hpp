@@ -11,6 +11,8 @@
 #include <imgui.h>
 #include <type_traits>
 
+#include <glm/gtc/quaternion.hpp>
+
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/math.hpp"
@@ -149,18 +151,22 @@ public:
 
         } else if constexpr (std::is_same_v<RawT, Vec2>) {
             do_label(label);
-            ImGui::SetNextItemWidth(0.1f);
             ImGui::DragFloat2("##v", &value.x, 0.1f);
 
         } else if constexpr (std::is_same_v<RawT, Vec3>) {
             do_label(label);
-            ImGui::SetNextItemWidth(0.1f);
             ImGui::DragFloat3("##v", &value.x, 0.1f);
 
         } else if constexpr (std::is_same_v<RawT, Vec4>) {
             do_label(label);
-            ImGui::SetNextItemWidth(0.1f);
             ImGui::DragFloat4("##v", &value.x, 0.1f);
+
+        } else if constexpr (std::is_same_v<RawT, Quat>) {
+            do_label(label);
+            Vec3 euler = glm::degrees(glm::eulerAngles(value));
+            if (ImGui::DragFloat3("##v", &euler.x, 0.5f)) {
+                value = Quat(glm::radians(euler));
+            }
 
         } else if constexpr (std::is_same_v<RawT, Mat4>) {
             if (do_tree(label)) {

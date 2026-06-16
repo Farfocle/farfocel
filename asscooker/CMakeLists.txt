@@ -20,11 +20,11 @@ set(COOKER_HEADERS
     "src/importers/gltf_importer.hpp"
     "src/importers/stb_importer.hpp"
 
+    "include/fr/asscooker/app.hpp"
     "include/fr/asscooker/dev_asset_catalog.hpp"
     "include/fr/asscooker/dev_asset_importer.hpp"
+    "include/fr/asscooker/devtools_setup.hpp"
 
-    "include/fr/asscooker/imgui/gltf_import_panel.hpp"
-    "include/fr/asscooker/imgui/material_override_panel.hpp"
 )
 
 set(COOKER_SOURCES

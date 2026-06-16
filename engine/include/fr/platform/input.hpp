@@ -8,6 +8,7 @@
 #pragma once
 
 #include "fr/core/mem.hpp"
+#include "fr/core/meta.hpp"
 #include "fr/core/typedefs.hpp"
 #include "fr/platform/keycode.hpp"
 
@@ -117,6 +118,18 @@ struct WindowInput {
     void reset() noexcept {
         reset_frame_state();
     }
+
+    template <typename Archive>
+    void shape(Archive &ar) noexcept {
+        ar.prop("mouse_x", mouse_x);
+        ar.prop("mouse_y", mouse_y);
+        ar.prop("mouse_delta_x", mouse_delta_x);
+        ar.prop("mouse_delta_y", mouse_delta_y);
+        ar.prop("mouse_wheel_x", mouse_wheel_x);
+        ar.prop("mouse_wheel_y", mouse_wheel_y);
+    }
 };
 
 } // namespace fr
+
+FR_TYPE(fr::WindowInput);

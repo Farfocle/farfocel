@@ -92,23 +92,24 @@ set(ENGINE_HEADERS
     "include/fr/platform/window.hpp"
 
 #### devtools
-    "include/fr/devtools/devtools_state.hpp"
+    "include/fr/devtools/asset_inspector.hpp"
+    "include/fr/devtools/asset_panel.hpp"
     "include/fr/devtools/editor_commands.hpp"
+    "include/fr/devtools/environment_panel.hpp"
+    "include/fr/devtools/gizmo.hpp"
+    "include/fr/devtools/gltf_import_panel.hpp"
     "include/fr/devtools/imgui_archive.hpp"
-    "include/fr/devtools/inspector.hpp"
-    "include/fr/devtools/inspector_state.hpp"
+    "include/fr/devtools/material_override_panel.hpp"
+    "include/fr/devtools/primitive_panel.hpp"
+    "include/fr/devtools/render_settings_panel.hpp"
+    "include/fr/devtools/renderer_inspector.hpp"
     "include/fr/devtools/scene_io.hpp"
+    "include/fr/devtools/setup.hpp"
+    "include/fr/devtools/spawn_panel.hpp"
+    "include/fr/devtools/state.hpp"
+    "include/fr/devtools/stats_panel.hpp"
     "include/fr/devtools/world_actions.hpp"
-    "include/fr/devtools/imgui/spawn_panel.hpp"
-    "include/fr/devtools/imgui/render_settings_panel.hpp"
-    "include/fr/devtools/imgui/stats_panel.hpp"
-    "include/fr/scene/primitive_mesh_system.hpp"
-    "include/fr/devtools/imgui/primitive_panel.hpp"
-    "include/fr/renderer/primitive_meshes.hpp"
-    "include/fr/scene/environment_parts.hpp"
-    "include/fr/scene/environment_system.hpp"
-    "include/fr/scene/scene_render_settings.hpp"
-    "include/fr/devtools/object_picking.hpp"
+    "include/fr/devtools/world_inspector.hpp"
 
 #### renderer
     "include/fr/renderer/default_renderer_assets.hpp"
@@ -130,12 +131,20 @@ set(ENGINE_HEADERS
     "include/fr/renderer/renderer_resources.hpp"
 
 #### scene
-    "include/fr/scene/camera_system.hpp"
-    "include/fr/scene/render_asset_system.hpp"
+    "include/fr/scene/app.hpp"
+    "include/fr/scene/camera.hpp"
+    "include/fr/scene/environment.hpp"
+    "include/fr/scene/picking.hpp"
+    "include/fr/scene/primitive_mesh.hpp"
+    "include/fr/scene/render_assets.hpp"
     "include/fr/scene/render_extractor.hpp"
     "include/fr/scene/render_parts.hpp"
     "include/fr/scene/render_scene_extractor.hpp"
-    "include/fr/scene/transform_system.hpp"
+    "include/fr/scene/scene_io.hpp"
+    "include/fr/scene/scene_render_settings.hpp"
+    "include/fr/scene/imgui_setup.hpp"
+    "include/fr/scene/spawn_actions.hpp"
+    "include/fr/scene/transform.hpp"
 )
 
 set(ENGINE_SOURCES
@@ -156,6 +165,19 @@ set(ENGINE_SOURCES
 
 #### platform
     "src/platform/sdl3/sdl_window.cpp"
+
+#### devtools
+    "src/devtools/primitive_panel.cpp"
+    "src/devtools/render_settings_panel.cpp"
+    "src/devtools/spawn_panel.cpp"
+    "src/devtools/stats_panel.cpp"
+    "src/devtools/transform_gizmo.cpp"
+    "src/devtools/world_actions.cpp"
+
+#### scene
+    "src/scene/picking.cpp"
+    "src/scene/imgui_setup.cpp"
+    "src/scene/spawn_actions.cpp"
 
 #### renderer
     "src/renderer/opengl/opengl_render_device.cpp"
@@ -194,7 +216,7 @@ target_include_directories(engine
 )
 
 if(BUILD_SHARED_LIBS)
-    target_compile_definitions(engine PRIVATE FR_STL_EXPORT)
+  target_compile_definitions(engine PRIVATE FR_STL_EXPORT)
 else()
-    target_compile_definitions(engine PUBLIC FR_STL_STATIC)
+  target_compile_definitions(engine PUBLIC FR_STL_STATIC)
 endif()

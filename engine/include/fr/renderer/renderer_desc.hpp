@@ -85,6 +85,14 @@ struct RenderLightingSettings {
     F32 pbr_ambient_strength{0.01f};
     F32 standard_ambient_strength{0.035f};
     F32 standard_specular_default{0.25f};
+
+    template <typename Archive>
+    void shape(Archive &ar) noexcept {
+        ar.prop("exposure", exposure);
+        ar.prop("pbr_ambient_strength", pbr_ambient_strength);
+        ar.prop("standard_ambient_strength", standard_ambient_strength);
+        ar.prop("standard_specular_default", standard_specular_default);
+    }
 };
 
 /**
@@ -98,6 +106,16 @@ struct RenderAmbientOcclusionSettings {
     F32 bias{0.05f};
     F32 power{1.5f};
     F32 thickness{1.0f};
+
+    template <typename Archive>
+    void shape(Archive &ar) noexcept {
+        ar.prop("enabled", enabled);
+        ar.prop("radius", radius);
+        ar.prop("intensity", intensity);
+        ar.prop("bias", bias);
+        ar.prop("power", power);
+        ar.prop("thickness", thickness);
+    }
 };
 
 /**
@@ -112,6 +130,16 @@ struct RenderIblSettings {
     F32 occlusion_strength{1.0f};
     F32 occlusion_power{2.0f};
     F32 sky_visibility_strength{0.75f};
+
+    template <typename Archive>
+    void shape(Archive &ar) noexcept {
+        ar.prop("enabled", enabled);
+        ar.prop("diffuse_strength", diffuse_strength);
+        ar.prop("specular_strength", specular_strength);
+        ar.prop("occlusion_strength", occlusion_strength);
+        ar.prop("occlusion_power", occlusion_power);
+        ar.prop("sky_visibility_strength", sky_visibility_strength);
+    }
 };
 
 /**
@@ -120,6 +148,14 @@ struct RenderIblSettings {
 struct RenderDebugSettings {
     RenderDebugMode mode{RenderDebugMode::Final};
     U32 flags{0};
+
+    template <typename Archive>
+    void shape(Archive &ar) noexcept {
+        U32 mode_v = static_cast<U32>(mode);
+        ar.prop("mode", mode_v);
+        mode = static_cast<RenderDebugMode>(mode_v);
+        ar.prop("flags", flags);
+    }
 };
 
 /**

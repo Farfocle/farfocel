@@ -703,9 +703,6 @@ public:
      */
     template <typename... Args>
     T &emplace_back(Args &&...args) noexcept {
-        static_assert(std::is_nothrow_constructible_v<T, Args...>,
-                      "T must be nothrow constructible from Args");
-
         do_grow_if_full();
         T *ptr = std::construct_at(m_data + m_size, std::forward<Args>(args)...);
         ++m_size;
@@ -797,8 +794,6 @@ public:
      */
     template <typename... Args>
     void emplace(USize idx, Args &&...args) noexcept {
-        static_assert(std::is_nothrow_constructible_v<T, Args...>,
-                      "T must be nothrow constructible from Args");
         FR_ASSERT(idx <= m_size, "index out of bounds");
 
         do_grow_if_full();

@@ -18,9 +18,7 @@
 
 namespace fr {
 
-/**
- * @brief Built-in runtime primitive mesh kind.
- */
+/// @brief Built-in runtime primitive mesh kind.
 enum class PrimitiveMeshKind : U32 {
     Cube = 0,
     Plane = 1,
@@ -29,10 +27,8 @@ enum class PrimitiveMeshKind : U32 {
 
 /**
  * @brief Persistent description for a built-in runtime primitive mesh.
- *
- * @details
- * Runtime mesh handles are not serialized. PrimitiveMeshSystem rebuilds them from this description
- * after scene load or when parameters change.
+ * @note Runtime mesh handles are not serialized. `PrimitiveMeshSystem` rebuilds them from this
+ * description after scene load or when parameters change.
  */
 struct PrimitiveMeshPart {
     U32 kind{static_cast<U32>(PrimitiveMeshKind::Cube)};
@@ -50,8 +46,6 @@ struct PrimitiveMeshPart {
     U32 resolved_z_segments{0};
     U32 resolved_pass_type{static_cast<U32>(-1)};
 
-    PrimitiveMeshPart() noexcept = default;
-
     FR_SHAPE({
         FR_PROP(kind);
         FR_PROP(size);
@@ -62,16 +56,12 @@ struct PrimitiveMeshPart {
     })
 };
 
-/**
- * @brief Camera lens properties.
- */
+/// @brief Camera lens properties part.
 struct CameraPart {
     F32 fov{70.0f};
     F32 near_plane{0.1f};
     F32 far_plane{1000.0f};
     bool is_main{true};
-
-    CameraPart() noexcept = default;
 
     FR_SHAPE({
         FR_PROP(fov);
@@ -81,16 +71,12 @@ struct CameraPart {
     })
 };
 
-/**
- * @brief Simple first-person camera controller state.
- */
+/// @brief Simple first-person camera controller state.
 struct FPSControllerPart {
     F32 pitch{0.0f};
     F32 yaw{-90.0f};
     F32 move_speed{15.0f};
     F32 mouse_sensitivity{0.1f};
-
-    FPSControllerPart() noexcept = default;
 
     FR_SHAPE({
         FR_PROP(pitch);
@@ -185,9 +171,7 @@ struct MaterialOverridePart {
     FR_SHAPE({ FR_PROP(material_path); })
 };
 
-/**
- * @brief Point light component.
- */
+/// @brief Point light part.
 struct PointLightPart {
     glm::vec3 color{1.0f, 1.0f, 1.0f};
     F32 intensity{1.0f};
@@ -196,8 +180,6 @@ struct PointLightPart {
     bool casts_shadow{false};
     F32 shadow_strength{1.0f};
     F32 shadow_bias{0.005f};
-
-    PointLightPart() noexcept = default;
 
     FR_SHAPE({
         FR_PROP(color);
@@ -209,9 +191,7 @@ struct PointLightPart {
     })
 };
 
-/**
- * @brief Spot light component.
- */
+/// @brief Spot light part.
 struct SpotLightPart {
     glm::vec3 color{1.0f, 1.0f, 1.0f};
     F32 intensity{0.0f};
@@ -223,8 +203,6 @@ struct SpotLightPart {
     bool casts_shadow{false};
     F32 shadow_strength{1.0f};
     F32 shadow_bias{0.002f};
-
-    SpotLightPart() noexcept = default;
 
     FR_SHAPE({
         FR_PROP(color);
@@ -238,14 +216,10 @@ struct SpotLightPart {
     })
 };
 
-/**
- * @brief Directional light component.
- */
+/// @brief Directional light part.
 struct DirectionalLightPart {
     glm::vec3 color{1.0f, 1.0f, 1.0f};
     F32 intensity{5.0f};
-
-    DirectionalLightPart() noexcept = default;
 
     FR_SHAPE({
         FR_PROP(color);

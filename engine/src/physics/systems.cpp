@@ -56,44 +56,14 @@ static AABB do_aabb_to_world(const AABB &local, const Vec3 &offset, const Mat4 &
 }
 
 /**
- * @brief Transforms a local-space sphere and its collider offset into world space.
- *
- * @details
- * Centre is mapped by the full 4x4 matrix.
- * Radius is scaled by the largest column magnitude of the upper 3x3, which handles
- * non-uniform scale correctly (the sphere becomes the smallest enclosing sphere).
- *
- * @param local Local-space sphere.
- * @param offset Local-space collider offset.
- * @param mat World transform matrix.
- */
-static Sphere do_sphere_to_world(const Sphere &local, const Vec3 &offset,
-                                 const Mat4 &mat) noexcept {
-    const Vec3 world_center = Vec3(mat * Vec4(local.center + offset, 1.0f));
-
-    // Scale radius by the maximum column magnitude of the upper 3x3.
-    F32 max_scale = 0.0f;
-    for (int j = 0; j < 3; ++j) {
-        const Vec3 col{mat[j]};
-        max_scale = math::max(max_scale, glm::length(col));
-    }
-
-    return Sphere{world_center, local.radius * max_scale};
-}
-
-/**
  * @brief Transforms a local-space `ColliderPart` into world space.
  *
  * @param local Source collider (local space, offset included).
  * @param mat World transform matrix.
- * @return A new `ColliderPart` with world-space primitive; offset is zeroed (already applied).
+ * @return A new `ColliderPart` with world-space AABB; offset is zeroed (already applied).
  */
 static ColliderPart do_collider_to_world(const ColliderPart &local, const Mat4 &mat) noexcept {
-    if (local.kind == ColliderKind::AABB) {
-        return ColliderPart::make_aabb(do_aabb_to_world(local.aabb, local.offset, mat));
-    }
-
-    return ColliderPart::make_sphere(do_sphere_to_world(local.sphere, local.offset, mat));
+    return ColliderPart::make(do_aabb_to_world(local.aabb, local.offset, mat));
 }
 
 /**
@@ -121,32 +91,6 @@ static void do_push_aabb_cells(impl::SpatialHashGrid &grid, Thing thing,
     }
 }
 
-/**
- * @brief Pushes all cells covered by a world-space sphere into the spatial hash grid.
- *
- * @param grid Grid to push into.
- * @param thing Owner of the collider.
- * @param ws_sphere World-space bounding sphere.
- */
-static void do_push_sphere_cells(impl::SpatialHashGrid &grid, Thing thing,
-                                 const Sphere &ws_sphere) noexcept {
-    const F32 cell_size = grid.options().cell_size;
-    const auto cell = [&](F32 v) { return static_cast<S32>(std::floor(v / cell_size)); };
-    const S32 r = static_cast<S32>(std::ceil(ws_sphere.radius / cell_size));
-
-    const S32 cx = cell(ws_sphere.center.x);
-    const S32 cy = cell(ws_sphere.center.y);
-    const S32 cz = cell(ws_sphere.center.z);
-
-    for (S32 x = cx - r; x <= cx + r; ++x) {
-        for (S32 y = cy - r; y <= cy + r; ++y) {
-            for (S32 z = cz - r; z <= cz + r; ++z) {
-                grid.push(thing, x, y, z);
-            }
-        }
-    }
-}
-
 // ===================================================================== Systems
 
 /// @brief Broadphase collision detection system.
@@ -155,13 +99,8 @@ void broadphase_collision_detection_system(Scope scope) {
     state.grid.clear();
 
     for (auto [thing, wt, collider] : scope.query<WorldTransformPart, ColliderPart>()) {
-        if (collider.kind == ColliderKind::AABB) {
-            const AABB ws = do_aabb_to_world(collider.aabb, collider.offset, wt.matrix);
-            do_push_aabb_cells(state.grid, thing, ws);
-        } else {
-            const Sphere ws = do_sphere_to_world(collider.sphere, collider.offset, wt.matrix);
-            do_push_sphere_cells(state.grid, thing, ws);
-        }
+        const AABB ws = do_aabb_to_world(collider.aabb, collider.offset, wt.matrix);
+        do_push_aabb_cells(state.grid, thing, ws);
     }
 
     state.grid.sort();
@@ -368,45 +307,37 @@ void rigit_body_collision_resolution_system(Scope scope) {
 
             // Friction impulse
 
-            const ColliderPart *col_a = scope.try_get<ColliderPart>(m.a);
-            const ColliderPart *col_b = scope.try_get<ColliderPart>(m.b);
-            const bool sphere_contact = (col_a && col_a->kind == ColliderKind::Sphere) ||
-                                        (col_b && col_b->kind == ColliderKind::Sphere);
+            const Vec3 vel_t = rel_vel - vn * m.normal;
+            const F32 vt_len = glm::length(vel_t);
 
-            if (!sphere_contact) {
-                const Vec3 vel_t = rel_vel - vn * m.normal;
-                const F32 vt_len = glm::length(vel_t);
+            if (vt_len > 1e-6f) {
+                const Vec3 tangent = vel_t / vt_len;
 
-                if (vt_len > 1e-6f) {
-                    const Vec3 tangent = vel_t / vt_len;
+                // Rotational contribution to effective mass along the tangent.
+                const Vec3 rt_a = glm::cross(r_a, tangent);
+                const Vec3 rt_b = glm::cross(r_b, tangent);
+                const F32 K_t =
+                    inv_a + inv_b + glm::dot(rt_a, I_inv_a * rt_a) + glm::dot(rt_b, I_inv_b * rt_b);
 
-                    // Rotational contribution to effective mass along the tangent.
-                    const Vec3 rt_a = glm::cross(r_a, tangent);
-                    const Vec3 rt_b = glm::cross(r_b, tangent);
-                    const F32 K_t = inv_a + inv_b + glm::dot(rt_a, I_inv_a * rt_a) +
-                                    glm::dot(rt_b, I_inv_b * rt_b);
+                const F32 mu = (rb_a && rb_b) ? std::sqrt(rb_a->friction * rb_b->friction)
+                                              : (rb_a ? rb_a->friction : rb_b->friction);
 
-                    const F32 mu = (rb_a && rb_b) ? std::sqrt(rb_a->friction * rb_b->friction)
-                                                  : (rb_a ? rb_a->friction : rb_b->friction);
+                const F32 jt = math::max(-vt_len / K_t, -mu * j);
+                const Vec3 f_impulse = tangent * jt;
 
-                    const F32 jt = math::max(-vt_len / K_t, -mu * j);
-                    const Vec3 f_impulse = tangent * jt;
+                if (rb_a && inv_a > 0.0f) {
+                    rb_a->velocity += f_impulse * inv_a;
+                    rb_a->angular_velocity += I_inv_a * glm::cross(r_a, f_impulse);
+                }
 
-                    if (rb_a && inv_a > 0.0f) {
-                        rb_a->velocity += f_impulse * inv_a;
-                        rb_a->angular_velocity += I_inv_a * glm::cross(r_a, f_impulse);
-                    }
-
-                    if (rb_b && inv_b > 0.0f) {
-                        rb_b->velocity -= f_impulse * inv_b;
-                        rb_b->angular_velocity -= I_inv_b * glm::cross(r_b, f_impulse);
-                    }
+                if (rb_b && inv_b > 0.0f) {
+                    rb_b->velocity -= f_impulse * inv_b;
+                    rb_b->angular_velocity -= I_inv_b * glm::cross(r_b, f_impulse);
                 }
             }
         }
 
         // Baumgarte correction to prevent penetration.
-
         const F32 corr_mag = math::max(m.depth - SLOP, 0.0f) * BAUMGARTE / (inv_a + inv_b);
         const Vec3 correction = m.normal * corr_mag;
 

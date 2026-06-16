@@ -289,9 +289,18 @@ TypeIdx lookup_tidx_from_registry(TypeRegistry &registry) noexcept {
         .move_construct = TypeInfo<T>::move_construct,
         .copy_construct =
             std::is_nothrow_copy_constructible_v<T> ? &TypeInfo<T>::copy_construct : nullptr,
-        .json_writer_shape = TypeInfo<T>::json_writer_shape,
-        .json_reader_shape = TypeInfo<T>::json_reader_shape,
-        .imgui_writer_shape = TypeInfo<T>::imgui_writer_shape,
+        .json_writer_shape = (impl::HasMemberShape<JsonWriterArchive, T> ||
+                               impl::HasADLShape<JsonWriterArchive, T>)
+                                  ? TypeInfo<T>::json_writer_shape
+                                  : nullptr,
+        .json_reader_shape = (impl::HasMemberShape<JsonReaderArchive, T> ||
+                               impl::HasADLShape<JsonReaderArchive, T>)
+                                  ? TypeInfo<T>::json_reader_shape
+                                  : nullptr,
+        .imgui_writer_shape = (impl::HasMemberShape<ImGuiWriterArchive, T> ||
+                                impl::HasADLShape<ImGuiWriterArchive, T>)
+                                   ? TypeInfo<T>::imgui_writer_shape
+                                   : nullptr,
     });
 }
 } // namespace impl
@@ -337,10 +346,16 @@ inline const TypeMeta &TypeIdx::meta() const noexcept {
             }                                                                                      \
         }                                                                                          \
         static void json_writer_shape(fr::JsonWriterArchive &archive, void *ptr) noexcept {        \
-            call_shape(archive, *(static_cast<T *>(ptr)));                                         \
+            if constexpr (fr::impl::HasMemberShape<fr::JsonWriterArchive, T> ||                   \
+                          fr::impl::HasADLShape<fr::JsonWriterArchive, T>) {                      \
+                call_shape(archive, *(static_cast<T *>(ptr)));                                    \
+            }                                                                                      \
         }                                                                                          \
         static void json_reader_shape(fr::JsonReaderArchive &archive, void *ptr) noexcept {        \
-            call_shape(archive, *(static_cast<T *>(ptr)));                                         \
+            if constexpr (fr::impl::HasMemberShape<fr::JsonReaderArchive, T> ||                   \
+                          fr::impl::HasADLShape<fr::JsonReaderArchive, T>) {                      \
+                call_shape(archive, *(static_cast<T *>(ptr)));                                    \
+            }                                                                                      \
         }                                                                                          \
         static void imgui_writer_shape(fr::ImGuiWriterArchive &archive, void *ptr) noexcept {     \
             if constexpr (fr::impl::HasMemberShape<fr::ImGuiWriterArchive, T> ||                  \

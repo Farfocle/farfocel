@@ -14,6 +14,7 @@
 #include "fr/asset/asset_manager.hpp"
 #include "fr/asset/material_format.hpp"
 
+#include "fr/core/shape.hpp"
 #include "fr/data/parts.hpp"
 
 #include "fr/data/world.hpp"
@@ -24,27 +25,35 @@
 
 namespace fr {
 
-/**
- * @brief Mesh submission statistics.
- */
 struct RenderSubmitStats {
     U32 total_submeshes{0};
     U32 visible_submeshes{0};
     U32 culled_submeshes{0};
     U32 skipped_submeshes{0};
+
+    FR_SHAPE({
+        FR_PROP(total_submeshes);
+        FR_PROP(visible_submeshes);
+        FR_PROP(culled_submeshes);
+        FR_PROP(skipped_submeshes);
+    })
 };
 
 struct RenderCameraData {
     Mat4 view_proj{1.0f};
     Vec3 position{0.0f};
     Vec3 forward{0.0f, 0.0f, -1.0f};
-
     bool found{false};
+
+    FR_SHAPE({
+        FR_PROP(view_proj);
+        FR_PROP(position);
+        FR_PROP(forward);
+        FR_PROP(found);
+    })
 };
 
-/**
- * @brief Directional shadow cascade setup.
- */
+/// @brief Directional shadow cascade setup.
 struct RenderDirectionalShadowSettings {
     Vec3 cascade_splits{15.0f, 50.0f, 150.0f};
     Vec3 cascade_half_extents{15.0f, 50.0f, 150.0f};
@@ -57,6 +66,19 @@ struct RenderDirectionalShadowSettings {
 
     F32 filter_radius_texels{1.75f};
     F32 cascade_filter_scale{0.0f};
+
+    template <typename Archive>
+    void shape(Archive &ar) noexcept {
+        ar.prop("cascade_splits", cascade_splits);
+        ar.prop("cascade_half_extents", cascade_half_extents);
+        ar.prop("cascade_depth_ranges", cascade_depth_ranges);
+        ar.prop("min_bias", min_bias);
+        ar.prop("slope_bias", slope_bias);
+        ar.prop("cascade_bias_scale", cascade_bias_scale);
+        ar.prop("shadow_strength", shadow_strength);
+        ar.prop("filter_radius_texels", filter_radius_texels);
+        ar.prop("cascade_filter_scale", cascade_filter_scale);
+    }
 };
 
 /**
@@ -68,9 +90,7 @@ struct RenderDirectionalShadowSettings {
  */
 class RenderSceneExtractor {
 public:
-    /**
-     * @brief Extracts the main camera data.
-     */
+    /// @brief Extracts the main camera data.
     static RenderCameraData extract_camera_data(World &world, F32 aspect_ratio) noexcept {
         for (auto [thing, cam, trans] : world.query<CameraPart, WorldTransformPart>()) {
             (void)thing;
@@ -99,9 +119,7 @@ public:
         };
     }
 
-    /**
-     * @brief Submits visible mesh geometry.
-     */
+    /// @brief Submits visible mesh geometry.
     static RenderSubmitStats submit_meshes(World &world, RenderFrameSubmission &submission,
                                            const AssetManager &assets,
                                            RenderPipelineHandle geometry_pipe,
@@ -181,9 +199,7 @@ public:
         return stats;
     }
 
-    /**
-     * @brief Submits mesh geometry without frustum culling.
-     */
+    /// @brief Submits mesh geometry without frustum culling.
     static RenderSubmitStats submit_meshes_no_cull(World &world, RenderFrameSubmission &submission,
                                                    const AssetManager &assets,
                                                    RenderPipelineHandle geometry_pipe,
@@ -257,9 +273,7 @@ public:
         return stats;
     }
 
-    /**
-     * @brief Submits shadow-casting mesh geometry.
-     */
+    /// @brief Submits shadow-casting mesh geometry.
     static RenderSubmitStats submit_shadow_casters(World &world, RenderFrameSubmission &submission,
                                                    const AssetManager &assets,
                                                    RenderPipelineHandle shadow_pipe) noexcept {
@@ -317,9 +331,7 @@ public:
         return stats;
     }
 
-    /**
-     * @brief Extracts point and spot lights.
-     */
+    /// @brief Extracts point and spot lights.
     static void submit_lights(World &world, RenderFrameSubmission &submission) noexcept {
         U32 point_shadow_count = 0;
         U32 spot_shadow_count = 0;
@@ -388,18 +400,14 @@ public:
         }
     }
 
-    /**
-     * @brief Extracts directional lights with default shadow settings.
-     */
+    /// @brief Extracts directional lights with default shadow settings.
     static void submit_directional_lights(World &world, RenderFrameSubmission &submission,
                                           const Vec3 &cam_pos, const Vec3 &cam_dir) noexcept {
         RenderDirectionalShadowSettings default_settings{};
         submit_directional_lights(world, submission, cam_pos, cam_dir, default_settings);
     }
 
-    /**
-     * @brief Extracts directional lights and builds cascade matrices.
-     */
+    /// @brief Extracts directional lights and builds cascade matrices.
     static void
     submit_directional_lights(World &world, RenderFrameSubmission &submission, const Vec3 &cam_pos,
                               const Vec3 &cam_dir,

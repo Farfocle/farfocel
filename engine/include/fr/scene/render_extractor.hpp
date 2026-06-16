@@ -6,24 +6,19 @@
 
 #pragma once
 
+#include "fr/asset/asset_manager.hpp"
 #include "fr/core/macros.hpp"
 #include "fr/core/math.hpp"
 #include "fr/core/typedefs.hpp"
-
-#include "fr/asset/asset_manager.hpp"
 #include "fr/data/world.hpp"
-
 #include "fr/renderer/render_device.hpp"
 #include "fr/renderer/render_frame.hpp"
 #include "fr/renderer/renderer_desc.hpp"
-
 #include "fr/scene/render_scene_extractor.hpp"
 
 namespace fr {
 
-/**
- * @brief Runtime settings required to extract one render frame.
- */
+/// @brief Runtime settings required to extract one render frame.
 struct RenderExtractDesc {
     F32 aspect_ratio{1.0f};
 
@@ -34,9 +29,7 @@ struct RenderExtractDesc {
     RenderDirectionalShadowSettings directional_shadow_settings{};
 };
 
-/**
- * @brief Result of one render extraction step.
- */
+/// @brief Result of one render extraction step.
 struct RenderExtractResult {
     RenderCameraDesc camera{};
 
@@ -46,9 +39,7 @@ struct RenderExtractResult {
     bool has_main_camera{false};
 };
 
-/**
- * @brief Extracts one renderer-facing frame from ECS scene data.
- */
+/// @brief Extracts one renderer-facing frame from ECS scene data.
 inline RenderExtractResult extract_render_frame(World &world, const AssetManager &assets,
                                                 const RenderExtractDesc &desc,
                                                 RenderFrameSubmission &out_submission) noexcept {

@@ -9,6 +9,7 @@
 #include "fr/asscooker/asscooker.hpp"
 #include "fr/asset/asset_registry.hpp"
 #include "fr/core/alloc.hpp"
+#include "fr/core/ctx.hpp"
 #include "fr/core/dynamic_array.hpp"
 #include "fr/core/slice.hpp"
 #include "fr/core/string.hpp"
@@ -43,6 +44,10 @@ struct DevAssetRecord {
  */
 class DevAssetCatalog {
 public:
+    DevAssetCatalog() noexcept
+        : DevAssetCatalog(get_ambient_ctx().alloc) {
+    }
+
     explicit DevAssetCatalog(Alloc *alloc) noexcept;
 
     DevAssetCatalog(const DevAssetCatalog &) = delete;
@@ -50,49 +55,33 @@ public:
     DevAssetCatalog &operator=(const DevAssetCatalog &) = delete;
     DevAssetCatalog &operator=(DevAssetCatalog &&) = delete;
 
-    /**
-     * @brief Removes all catalog records.
-     */
+    /// @brief Removes all catalog records.
     void clear() noexcept;
 
-    /**
-     * @brief Adds or replaces a cooked output record.
-     */
+    /// @brief Adds or replaces a cooked output record.
     void add_or_replace(const CookedAssetOutput &output, StringView source_path = {}) noexcept;
 
-    /**
-     * @brief Adds or replaces all cooked output records.
-     */
+    /// @brief Adds or replaces all cooked output records.
     void add_or_replace(Slice<const CookedAssetOutput> outputs,
                         StringView source_path = {}) noexcept;
 
-    /**
-     * @brief Registers catalog records as loose assets.
-     */
+    /// @brief Registers catalog records as loose assets.
     [[nodiscard]] bool register_loose_assets(AssetRegistry &registry) const noexcept;
 
-    /**
-     * @brief Builds a loose-asset development manifest from catalog records.
-     */
+    /// @brief Builds a loose-asset development manifest from catalog records.
     [[nodiscard]] bool build_loose_manifest(StringView output_path) const noexcept;
 
-    /**
-     * @brief Returns all catalog records.
-     */
+    /// @brief Returns all catalog records.
     [[nodiscard]] Slice<const DevAssetRecord> records() const noexcept {
         return m_records.slice();
     }
 
-    /**
-     * @brief Returns number of catalog records.
-     */
+    /// @brief Returns number of catalog records.
     [[nodiscard]] USize size() const noexcept {
         return m_records.size();
     }
 
-    /**
-     * @brief Returns true when the catalog has no records.
-     */
+    /// @brief Returns true when the catalog has no records.
     [[nodiscard]] bool is_empty() const noexcept {
         return m_records.is_empty();
     }

@@ -10,9 +10,7 @@
 
 #pragma once
 
-#include "glm/common.hpp"
 #include "glm/geometric.hpp"
-#include <cmath>
 
 #include "fr/core/array.hpp"
 #include "fr/core/macros.hpp"
@@ -148,93 +146,27 @@ struct AABB {
     }
 };
 
-/**
- * @brief Bounding sphere in world space.
- * @note Defined by its center point and radius.
- */
-struct Sphere {
-    Vec3 center{};
-    F32 radius{1.0f};
-
-    FR_SHAPE({
-        FR_PROP(center);
-        FR_PROP(radius);
-    })
-
-    /// @brief Returns true if `point` is inside or on the surface of the sphere.
-    bool contains(const Vec3 &point) const noexcept {
-        const Vec3 offset = point - center;
-        return glm::dot(offset, offset) <= radius * radius;
-    }
-
-    /// @brief Returns true if this sphere overlaps `other`.
-    bool overlaps(const Sphere &other) const noexcept {
-        const F32 combined = radius + other.radius;
-        return glm::distance(center, other.center) <= combined;
-    }
-};
-
 // ==================================================================== Collider
 
-/// @brief Identifies which collision primitive is active inside a `Collider`.
-enum class ColliderKind : U8 { AABB, Sphere };
-
-template <typename Archive>
-void shape(Archive &a, ColliderKind &value) {
-    if constexpr (Archive::action == ArchiveAction::Write) {
-        const char *str = value == ColliderKind::AABB ? "aabb" : "sphere";
-        a.prop("@value", str);
-    } else {
-        StringView str;
-        a.prop("@value", str);
-        value = (str == "sphere") ? ColliderKind::Sphere : ColliderKind::AABB;
-    }
-}
-
 /**
- * @brief A broad-phase collision primitive attached to a thing.
+ * @brief An AABB collision primitive attached to a thing.
  *
  * @details
- * Stores one of AABB or Sphere as a tagged union. `offset` is in local space and is
- * added when computing the world-space bounds so the primitive can be positioned
- * independently of the thing's origin (useful for off-center colliders).
+ * `offset` is in local space and is added when computing the world-space bounds so the
+ * primitive can be positioned independently of the thing's origin.
  */
 struct ColliderPart {
-    ColliderKind kind{ColliderKind::AABB};
-    union {
-        AABB aabb;
-        Sphere sphere;
-    };
-
+    AABB aabb{};
     Vec3 offset{};
 
-    ColliderPart() noexcept {};
-
     FR_SHAPE({
-        FR_PROP(kind);
         FR_PROP(aabb);
-        FR_PROP(sphere);
         FR_PROP(offset);
     })
 
-    /// @brief Creates an AABB collider with an optional local-space offset.
-    static ColliderPart make_aabb(AABB box, Vec3 offset = {}) noexcept {
-        ColliderPart c;
-        c.kind = ColliderKind::AABB;
-        c.aabb = box;
-        c.offset = offset;
-
-        return c;
-    }
-
-    /// @brief Creates a sphere collider with an optional local-space offset.
-    static ColliderPart make_sphere(Sphere s, Vec3 offset = {}) noexcept {
-        ColliderPart c;
-        c.kind = ColliderKind::Sphere;
-        c.sphere = s;
-        c.offset = offset;
-
-        return c;
+    /// @brief Creates a collider from a local-space AABB with an optional offset.
+    static ColliderPart make(AABB box, Vec3 offset = {}) noexcept {
+        return {box, offset};
     }
 };
 
@@ -414,47 +346,9 @@ inline bool check_collision(const AABB &a, const AABB &b) noexcept {
     return a.overlaps(b);
 }
 
-/// @brief Returns true if two spheres overlap (touching counts).
-inline bool check_collision(const Sphere &a, const Sphere &b) noexcept {
-    return a.overlaps(b);
-}
-
-/**
- * @brief Returns true if an AABB and a sphere overlap.
- *
- * @details
- * Finds the closest point on the AABB to the sphere center, then checks
- * whether its distance to the center is within the sphere's radius.
- */
-inline bool check_collision(const AABB &a, const Sphere &s) noexcept {
-    const Vec3 closest = glm::clamp(s.center, a.min, a.max);
-    const Vec3 delta = s.center - closest;
-    return glm::dot(delta, delta) <= s.radius * s.radius;
-}
-
-/// @brief Sphere vs AABB — symmetric overload, delegates to AABB vs Sphere.
-inline bool check_collision(const Sphere &s, const AABB &a) noexcept {
-    return check_collision(a, s);
-}
-
-/**
- * @brief Dispatches a collision test between two Colliders based on their runtime kind.
- * @note Covers all four kind-pairs: AABB/AABB, Sphere/Sphere, AABB/Sphere, Sphere/AABB.
- */
+/// @brief Returns true if two ColliderParts overlap.
 inline bool check_collision(const ColliderPart &a, const ColliderPart &b) noexcept {
-    if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::AABB) {
-        return check_collision(a.aabb, b.aabb);
-    }
-
-    if (a.kind == ColliderKind::Sphere && b.kind == ColliderKind::Sphere) {
-        return check_collision(a.sphere, b.sphere);
-    }
-
-    if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::Sphere) {
-        return check_collision(a.aabb, b.sphere);
-    }
-
-    return check_collision(b.aabb, a.sphere);
+    return check_collision(a.aabb, b.aabb);
 }
 
 // ======================================================== Manifold Computation
@@ -519,128 +413,10 @@ inline CollisionManifoldResult compute_manifold(const AABB &a, const AABB &b) no
     return {true, {Thing::nil(), Thing::nil(), normal, point, depth}};
 }
 
-/**
- * @brief Computes the contact manifold for two overlapping spheres.
- *
- * @details The manifold normal points from `b` toward `a`.
- * When the sphere centres coincide, an arbitrary up-vector is used to avoid a zero normal.
- *
- * @return `{false, {}}` when the spheres do not overlap.
- */
-inline CollisionManifoldResult compute_manifold(const Sphere &a, const Sphere &b) noexcept {
-    const Vec3 delta = a.center - b.center; // from b toward a
-    const F32 dist_sq = glm::dot(delta, delta);
-    const F32 combined = a.radius + b.radius;
-
-    if (dist_sq > combined * combined) {
-        return {false, {}};
-    }
-
-    const F32 dist = std::sqrt(dist_sq);
-    const Vec3 normal = (dist > 1e-6f) ? delta / dist : Vec3{0.0f, 1.0f, 0.0f};
-    const F32 depth = combined - dist;
-
-    // Contact point: surface of b along the collision normal.
-    const Vec3 point = b.center + normal * b.radius;
-
-    return {true, {Thing::nil(), Thing::nil(), normal, point, depth}};
-}
-
-/**
- * @brief Computes the contact manifold for an AABB and an overlapping sphere.
- *
- * @details Finds the closest point on the AABB to the sphere centre.
- * When the sphere centre is inside the AABB the nearest face is selected as the exit face.
- * The manifold normal points from `b` (sphere) toward `a` (AABB).
- *
- * @return `{false, {}}` when there is no overlap.
- */
-inline CollisionManifoldResult compute_manifold(const AABB &a, const Sphere &b) noexcept {
-    const Vec3 closest = glm::clamp(b.center, a.min, a.max);
-    const Vec3 delta = b.center - closest; // from closest-on-a toward b center
-    const F32 dist_sq = glm::dot(delta, delta);
-
-    if (dist_sq > b.radius * b.radius) {
-        return {false, {}};
-    }
-
-    Vec3 normal;
-    F32 depth;
-    Vec3 point;
-
-    if (dist_sq < 1e-10f) {
-        // Sphere centre is inside the AABB: find the face it is closest to and push it out.
-        const Vec3 d_min = b.center - a.min; // distances to each -face
-        const Vec3 d_max = a.max - b.center; // distances to each +face
-
-        // Find the axis and face with the smallest distance.
-        F32 min_d = d_min.x;
-        normal = {-1.0f, 0.0f, 0.0f}; // outward normal of the -x face
-
-        if (d_min.y < min_d) {
-            min_d = d_min.y;
-            normal = {0.0f, -1.0f, 0.0f};
-        }
-
-        if (d_min.z < min_d) {
-            min_d = d_min.z;
-            normal = {0.0f, 0.0f, -1.0f};
-        }
-
-        if (d_max.x < min_d) {
-            min_d = d_max.x;
-            normal = {1.0f, 0.0f, 0.0f};
-        }
-
-        if (d_max.y < min_d) {
-            min_d = d_max.y;
-            normal = {0.0f, 1.0f, 0.0f};
-        }
-
-        if (d_max.z < min_d) {
-            normal = {0.0f, 0.0f, 1.0f};
-        }
-
-        depth = b.radius + min_d;
-        point = b.center;
-    } else {
-        const F32 dist = std::sqrt(dist_sq);
-
-        // delta points from a's surface toward b; negate to get normal from b toward a.
-        normal = -(delta / dist);
-        depth = b.radius - dist;
-        point = closest; // contact point on a's surface
-    }
-
-    return {true, {Thing::nil(), Thing::nil(), normal, point, depth}};
-}
-
-/// @brief Sphere vs AABB manifold - symmetric: delegates and negates the normal.
-inline CollisionManifoldResult compute_manifold(const Sphere &a, const AABB &b) noexcept {
-    CollisionManifoldResult r = compute_manifold(b, a);
-    r.manifold.normal = -r.manifold.normal;
-    return r;
-}
-
-/**
- * @brief Dispatches manifold computation between two `ColliderPart`s based on their kind.
- * @note Covers AABB/AABB, Sphere/Sphere, AABB/Sphere, Sphere/AABB.
- */
+/// @brief Computes the contact manifold between two ColliderParts.
 inline CollisionManifoldResult compute_manifold(const ColliderPart &a,
                                                 const ColliderPart &b) noexcept {
-    if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::AABB) {
-        return compute_manifold(a.aabb, b.aabb);
-    }
-
-    if (a.kind == ColliderKind::Sphere && b.kind == ColliderKind::Sphere) {
-        return compute_manifold(a.sphere, b.sphere);
-    }
-
-    if (a.kind == ColliderKind::AABB && b.kind == ColliderKind::Sphere) {
-        return compute_manifold(a.aabb, b.sphere);
-    }
-
-    return compute_manifold(a.sphere, b.aabb);
+    return compute_manifold(a.aabb, b.aabb);
 }
 
 } // namespace fr

@@ -648,7 +648,7 @@ public:
 
     /// @brief Iterates all alive non-nil things and calls `fn(Thing)` for each.
     template <typename Fn>
-    void for_each_alive_thing(Fn &&fn) noexcept;
+    void each_alive_thing(Fn &&fn) noexcept;
 
     /// @brief Returns the number of currently alive non-nil things.
     USize alive_thing_count() const noexcept;
@@ -664,6 +664,31 @@ public:
 
     /// @brief Returns the number of things owning the part at `tidx` (0 if pool not created).
     USize pool_size_raw(TypeIdx tidx) const noexcept;
+
+    /**
+     * @brief Calls `fn(TypeIdx, void *, const TypeMeta &)` for each resource that has an ImGui
+     * shape function registered.
+     */
+    template <typename Fn>
+    void for_each_imgui_resource(Fn &&fn) noexcept {
+        for (TypeIdx::IDX i = 0; i < MAX_PARTS; ++i) {
+            TypeIdx tidx = TypeIdx::from_idx(i);
+            void *ptr = m_resource_pool.try_get_raw(tidx);
+            if (!ptr) {
+                continue;
+            }
+            const TypeMeta &meta = tidx.meta();
+            if (!meta.imgui_writer_shape) {
+                continue;
+            }
+            std::forward<Fn>(fn)(tidx, ptr, meta);
+        }
+    }
+
+    /// @brief Returns a raw pointer to the resource at `tidx`, or nullptr if absent.
+    void *try_get_resource_raw(TypeIdx tidx) noexcept {
+        return m_resource_pool.try_get_raw(tidx);
+    }
 
     // --------------------------------------------------------------- Relations
 
@@ -1107,7 +1132,7 @@ inline void World::clear_scene() noexcept {
     DynamicArray<Thing> things(m_options.registry_alloc);
     things.reserve(alive_thing_count());
 
-    for_each_alive_thing([&](Thing thing) {
+    each_alive_thing([&](Thing thing) {
         if (!thing.is_nil()) {
             things.push_back(thing);
         }
@@ -1589,7 +1614,7 @@ inline void *World::get_raw(TypeIdx tidx, Thing thing) noexcept {
 // ------------------------------------------------- Inspector / Devtools API
 
 template <typename Fn>
-inline void World::for_each_alive_thing(Fn &&fn) noexcept {
+inline void World::each_alive_thing(Fn &&fn) noexcept {
     m_registry.for_each_alive_thing(std::forward<Fn>(fn));
 }
 

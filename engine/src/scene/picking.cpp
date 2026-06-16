@@ -1,59 +1,24 @@
 /**
- * @file object_picking.hpp
- * @author Tfoedy
- * @brief Runtime object picking helpers for devtools.
+ * @file picking.cpp
+ * @brief Scene-level ray-casting and object picking implementations.
  */
-
-#pragma once
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-#include "fr/asset/asset_manager.hpp"
-#include "fr/core/math.hpp"
-#include "fr/core/typedefs.hpp"
-#include "fr/data/parts.hpp"
-#include "fr/data/world.hpp"
-#include "fr/renderer/render_mesh.hpp"
+#include "fr/scene/picking.hpp"
 #include "fr/scene/render_parts.hpp"
 
-namespace fr::devtools {
+namespace fr {
 
-struct PickingRay {
-    Vec3 origin{0.0f};
-    Vec3 direction{0.0f, 0.0f, -1.0f};
-};
-
-struct PickingHit {
-    Thing thing{Thing::nil()};
-    Vec3 position{0.0f};
-    F32 distance{0.0f};
-
-    [[nodiscard]] bool is_valid() const noexcept {
-        return !thing.is_nil();
-    }
-};
-
-struct EditorCameraMatrices {
-    Mat4 view{1.0f};
-    Mat4 projection{1.0f};
-    Mat4 view_projection{1.0f};
-
-    Vec3 position{0.0f};
-    Vec3 forward{0.0f, 0.0f, -1.0f};
-
-    bool found{false};
-};
-
-inline EditorCameraMatrices extract_editor_camera_matrices(World &world,
-                                                           F32 aspect_ratio) noexcept {
-    EditorCameraMatrices result{};
+CameraMatrices extract_camera_matrices(World &world, F32 aspect_ratio) noexcept {
+    CameraMatrices result{};
 
     if (aspect_ratio <= 0.0f) {
         aspect_ratio = 1.0f;
     }
 
-    world.for_each_alive_thing([&](Thing thing) noexcept {
+    world.each_alive_thing([&](Thing thing) noexcept {
         if (result.found || thing.is_nil()) {
             return;
         }
@@ -70,9 +35,7 @@ inline EditorCameraMatrices extract_editor_camera_matrices(World &world,
 
         result.projection = glm::perspective(glm::radians(camera->fov), aspect_ratio,
                                              camera->near_plane, camera->far_plane);
-
         result.view = glm::lookAt(transform->position, transform->position + forward, up);
-
         result.view_projection = result.projection * result.view;
         result.position = transform->position;
         result.forward = forward;
@@ -82,9 +45,8 @@ inline EditorCameraMatrices extract_editor_camera_matrices(World &world,
     return result;
 }
 
-inline PickingRay make_picking_ray(F32 mouse_x, F32 mouse_y, F32 viewport_width,
-                                   F32 viewport_height,
-                                   const EditorCameraMatrices &camera) noexcept {
+PickingRay make_picking_ray(F32 mouse_x, F32 mouse_y, F32 viewport_width, F32 viewport_height,
+                            const CameraMatrices &camera) noexcept {
     PickingRay ray{};
 
     if (!camera.found || viewport_width <= 0.0f || viewport_height <= 0.0f) {
@@ -121,8 +83,8 @@ inline PickingRay make_picking_ray(F32 mouse_x, F32 mouse_y, F32 viewport_width,
     return ray;
 }
 
-inline bool ray_intersects_aabb(const PickingRay &ray, const Vec3 &aabb_min, const Vec3 &aabb_max,
-                                F32 &out_distance) noexcept {
+bool check_ray_aabb(const PickingRay &ray, const Vec3 &aabb_min, const Vec3 &aabb_max,
+                         F32 &out_distance) noexcept {
     constexpr F32 EPSILON = 0.000001f;
 
     F32 t_min = 0.0f;
@@ -138,7 +100,6 @@ inline bool ray_intersects_aabb(const PickingRay &ray, const Vec3 &aabb_min, con
             if (origin < min_v || origin > max_v) {
                 return false;
             }
-
             continue;
         }
 
@@ -169,7 +130,7 @@ inline bool ray_intersects_aabb(const PickingRay &ray, const Vec3 &aabb_min, con
     return out_distance > 0.0001f;
 }
 
-inline PickingRay transform_ray(const PickingRay &ray, const Mat4 &inverse_transform) noexcept {
+PickingRay transform_ray(const PickingRay &ray, const Mat4 &inverse_transform) noexcept {
     PickingRay out{};
 
     out.origin = Vec3(inverse_transform * Vec4(ray.origin, 1.0f));
@@ -183,12 +144,12 @@ inline PickingRay transform_ray(const PickingRay &ray, const Mat4 &inverse_trans
     return out;
 }
 
-inline PickingHit pick_scene_mesh_aabbs(World &world, const AssetManager &assets,
-                                        const PickingRay &ray) noexcept {
+PickingHit pick_scene_mesh_aabbs(World &world, const AssetManager &assets,
+                                 const PickingRay &ray) noexcept {
     PickingHit best_hit{};
     F32 best_distance = 1.0e30f;
 
-    world.for_each_alive_thing([&](Thing thing) noexcept {
+    world.each_alive_thing([&](Thing thing) noexcept {
         if (thing.is_nil()) {
             return;
         }
@@ -222,7 +183,7 @@ inline PickingHit pick_scene_mesh_aabbs(World &world, const AssetManager &assets
             const PickingRay local_ray = transform_ray(ray, inverse_model);
 
             F32 local_distance = 0.0f;
-            if (!ray_intersects_aabb(local_ray, local_min, local_max, local_distance)) {
+            if (!check_ray_aabb(local_ray, local_min, local_max, local_distance)) {
                 continue;
             }
 
@@ -242,4 +203,4 @@ inline PickingHit pick_scene_mesh_aabbs(World &world, const AssetManager &assets
     return best_hit;
 }
 
-} // namespace fr::devtools
+} // namespace fr

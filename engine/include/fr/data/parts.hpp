@@ -64,8 +64,6 @@ struct LocalTransformPart {
     Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     Vec3 scale{1.0f, 1.0f, 1.0f};
 
-    LocalTransformPart() noexcept = default;
-
     FR_SHAPE({
         FR_PROP(position);
         FR_PROP(rotation);

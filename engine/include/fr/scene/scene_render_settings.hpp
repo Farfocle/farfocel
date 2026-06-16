@@ -1,7 +1,6 @@
 /**
  * @file scene_render_settings.hpp
- * @author Tfoedy
- * @brief Scene-owned renderer settings.
+ * @brief Scene-level renderer settings stored as a world resource.
  */
 
 #pragma once
@@ -15,16 +14,18 @@
 namespace fr {
 
 /**
- * @brief Persistent per-scene renderer settings.
+ * @brief Persistent renderer settings stored as a world resource.
+ * @note These settings are app-level (not scene-level) and are intentionally excluded
+ * from scene serialization. They persist across scene loads.
  */
-struct SceneRenderSettingsPart {
+struct SceneRenderSettings {
     RenderLightingSettings lighting{};
     RenderAmbientOcclusionSettings ao{};
     RenderIblSettings ibl{};
     RenderDebugSettings debug{};
     RenderDirectionalShadowSettings directional_shadow_settings{};
 
-    SceneRenderSettingsPart() noexcept = default;
+    SceneRenderSettings() noexcept = default;
 
     template <typename Archive>
     void shape(Archive &archive) noexcept {
@@ -54,7 +55,6 @@ struct SceneRenderSettingsPart {
             if (debug_mode > static_cast<U32>(RenderDebugMode::Hbao)) {
                 debug_mode = static_cast<U32>(RenderDebugMode::Final);
             }
-
             debug.mode = static_cast<RenderDebugMode>(debug_mode);
         }
 
@@ -65,7 +65,6 @@ struct SceneRenderSettingsPart {
                      directional_shadow_settings.cascade_half_extents);
         archive.prop("directional_cascade_depth_ranges",
                      directional_shadow_settings.cascade_depth_ranges);
-
         archive.prop("directional_min_bias", directional_shadow_settings.min_bias);
         archive.prop("directional_slope_bias", directional_shadow_settings.slope_bias);
         archive.prop("directional_cascade_bias_scale",
@@ -80,4 +79,4 @@ struct SceneRenderSettingsPart {
 
 } // namespace fr
 
-FR_TYPE(fr::SceneRenderSettingsPart);
+FR_TYPE(fr::SceneRenderSettings);
