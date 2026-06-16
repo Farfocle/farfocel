@@ -1,5 +1,6 @@
 set(RENDERER_EXAMPLE_SOURCES
     "inspector.cpp"
+    "physics.cpp"
 )
 
 foreach(source ${RENDERER_EXAMPLE_SOURCES})
