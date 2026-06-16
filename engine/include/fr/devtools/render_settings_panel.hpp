@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "fr/devtools/state.hpp"
 #include "fr/renderer/renderer_desc.hpp"
 #include "fr/scene/render_scene_extractor.hpp"
+#include "fr/scene/scene_render_settings.hpp"
 
 namespace fr::devtools {
 
@@ -17,6 +17,6 @@ void draw_lighting_settings(RenderLightingSettings &lighting) noexcept;
 void draw_ao_settings(RenderAmbientOcclusionSettings &ao) noexcept;
 void draw_ibl_settings(RenderIblSettings &ibl) noexcept;
 void draw_directional_shadow_settings(RenderDirectionalShadowSettings &settings) noexcept;
-void draw_renderer_settings_panel(DevToolsState &tools) noexcept;
+void draw_renderer_settings_panel(fr::SceneRenderSettings &settings) noexcept;
 
 } // namespace fr::devtools

@@ -113,34 +113,34 @@ void draw_directional_shadow_settings(RenderDirectionalShadowSettings &settings)
                      0.01f, 0.0f, 4.0f);
 }
 
-void draw_renderer_settings_panel(DevToolsState &tools) noexcept {
+void draw_renderer_settings_panel(fr::SceneRenderSettings &settings) noexcept {
     if (ImGui::CollapsingHeader("Debug Output##debug_hdr")) {
         ImGui::PushID("debug");
-        draw_debug_mode_combo(tools.debug);
+        draw_debug_mode_combo(settings.debug);
         ImGui::PopID();
     }
 
     if (ImGui::CollapsingHeader("Lighting##lighting_hdr", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("lighting");
-        draw_lighting_settings(tools.lighting);
+        draw_lighting_settings(settings.lighting);
         ImGui::PopID();
     }
 
     if (ImGui::CollapsingHeader("Ambient Occlusion##ao_hdr")) {
         ImGui::PushID("ao");
-        draw_ao_settings(tools.ao);
+        draw_ao_settings(settings.ao);
         ImGui::PopID();
     }
 
     if (ImGui::CollapsingHeader("IBL##ibl_hdr")) {
         ImGui::PushID("ibl");
-        draw_ibl_settings(tools.ibl);
+        draw_ibl_settings(settings.ibl);
         ImGui::PopID();
     }
 
     if (ImGui::CollapsingHeader("Directional Shadows##shadow_hdr")) {
         ImGui::PushID("shadow");
-        draw_directional_shadow_settings(tools.directional_shadow_settings);
+        draw_directional_shadow_settings(settings.directional_shadow_settings);
         ImGui::PopID();
     }
 }
