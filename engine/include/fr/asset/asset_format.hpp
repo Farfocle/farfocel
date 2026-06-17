@@ -7,37 +7,32 @@
 #pragma once
 
 #include "fr/asset/asset_id.hpp"
+#include "fr/core/macros.hpp"
 #include "fr/core/typedefs.hpp"
 
 namespace fr {
 
-/**
- * @brief Texture payload format stored in .ftex.
- */
+/// @brief Texture payload format stored in .ftex.
 enum class CookedTextureFormat : U32 {
     RGBA8_UNORM = 0,
     RGBA8_SRGB = 1,
 
-    /*
-        Value 2 is unused. Older experimental builds reserved it for BC5 data, but
-        the current runtime does not support that texture path.
-    */
+    /**
+     * @brief Value 2 is unused. Older experimental builds reserved it for BC5 data, but
+     * the current runtime does not support that texture path.
+     */
     RGBA32F_HDR = 3
 };
 
 #pragma pack(push, 1)
 
-/**
- * @brief Common header stored at the beginning of every cooked asset file.
- */
+/// @brief Common header stored at the beginning of every cooked asset file.
 struct CookedAssetHeader {
     char verify[4];
     U32 version;
 };
 
-/**
- * @brief Header stored at the beginning of .ftex.
- */
+/// @brief Header stored at the beginning of .ftex.
 struct CookedTextureHeader {
     CookedAssetHeader base;
 
@@ -50,9 +45,7 @@ struct CookedTextureHeader {
     U32 mip_levels;
 };
 
-/**
- * @brief Header stored at the beginning of .fmesh.
- */
+/// @brief Header stored at the beginning of .fmesh.
 struct CookedMeshHeader {
     CookedAssetHeader base;
 
@@ -71,9 +64,7 @@ struct CookedMeshHeader {
     F32 aabb_max[3];
 };
 
-/**
- * @brief Submesh record stored inside .fmesh.
- */
+/// @brief Submesh record stored inside .fmesh.
 struct CookedSubMesh {
     U32 index_count;
     U32 index_offset;
@@ -110,7 +101,8 @@ struct CookedVertex {
 
 #pragma pack(pop)
 
-static_assert(sizeof(AssetId) == sizeof(U64), "AssetId must remain a 64-bit disk value");
-static_assert(sizeof(CookedVertex) == 48, "CookedVertex layout must match renderer input stride");
+FR_STATIC_ASSERT(sizeof(AssetId) == sizeof(U64), "AssetId must remain a 64-bit disk value");
+FR_STATIC_ASSERT(sizeof(CookedVertex) == 48,
+                 "CookedVertex layout must match renderer input stride");
 
 } // namespace fr

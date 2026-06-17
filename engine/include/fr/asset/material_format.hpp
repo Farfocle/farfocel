@@ -11,18 +11,14 @@
 
 namespace fr {
 
-/**
- * @brief Material shading model stored in .fmat.
- */
+/// @brief Material shading model stored in .fmat.
 enum class MaterialShadingModel : U32 {
     Unlit = 0,
     Standard = 1,
     PBR = 2,
 };
 
-/**
- * @brief Material blend mode stored in .fmat.
- */
+/// @brief Material blend mode stored in .fmat.
 enum class MaterialBlendMode : U32 {
     Opaque = 0,
     Masked = 1,
@@ -62,6 +58,6 @@ struct CookedMaterialHeader {
 
 #pragma pack(pop)
 
-static_assert(sizeof(AssetId) == sizeof(U64), "AssetId must remain a 64-bit disk value");
+FR_STATIC_ASSERT(sizeof(AssetId) == sizeof(U64), "AssetId must remain a 64-bit disk value");
 
 } // namespace fr

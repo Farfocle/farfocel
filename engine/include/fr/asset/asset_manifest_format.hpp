@@ -37,17 +37,13 @@ struct CookedAssetManifestHeader {
     U32 string_data_size{0};
 };
 
-/**
- * @brief One pack path entry in .fmanifest.
- */
+/// @brief One pack path entry in .fmanifest.
 struct CookedAssetManifestPackRecord {
     U32 path_offset{0};
     U32 path_size{0};
 };
 
-/**
- * @brief One loose cooked asset entry in .fmanifest.
- */
+/// @brief One loose cooked asset entry in .fmanifest.
 struct CookedAssetManifestLooseRecord {
     AssetId id{};
     AssetKind kind{AssetKind::Unknown};

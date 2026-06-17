@@ -66,9 +66,7 @@ public:
         return *this;
     }
 
-    /**
-     * @brief Loads and validates a .fpack file.
-     */
+    /// @brief Loads and validates a .fpack file.
     [[nodiscard]] bool mount_from_path(StringView path) noexcept {
         clear();
 
@@ -95,9 +93,7 @@ public:
         return true;
     }
 
-    /**
-     * @brief Reads a packed asset entry into memory.
-     */
+    /// @brief Reads a packed asset entry into memory.
     [[nodiscard]] bool read_entry_bytes(const CookedAssetPackEntry &entry,
                                         DynamicArray<Byte> &out) const noexcept {
         out.clear();
