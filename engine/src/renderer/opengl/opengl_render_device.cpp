@@ -511,7 +511,11 @@ public:
             break;
         }
 
-        const U32 allocated_mips = fr::math::max<U32>(desc.mip_levels, 1);
+        U32 allocated_mips = fr::math::max<U32>(desc.mip_levels, 1);
+
+        if (should_generate_runtime_mips(desc)) {
+            allocated_mips = full_mip_count(desc.width, desc.height);
+        }
 
         glTextureStorage2D(id, allocated_mips, internal_format, desc.width, desc.height);
 
@@ -1219,6 +1223,40 @@ private:
     }
 
 private:
+    [[nodiscard]] bool is_depth_texture_format(TextureFormat format) noexcept {
+        return format == TextureFormat::Depth24_Stencil8 ||
+               format == TextureFormat::Depth32_Float ||
+               format == TextureFormat::Depth32_Float_Shadow;
+    }
+
+    [[nodiscard]] U32 full_mip_count(U32 width, U32 height) noexcept {
+        U32 max_dim = fr::math::max<U32>(width, height);
+        U32 levels = 1;
+
+        while (max_dim > 1) {
+            max_dim /= 2;
+            ++levels;
+        }
+
+        return levels;
+    }
+
+    [[nodiscard]] bool should_generate_runtime_mips(const TextureDesc &desc) noexcept {
+        if (desc.initial_data.is_empty()) {
+            return false;
+        }
+
+        if (desc.dimension != TextureDimension::Texture2D) {
+            return false;
+        }
+
+        if (is_depth_texture_format(desc.format)) {
+            return false;
+        }
+
+        return true;
+    }
+
     GLuint m_fallback_fbo{0};
     GLuint m_vao{0};
     GLuint m_empty_vao{0};

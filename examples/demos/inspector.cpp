@@ -173,6 +173,7 @@ private:
 
         {
             fr::FPSControllerPart fps = world.get<fr::FPSControllerPart>(camera);
+            (void)fps;
             fps.pitch = -10.0f;
             fps.yaw = 180.0f;
             fps.move_speed = 15.0f;
