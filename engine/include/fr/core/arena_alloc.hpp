@@ -18,8 +18,7 @@ namespace fr {
 
 /**
  * @brief Non-owning, non-growing arena allocator.
- *
- * This allocator can only exist in a valid, non-null state.
+ * @note This allocator can only exist in a valid, non-null state.
  */
 class ArenaAlloc final : public Alloc {
 public:
@@ -50,39 +49,22 @@ public:
         m_offset = 0;
     }
 
-    /**
-     * @brief Returns the total capacity of the arena.
-     *
-     * @return Capacity in bytes.
-     */
+    /// @brief Returns the total capacity of the arena.
     [[nodiscard]] USize capacity() const noexcept {
         return m_buffer_size;
     }
 
-    /**
-     * @brief Returns the number of bytes used in the arena.
-     *
-     * @return Used bytes.
-     */
+    /// @brief Returns the number of bytes used in the arena.
     [[nodiscard]] USize used() const noexcept {
         return m_offset;
     }
 
-    /**
-     * @brief Returns the number of bytes remaining in the arena.
-     *
-     * @return Remaining bytes.
-     */
+    /// @brief Returns the number of bytes remaining in the arena.
     [[nodiscard]] USize remaining() const noexcept {
         return m_buffer_size - m_offset;
     }
 
-    /**
-     * @brief Checks if a pointer is owned by this arena.
-     *
-     * @param ptr Pointer to check.
-     * @return Ownership result.
-     */
+    /// @brief Checks if a pointer is owned by this arena.
     OwnershipResult owns(void *ptr) const noexcept override {
         Byte *byte_ptr = static_cast<Byte *>(ptr);
         return (byte_ptr >= m_buffer && byte_ptr < (m_buffer + m_buffer_size))
@@ -90,11 +72,7 @@ public:
                    : OwnershipResult::DoesNotOwn;
     }
 
-    /**
-     * @brief Returns the allocator tag.
-     *
-     * @return Tag string.
-     */
+    /// @brief Returns the allocator tag.
     const char *tag() const noexcept override {
         return m_full_tag;
     }

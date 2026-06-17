@@ -11,9 +11,7 @@ namespace fr {
 
 // --------------------------------------------------------- Out of Memory - OOM
 
-/**
- * @brief Action requested by an out-of-memory handler.
- */
+/// @brief Action requested by an out-of-memory handler.
 enum class OOMHandlerAction : U8 { Fail, Retry };
 
 template <typename A>
@@ -26,7 +24,6 @@ void shape(A &a, const OOMHandlerAction &value) {
     a.prop("@value", value == OOMHandlerAction::Fail ? "fail" : "retry");
 }
 
-
 /**
  * @brief Out-of-memory callback.
  *
@@ -36,18 +33,12 @@ void shape(A &a, const OOMHandlerAction &value) {
  */
 using OOMHandler = OOMHandlerAction (*)(USize sz, USize alignment) noexcept;
 
-/**
- * @brief Ownership inspection result for debug tooling.
- */
+/// @brief Ownership inspection result for debug tooling.
 enum class OwnershipResult : U8 {
-    /**
-     * @brief Allocator owns this pointer.
-     */
+    /// @brief Allocator owns this pointer.
     Owns,
 
-    /**
-     * @brief Allocator does not own this pointer.
-     */
+    /// @brief Allocator does not own this pointer.
     DoesNotOwn,
 
     /**
@@ -83,12 +74,9 @@ void shape(A &a, const OwnershipResult &value) {
     a.prop("@value", str);
 }
 
-
 // ----------------------------------------------------------------------- Debug
 
-/**
- * @brief Recorded allocator action for debugging.
- */
+/// @brief Record allocator action for debugging.
 enum class AllocAction : U8 {
     Allocate,
     Reallocate,
@@ -120,7 +108,6 @@ void shape(A &a, const AllocAction &value) {
 
     a.prop("@value", str);
 }
-
 
 /**
  * @brief Recorded allocation frame for debugging.
@@ -176,6 +163,5 @@ struct AllocFrame {
         archive.prop("success", success);
         archive.prop("attempt", attempt);
     }
-
 };
 } // namespace fr

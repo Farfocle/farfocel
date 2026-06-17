@@ -30,7 +30,7 @@ using RadixKeyUnsigned = std::make_unsigned_t<KeyT>;
 
 /**
  * @brief Convert an integral key to a little-endian byte array.
- * Signed keys have their sign bit flipped so negatives sort before non-negatives.
+ * @note Signed keys have their sign bit flipped so negatives sort before non-negatives.
  */
 template <typename KeyT>
 Array<U8, sizeof(KeyT)> radix_key_to_bytes(KeyT key) noexcept {
@@ -52,9 +52,7 @@ Array<U8, sizeof(KeyT)> radix_key_to_bytes(KeyT key) noexcept {
     return bytes;
 }
 
-/**
- * @brief Sort byte-array keys in-place via LSD counting sort.
- */
+/// @brief Sort byte-array keys in-place via LSD counting sort.
 template <USize KeySize>
 void radix_sort_raw(Slice<Array<U8, KeySize>> keys) {
     FR_STATIC_ASSERT(KeySize > 0, "KeySize must be non-zero");
@@ -101,7 +99,7 @@ void radix_sort_raw(Slice<Array<U8, KeySize>> keys) {
 
 /**
  * @brief Generate the permutation that stably sorts byte-array keys (LSD counting sort).
- * out_indices[i] = original index of the element at sorted position i.
+ * @note `out_indices[i] = original` index of the element at sorted position i.
  */
 template <USize KeySize>
 void radix_argsort_raw(Slice<Array<U8, KeySize>> keys, Slice<USize> out_indices) {
@@ -168,7 +166,7 @@ concept RadixKeyFn =
 
 /**
  * @brief Reorder items in-place according to a permutation.
- * After the call, items[i] == old_items[perm[i]].
+ * @note After the call, `items[i] == old_items[perm[i]]`.
  */
 template <typename Item>
 void apply_permutation(Slice<Item> items, Slice<USize> perm) {
@@ -189,9 +187,7 @@ void apply_permutation(Slice<Item> items, Slice<USize> perm) {
 
 // -------------------------------------------------------------- radix_sort_raw
 
-/**
- * @brief Sort byte-array keys in-place.
- */
+/// @brief Sort byte-array keys in-place.
 template <USize KeySize>
 void radix_sort_raw(Slice<Array<U8, KeySize>> keys) {
     if (keys.is_empty()) {
@@ -203,7 +199,7 @@ void radix_sort_raw(Slice<Array<U8, KeySize>> keys) {
 
 /**
  * @brief Generate the permutation that sorts byte-array keys.
- * out_indices[i] = original index of the element at sorted position i.
+ * @note `out_indices[i] = original` index of the element at sorted position i.
  */
 template <USize KeySize>
 void radix_argsort_raw(Slice<Array<U8, KeySize>> keys, Slice<USize> out_indices) {
@@ -216,9 +212,7 @@ void radix_argsort_raw(Slice<Array<U8, KeySize>> keys, Slice<USize> out_indices)
 
 // ----------------------------------------------------------------- radix_sort
 
-/**
- * @brief Sort integral keys in-place.
- */
+/// @brief Sort integral keys in-place.
 template <RadixIntegralKey Key>
 void radix_sort(Slice<Key> keys) {
     if (keys.is_empty()) {
@@ -252,7 +246,7 @@ void radix_sort(Slice<Key> keys) {
 
 /**
  * @brief Generate the permutation that sorts integral keys.
- * out_indices[i] = original index of the element at sorted position i.
+ * @note `out_indices[i] = original` index of the element at sorted position i.
  */
 template <RadixIntegralKey Key>
 void radix_argsort(Slice<Key> keys, Slice<USize> out_indices) {
@@ -273,9 +267,7 @@ void radix_argsort(Slice<Key> keys, Slice<USize> out_indices) {
 
 // -------------------------------------------------------------- radix_sort_key
 
-/**
- * @brief Sort items in-place by an integral key extracted via key_fn.
- */
+/// @brief Sort items in-place by an integral key extracted via `key_fn`.
 template <typename Item, typename KeyFn>
     requires RadixKeyFn<Item, KeyFn>
 void radix_sort_key(Slice<Item> items, KeyFn key_fn) {
@@ -302,8 +294,8 @@ void radix_sort_key(Slice<Item> items, KeyFn key_fn) {
 }
 
 /**
- * @brief Generate the permutation that sorts items by an integral key extracted via key_fn.
- * out_indices[i] = original index of the element at sorted position i.
+ * @brief Generate the permutation that sorts items by an integral key extracted via `key_fn`.
+ * @note `out_indices[i] = original` index of the element at sorted position i.
  */
 template <typename Item, typename KeyFn>
     requires RadixKeyFn<Item, KeyFn>

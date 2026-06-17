@@ -20,15 +20,11 @@
 
 namespace fr {
 
-/**
- * @brief Concept for bitset iteration callbacks (idx, value).
- */
+/// @brief Concept for bitset iteration callbacks (idx, value).
 template <typename Fn>
 concept BitsetEachCallback = std::is_invocable_v<Fn, USize, bool>;
 
-/**
- * @brief Concept for bitset iteration callbacks for set bits (idx).
- */
+/// @brief Concept for bitset iteration callbacks for set bits (idx).
 template <typename Fn>
 concept BitsetEachOneCallback = std::is_invocable_v<Fn, USize>;
 
@@ -94,49 +90,35 @@ public:
         USize m_idx{SZ};
     };
 
-    /**
-     * @brief Construct a bitset with all bits set to 0.
-     */
+    /// @brief Construct a bitset with all bits set to 0.
     constexpr Bitset() noexcept = default;
 
-    /**
-     * @brief Construct a bitset with all bits set to 0.
-     */
+    /// @brief Construct a bitset with all bits set to 0.
     [[nodiscard]] static constexpr Bitset<SZ> with_zeros() noexcept {
         return Bitset<SZ>();
     }
 
-    /**
-     * @brief Construct a bitset with all bits set to 1.
-     */
+    /// @brief Construct a bitset with all bits set to 1.
     [[nodiscard]] static constexpr Bitset<SZ> with_ones() noexcept {
         return Bitset<SZ>(~Bitset<SZ>());
     }
 
-    /**
-     * @brief Get the number of bits in the bitset.
-     */
+    /// @brief Get the number of bits in the bitset.
     [[nodiscard]] static constexpr USize size() noexcept {
         return SZ;
     }
 
-    /**
-     * @brief Check if the bitset has zero size.
-     */
+    /// @brief Check if the bitset has zero size.
     [[nodiscard]] constexpr bool is_empty() const noexcept {
         return SZ == 0;
     }
 
-    /**
-     * @brief Count the number of bits set to 1.
-     */
+    /// @brief Count the number of bits set to 1.
     [[nodiscard]] USize count_ones() const noexcept {
         return do_count_ones();
     }
 
-    /**
-     * @brief Count the number of bits set to 0.
-     */
+    /// @brief Count the number of bits set to 0.
     [[nodiscard]] USize count_zeros() const noexcept {
         return do_count_zeros();
     }
@@ -144,7 +126,7 @@ public:
     /**
      * @brief Check the value of a bit.
      * @param idx Bit index.
-     * @pre idx < size().
+     * @pre `idx < size()`.
      */
     [[nodiscard]] constexpr bool check_bit(USize idx) const noexcept {
         FR_ASSERT(idx < SZ, "bit index out of bounds");
@@ -159,7 +141,7 @@ public:
      * @brief Set a bit to a specific value.
      * @param idx Bit index.
      * @param value Value to set (default true).
-     * @pre idx < size().
+     * @pre `idx < size()`.
      */
     constexpr void set_bit(USize idx, bool value) noexcept {
         FR_ASSERT(idx < SZ, "bit index out of bounds");
@@ -178,7 +160,7 @@ public:
     /**
      * @brief Reset a bit to 0.
      * @param idx Bit index.
-     * @pre idx < size().
+     * @pre `idx < size()`.
      */
     constexpr void zero_bit(USize idx) noexcept {
         set_bit(idx, false);
@@ -196,7 +178,7 @@ public:
     /**
      * @brief Flip the value of a bit.
      * @param idx Bit index.
-     * @pre idx < size().
+     * @pre `idx < size()`.
      */
     constexpr void flip_bit(USize idx) noexcept {
         FR_ASSERT(idx < SZ, "bit index out of bounds");
@@ -207,9 +189,7 @@ public:
         m_words[w] ^= (Word(1) << b);
     }
 
-    /**
-     * @brief Sets all bits to a value;
-     */
+    /// @brief Sets all bits to a value;
     constexpr void set_all(bool value) noexcept {
         if (value) {
             one_all();
@@ -218,30 +198,22 @@ public:
         }
     }
 
-    /**
-     * @brief Set all bits to 1.
-     */
+    /// @brief Set all bits to 1.
     constexpr void one_all() noexcept {
         do_one_all();
     }
 
-    /**
-     * @brief Reset all bits to 0.
-     */
+    /// @brief Reset all bits to 0.
     constexpr void zero_all() noexcept {
         do_zero_all();
     }
 
-    /**
-     * @brief Flip all bits.
-     */
+    /// @brief Flip all bits.
     constexpr void flip_all() noexcept {
         do_flip_all();
     }
 
-    /**
-     * @brief Return a bitset with all bits flipped.
-     */
+    /// @brief Return a bitset with all bits flipped.
     [[nodiscard]] constexpr Bitset operator~() const noexcept {
         Bitset out = *this;
         out.flip_all();
@@ -249,9 +221,7 @@ public:
         return out;
     }
 
-    /**
-     * @brief Apply bitwise AND with another bitset.
-     */
+    /// @brief Apply bitwise AND with another bitset.
     constexpr Bitset &operator&=(const Bitset &rhs) noexcept {
         do_apply_and(rhs);
         return *this;
@@ -265,38 +235,28 @@ public:
         return *this;
     }
 
-    /**
-     * @brief Apply bitwise XOR with another bitset.
-     */
+    /// @brief Apply bitwise XOR with another bitset.
     constexpr Bitset &operator^=(const Bitset &rhs) noexcept {
         do_apply_xor(rhs);
         return *this;
     }
 
-    /**
-     * @brief Bitwise AND of two bitsets.
-     */
+    /// @brief Bitwise AND of two bitsets.
     [[nodiscard]] friend constexpr Bitset operator&(const Bitset &a, const Bitset &b) noexcept {
         return do_and(a, b);
     }
 
-    /**
-     * @brief Bitwise OR of two bitsets.
-     */
+    /// @brief Bitwise OR of two bitsets.
     [[nodiscard]] friend constexpr Bitset operator|(const Bitset &a, const Bitset &b) noexcept {
         return do_or(a, b);
     }
 
-    /**
-     * @brief Bitwise XOR of two bitsets.
-     */
+    /// @brief Bitwise XOR of two bitsets.
     [[nodiscard]] friend constexpr Bitset operator^(const Bitset &a, const Bitset &b) noexcept {
         return do_xor(a, b);
     }
 
-    /**
-     * @brief Checks if any bits are set to 1.
-     */
+    /// @brief Checks if any bits are set to 1.
     [[nodiscard]] constexpr bool any() const noexcept {
         for (USize i = 0; i < word_count; ++i) {
             if (m_words[i] != 0) {
@@ -306,16 +266,12 @@ public:
         return false;
     }
 
-    /**
-     * @brief Checks if all bits are set to 0.
-     */
+    /// @brief Checks if all bits are set to 0.
     [[nodiscard]] constexpr bool none() const noexcept {
         return !any();
     }
 
-    /**
-     * @brief Equality comparison for bitsets.
-     */
+    /// @brief Equality comparison for bitsets.
     friend constexpr bool operator==(const Bitset &a, const Bitset &b) noexcept {
         for (USize i = 0; i < word_count; ++i) {
             if (a.m_words[i] != b.m_words[i]) {
@@ -325,46 +281,34 @@ public:
         return true;
     }
 
-    /**
-     * @brief Inequality comparison for bitsets.
-     */
+    /// @brief Inequality comparison for bitsets.
     friend constexpr bool operator!=(const Bitset &a, const Bitset &b) noexcept {
         return !(a == b);
     }
 
-    /**
-     * @brief Returns an iterator to the first set bit.
-     */
+    /// @brief Returns an iterator to the first set bit.
     [[nodiscard]] constexpr OneIterator ones_begin() const noexcept {
         return OneIterator(this, do_next_one(0));
     }
 
-    /**
-     * @brief Returns an iterator representing the end of set bits.
-     */
+    /// @brief Returns an iterator representing the end of set bits.
     [[nodiscard]] constexpr OneIterator ones_end() const noexcept {
         return OneIterator(this, SZ);
     }
 
-    /**
-     * @brief Call fn for every bit (idx, value).
-     */
+    /// @brief Call fn for every bit (idx, value).
     template <BitsetEachCallback Fn>
     constexpr void each(Fn &&fn) const {
         do_each(std::forward<Fn>(fn));
     }
 
-    /**
-     * @brief Call fn for every set bit (idx).
-     */
+    /// @brief Call fn for every set bit (idx).
     template <BitsetEachOneCallback Fn>
     constexpr void each_one(Fn &&fn) const {
         do_each_one(std::forward<Fn>(fn));
     }
 
-    /**
-     * @brief Implementation of shape protocol. Serializes as a string of ones and zeros.
-     */
+    /// @brief Implementation of shape protocol. Serializes as a string of ones and zeros.
     template <typename Archive>
     void shape(Archive &archive) {
         if constexpr (Archive::action == ArchiveAction::Write) {

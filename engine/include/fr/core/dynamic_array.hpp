@@ -127,9 +127,7 @@ public:
         FR_ASSERT(alloc, "allocator must be non-null");
     }
 
-    /**
-     * @brief Destroy all elements and free the underlying storage.
-     */
+    /// @brief Destroy all elements and free the underlying storage.
     ~DynamicArray() noexcept {
         do_destroy_all();
         do_free_storage();
@@ -204,8 +202,8 @@ public:
      * @brief Create an array of a specific size with default-initialized elements.
      *
      * @param size Initial number of elements.
-     * @return A new DynamicArray instance of the requested size.
-     * @pre T must be nothrow default constructible.
+     * @return A new `DynamicArray` instance of the requested size.
+     * @pre `T` must be nothrow default constructible.
      */
     [[nodiscard]] static DynamicArray with_size(USize size) noexcept {
         return with_size(get_ambient_ctx().alloc, size);
@@ -216,8 +214,8 @@ public:
      *
      * @param size Number of elements.
      * @param value Value to copy into every element.
-     * @return A new DynamicArray instance filled with fill.
-     * @pre T must be nothrow copy constructible.
+     * @return A new `DynamicArray` instance filled with fill.
+     * @pre `T` must be nothrow copy constructible.
      */
     [[nodiscard]] static DynamicArray from_repeated(USize size, const T &value) noexcept {
         return from_repeated(get_ambient_ctx().alloc, size, value);
@@ -229,9 +227,9 @@ public:
      * @param alloc Pointer to the allocator to use.
      * @param size Number of elements.
      * @param value Value to copy into every element.
-     * @return A new DynamicArray instance filled with fill.
-     * @pre alloc must be non-null.
-     * @pre T must be nothrow copy constructible.
+     * @return A new `DynamicArray` instance filled with fill.
+     * @pre `alloc` must be non-null.
+     * @pre `T` must be nothrow copy constructible.
      */
     [[nodiscard]] static DynamicArray from_repeated(Alloc *alloc, USize size,
                                                     const T &value) noexcept {
@@ -253,8 +251,8 @@ public:
      * @brief Create an array from a slice using the ambient allocator.
      *
      * @param slice Source slice.
-     * @return A new DynamicArray instance containing the slice elements.
-     * @pre T must be nothrow copy constructible.
+     * @return A new `DynamicArray` instance containing the slice elements.
+     * @pre `T` must be nothrow copy constructible.
      */
     [[nodiscard]] static DynamicArray
     from_slice(Slice<const std::remove_const_t<T>> slice) noexcept {
@@ -266,9 +264,9 @@ public:
      *
      * @param alloc Pointer to the allocator to use.
      * @param slice Source slice.
-     * @return A new DynamicArray instance containing the slice elements.
-     * @pre alloc must be non-null.
-     * @pre T must be nothrow copy constructible.
+     * @return A new `DynamicArray` instance containing the slice elements.
+     * @pre `alloc` must be non-null.
+     * @pre `T` must be nothrow copy constructible.
      */
     [[nodiscard]] static DynamicArray
     from_slice(Alloc *alloc, Slice<const std::remove_const_t<T>> slice) noexcept {
@@ -352,50 +350,32 @@ public:
 
     // --------------------------------------------------------------- Iterators
 
-    /**
-     * @brief Returns an iterator to the first element.
-     * @return Pointer to the first element.
-     */
+    /// @brief Returns an iterator to the first element.
     T *begin() noexcept {
         return m_data;
     }
 
-    /**
-     * @brief Returns an iterator to the element following the last element.
-     * @return Pointer past the last element.
-     */
+    /// @brief Returns an iterator to the element following the last element.
     T *end() noexcept {
         return m_data + m_size;
     }
 
-    /**
-     * @brief Returns a constant iterator to the first element.
-     * @return Constant pointer to the first element.
-     */
+    /// @brief Returns a constant iterator to the first element.
     const T *begin() const noexcept {
         return m_data;
     }
 
-    /**
-     * @brief Returns a constant iterator to the element following the last element.
-     * @return Constant pointer past the last element.
-     */
+    /// @brief Returns a constant iterator to the element following the last element.
     const T *end() const noexcept {
         return m_data + m_size;
     }
 
-    /**
-     * @brief Returns a constant iterator to the first element.
-     * @return Constant pointer to the first element.
-     */
+    /// @brief Returns a constant iterator to the first element.
     const T *cbegin() const noexcept {
         return m_data;
     }
 
-    /**
-     * @brief Returns a constant iterator to the element following the last element.
-     * @return Constant pointer past the last element.
-     */
+    /// @brief Returns a constant iterator to the element following the last element.
     const T *cend() const noexcept {
         return m_data + m_size;
     }
@@ -490,7 +470,7 @@ public:
 
     /**
      * @brief Create a constant slice view over the entire array.
-     * @return A Slice covering [0, size()).
+     * @return A `Slice` covering `[0, size())`.
      */
     Slice<const T> slice() const & noexcept {
         return Slice<const T>(m_data, m_size);
@@ -499,8 +479,8 @@ public:
     /**
      * @brief Create a mutable slice view over the entire array.
      *
-     * @return A mutable Slice covering [0, size()).
-     * @note Only available if T is not const.
+     * @return A mutable `Slice` covering `[0, size())`.
+     * @note Only available if `T` is not `const`.
      */
     Slice<T> slice_mut() & noexcept
         requires(!std::is_const_v<T>)
@@ -516,7 +496,7 @@ public:
      *
      * @param from Start index (inclusive).
      * @param to End index (inclusive).
-     * @return A Slice covering the range [from, to].
+     * @return A `Slice` covering the range `[from, to]`.
      * @pre `from <= to && to < size()`.
      */
     Slice<const T> slice(USize from, USize to) const & noexcept {
@@ -528,9 +508,9 @@ public:
      *
      * @param from Start index (inclusive).
      * @param to End index (inclusive).
-     * @return A mutable Slice covering the range [from, to].
+     * @return A mutable `Slice` covering the range `[from, to]`.
      * @pre `from <= to && to < size()`.
-     * @note Only available if T is not const.
+     * @note Only available if `T` is not const.
      */
     Slice<T> slice_mut(USize from, USize to) & noexcept
         requires(!std::is_const_v<T>)
@@ -556,9 +536,9 @@ public:
      * @brief Create a mutable slice starting from a specific index.
      *
      * @param from Start index (inclusive).
-     * @return A mutable Slice covering [from, size()).
+     * @return A mutable `Slice` covering `[from, size())`.
      * @pre `from < size() || (from == 0 && size() == 0)`.
-     * @note Only available if T is not const.
+     * @note Only available if `T` is not `const`.
      */
     Slice<T> slice_mut_from(USize from) & noexcept
         requires(!std::is_const_v<T>)
@@ -971,9 +951,7 @@ private:
         m_capacity = new_capacity;
     }
 
-    /**
-     * @brief Grows the array if the size has reached capacity.
-     */
+    /// @brief Grows the array if the size has reached capacity.
     void do_grow_if_full() noexcept {
         if (is_full()) {
             do_reserve(do_next_capacity(m_capacity));
@@ -982,7 +960,6 @@ private:
 
     /**
      * @brief Grows the array if required_size exceeds current capacity.
-     *
      * @param required_size The minimum capacity needed.
      */
     void do_grow_if_needed(USize required_size) noexcept {
@@ -991,16 +968,12 @@ private:
         }
     }
 
-    /**
-     * @brief Destroys all elements in the current buffer.
-     */
+    /// @brief Destroys all elements in the current buffer.
     void do_destroy_all() noexcept {
         mem::destroy_range(m_data, m_size);
     }
 
-    /**
-     * @brief Frees the internal storage buffer.
-     */
+    /// @brief Frees the internal storage buffer.
     void do_free_storage() noexcept {
         if (!m_data)
             return;
@@ -1012,7 +985,6 @@ private:
 
     /**
      * @brief Helper for deep copying from another array during construction.
-     *
      * @param other Source array.
      */
     void do_copy_from(const DynamicArray &other) noexcept {
@@ -1028,7 +1000,6 @@ private:
 
     /**
      * @brief Helper for deep copying from another array during assignment.
-     *
      * @param other Source array.
      */
     void do_assign_copy(const DynamicArray &other) noexcept {
@@ -1050,7 +1021,6 @@ private:
 
     /**
      * @brief Helper for moving storage from another array.
-     *
      * @param other Source array.
      */
     void do_move_from(DynamicArray &&other) noexcept {

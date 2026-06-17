@@ -18,8 +18,7 @@ namespace fr {
 
 /**
  * @brief Pool allocator managing equal-sized blocks.
- *
- * This allocator can only exist in a valid, non-null state.
+ * @note This allocator can only exist in a valid, non-null state.
  */
 class BlockAlloc final : public Alloc {
 public:
@@ -47,9 +46,7 @@ public:
         reset();
     }
 
-    /**
-     * @brief Resets the allocator and rebuilds the free list.
-     */
+    /// @brief Resets the allocator and rebuilds the free list.
     void reset() noexcept {
         USize n = total_blocks();
         m_free_count = n;
@@ -66,54 +63,33 @@ public:
         current->next = nullptr;
     }
 
-    /**
-     * @brief Returns the total size of the managed buffer.
-     *
-     * @return Buffer size in bytes.
-     */
+    /// @brief Returns the total size of the managed buffer.
     [[nodiscard]] USize buffer_size() const noexcept {
         return m_buffer_size;
     }
 
-    /**
-     * @brief Returns the size of a single block.
-     *
-     * @return Block size in bytes.
-     */
+    /// @brief Returns the size of a single block.
     [[nodiscard]] USize block_size() const noexcept {
         return m_block_size;
     }
 
-    /**
-     * @brief Returns the total number of blocks in the pool.
-     *
-     * @return Total blocks.
-     */
+    /// @brief Returns the total number of blocks in the pool.
     [[nodiscard]] USize total_blocks() const noexcept {
         return m_buffer_size / m_block_size;
     }
 
-    /**
-     * @brief Returns the number of free blocks currently available.
-     *
-     * @return Free blocks.
-     */
+    /// @brief Returns the number of free blocks currently available.
     [[nodiscard]] USize free_blocks() const noexcept {
         return m_free_count;
     }
 
-    /**
-     * @brief Returns the number of used blocks.
-     *
-     * @return Used blocks.
-     */
+    /// @brief Returns the number of used blocks.
     [[nodiscard]] USize used_blocks() const noexcept {
         return total_blocks() - m_free_count;
     }
 
     /**
      * @brief Checks if a pointer is owned by this block allocator.
-     *
      * @param ptr Pointer to check.
      * @return Ownership result.
      */
@@ -124,11 +100,7 @@ public:
                    : OwnershipResult::DoesNotOwn;
     }
 
-    /**
-     * @brief Returns the allocator tag.
-     *
-     * @return Tag string.
-     */
+    /// @brief Returns the allocator tag.
     const char *tag() const noexcept override {
         return m_full_tag;
     }
