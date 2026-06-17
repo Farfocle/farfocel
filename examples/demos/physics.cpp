@@ -114,12 +114,12 @@ static void physics_damping_system(fr::Scope scope) {
 
         // Hard cap so a bad collision impulse can't blow up the simulation.
         const F32 lin_speed = glm::length(rb.velocity);
-        if (lin_speed > 20.0f) {
-            rb.velocity *= 20.0f / lin_speed;
+        if (lin_speed > 100.0f) {
+            rb.velocity *= 100.0f / lin_speed;
         }
         const F32 ang_speed = glm::length(rb.angular_velocity);
-        if (ang_speed > 15.0f) {
-            rb.angular_velocity *= 15.0f / ang_speed;
+        if (ang_speed > 50.0f) {
+            rb.angular_velocity *= 50.0f / ang_speed;
         }
     }
 }
@@ -377,10 +377,10 @@ private:
         // center_y = SURF + scale*0.5 + 0.1  (small gap so they don't start penetrating).
         // Tower at z=7: four cubes stacked 1 m apart, a satisfying target to crash into.
         static const CubeDesc CUBES[] = {
-            {{6.0f,  SURF + 0.6f,  4.0f}, 1.0f, 1.0f},
-            {{-7.0f, SURF + 0.7f,  3.0f}, 1.2f, 1.5f},   // scale 1.2 → half 0.6
-            {{8.0f,  SURF + 0.85f, -5.0f}, 1.5f, 3.0f},  // scale 1.5 → half 0.75
-            {{-4.0f, SURF + 0.5f,  -7.0f}, 0.8f, 0.5f},  // scale 0.8 → half 0.4
+            {{6.0f, SURF + 0.6f, 4.0f}, 1.0f, 1.0f},
+            {{-7.0f, SURF + 0.7f, 3.0f}, 1.2f, 1.5f},  // scale 1.2 → half 0.6
+            {{8.0f, SURF + 0.85f, -5.0f}, 1.5f, 3.0f}, // scale 1.5 → half 0.75
+            {{-4.0f, SURF + 0.5f, -7.0f}, 0.8f, 0.5f}, // scale 0.8 → half 0.4
             // Tower — four stacked cubes (each 1 m apart in Y)
             {{0.0f, SURF + 0.6f, 7.0f}, 1.0f, 1.0f},
             {{0.0f, SURF + 1.6f, 7.0f}, 1.0f, 1.0f},

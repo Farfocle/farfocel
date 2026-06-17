@@ -1,8 +1,7 @@
 /**
  * @file array.hpp
  * @author Kiju
- *
- * @brief Fixed-size.
+ * @brief Fixed-size array.
  */
 
 #pragma once
@@ -23,11 +22,11 @@
 namespace fr {
 
 /**
- * @brief Fixed-size array with contiguous storage on the stack.
+ * @brief Fixed-size array.
  * @tparam T Element type.
  * @tparam Size Number of elements.
  *
- * @note Foundational requirements for T are enforced via FR_STATIC_ASSERT_NOTHROW_BASE.
+ * @note Foundational requirements for `T` are enforced via `FR_STATIC_ASSERT_NOTHROW_BASE`.
  */
 template <typename T, USize Size>
 class Array {
@@ -53,8 +52,8 @@ public:
     /**
      * @brief Construct an array with zero-initialized elements.
      *
-     * This constructor ensures that all elements are properly initialized.
-     * For primitive types (int, float, etc.), they are guaranteed to be zero-filled.
+     * @note This constructor ensures that all elements are properly initialized.
+     * For primitive types (`int`, `float`, etc.), they are guaranteed to be zero-filled.
      *
      * @pre T must be nothrow default constructible.
      */
@@ -69,12 +68,12 @@ public:
     /**
      * @brief Construct an array from an initializer list.
      *
-     * If the list contains fewer elements than the array's size, the remaining
+     * @note If the list contains fewer elements than the array's size, the remaining
      * elements are zero-initialized.
      *
      * @param list Elements to copy.
-     * @pre list.size() <= Size.
-     * @pre T must be nothrow copy constructible.
+     * @pre `list.size() <= Size`.
+     * @pre `T` must be nothrow copy constructible.
      */
     constexpr Array(std::initializer_list<T> list) noexcept {
         FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
@@ -96,7 +95,7 @@ public:
      * @brief Create an array filled with a specific value.
      * @param value Value to copy into every element.
      * @return A new Array instance.
-     * @pre T must be nothrow copy constructible.
+     * @pre `T` must be nothrow copy constructible.
      */
     [[nodiscard]] static constexpr Array from_repeated(const T &value) noexcept {
         FR_STATIC_ASSERT_NOTHROW_COPY_CONSTRUCTIBLE(T);
@@ -113,8 +112,8 @@ public:
      * @brief Create an array from a slice.
      * @param slice Source slice.
      * @return A new Array instance containing the slice elements.
-     * @pre slice.size() == Size.
-     * @pre T must be nothrow default constructible and copy assignable.
+     * @pre `slice.size() == Size`.
+     * @pre `T` must be nothrow default constructible and copy assignable.
      */
     [[nodiscard]] static constexpr Array
     from_slice(Slice<const std::remove_const_t<T>> slice) noexcept {
@@ -132,50 +131,32 @@ public:
 
     // --------------------------------------------------------------- Iterators
 
-    /**
-     * @brief Returns an iterator to the first element.
-     * @return Pointer to the first element.
-     */
+    /// @brief Returns an iterator to the first element.
     constexpr T *begin() noexcept {
         return m_data;
     }
 
-    /**
-     * @brief Returns an iterator to the element following the last element.
-     * @return Pointer past the last element.
-     */
+    /// @brief Returns an iterator to the element following the last element.
     constexpr T *end() noexcept {
         return m_data + Size;
     }
 
-    /**
-     * @brief Returns a constant iterator to the first element.
-     * @return Constant pointer to the first element.
-     */
+    /// @brief Returns a constant iterator to the first element.
     constexpr const T *begin() const noexcept {
         return m_data;
     }
 
-    /**
-     * @brief Returns a constant iterator to the element following the last element.
-     * @return Constant pointer past the last element.
-     */
+    /// @brief Returns a constant iterator to the element following the last element.
     constexpr const T *end() const noexcept {
         return m_data + Size;
     }
 
-    /**
-     * @brief Returns a constant iterator to the first element.
-     * @return Constant pointer to the first element.
-     */
+    /// @brief Returns a constant iterator to the first element.
     constexpr const T *cbegin() const noexcept {
         return m_data;
     }
 
-    /**
-     * @brief Returns a constant iterator to the element following the last element.
-     * @return Constant pointer past the last element.
-     */
+    /// @brief Returns a constant iterator to the element following the last element.
     constexpr const T *cend() const noexcept {
         return m_data + Size;
     }
@@ -186,7 +167,7 @@ public:
      * @brief Access element at index with bounds checking in debug.
      * @param idx Index of the element to access.
      * @return Reference to the element at idx.
-     * @pre idx < Size.
+     * @pre `idx < Size`.
      */
     constexpr T &operator[](USize idx) noexcept {
         FR_ASSERT(idx < Size, "index out of bounds");
@@ -196,8 +177,8 @@ public:
     /**
      * @brief Access element at index with bounds checking in debug (const).
      * @param idx Index of the element to access.
-     * @return Constant reference to the element at idx.
-     * @pre idx < Size.
+     * @return Constant reference to the element at `idx`.
+     * @pre `idx < Size`.
      */
     constexpr const T &operator[](USize idx) const noexcept {
         FR_ASSERT(idx < Size, "index out of bounds");
@@ -207,7 +188,7 @@ public:
     /**
      * @brief Access the first element.
      * @return Reference to the first element.
-     * @pre Size > 0.
+     * @pre `Size > 0`.
      */
     constexpr T &front() noexcept {
         FR_ASSERT(Size > 0, "empty array access");
@@ -217,7 +198,7 @@ public:
     /**
      * @brief Access the first element (const).
      * @return Constant reference to the first element.
-     * @pre Size > 0.
+     * @pre `Size > 0`.
      */
     constexpr const T &front() const noexcept {
         FR_ASSERT(Size > 0, "empty array access");
@@ -227,7 +208,7 @@ public:
     /**
      * @brief Access the last element.
      * @return Reference to the last element.
-     * @pre Size > 0.
+     * @pre `Size > 0`.
      */
     constexpr T &back() noexcept {
         FR_ASSERT(Size > 0, "empty array access");
@@ -237,7 +218,7 @@ public:
     /**
      * @brief Access the last element (const).
      * @return Constant reference to the last element.
-     * @pre Size > 0.
+     * @pre `Size > 0`.
      */
     constexpr const T &back() const noexcept {
         FR_ASSERT(Size > 0, "empty array access");
@@ -262,18 +243,12 @@ public:
 
     // ------------------------------------------------------------------ Slices
 
-    /**
-     * @brief Create a constant slice view over the entire array.
-     * @return A Slice covering the array.
-     */
+    /// @brief Creates a constant slice view over the entire array.
     constexpr Slice<const T> slice() const & noexcept {
         return Slice<const T>(m_data, Size);
     }
 
-    /**
-     * @brief Create a mutable slice view over the entire array.
-     * @return A mutable Slice covering the array.
-     */
+    /// @brief Creates a mutable slice view over the entire array.
     constexpr Slice<T> slice_mut() & noexcept
         requires(!std::is_const_v<T>)
     {
@@ -284,22 +259,22 @@ public:
     constexpr Slice<T> slice_mut() && noexcept = delete;
 
     /**
-     * @brief Create a constant sub-slice view.
+     * @brief Creates a constant sub-slice view.
      * @param from Start index (inclusive).
      * @param to End index (inclusive).
      * @return A Slice covering the range [from, to].
-     * @pre from <= to < Size.
+     * @pre `from <= to < Size`.
      */
     constexpr Slice<const T> slice(USize from, USize to) const & noexcept {
         return slice().slice(from, to);
     }
 
     /**
-     * @brief Create a mutable sub-slice view.
+     * @brief Creates a mutable sub-slice view.
      * @param from Start index (inclusive).
      * @param to End index (inclusive).
      * @return A mutable Slice covering the range [from, to].
-     * @pre from <= to < Size.
+     * @pre `from <= to < Size`.
      */
     constexpr Slice<T> slice_mut(USize from, USize to) & noexcept
         requires(!std::is_const_v<T>)
@@ -323,8 +298,8 @@ public:
     /**
      * @brief Create a mutable slice starting from a specific index.
      * @param from Start index (inclusive).
-     * @return A mutable Slice covering [from, Size).
-     * @pre from < Size or (from == 0 && Size == 0).
+     * @return A mutable Slice covering `[from, Size)`.
+     * @pre `from < Size` or (`from == 0 && Size == 0`).
      */
     constexpr Slice<T> slice_mut_from(USize from) & noexcept
         requires(!std::is_const_v<T>)
@@ -348,8 +323,8 @@ public:
     /**
      * @brief Create a mutable slice up to a specific index.
      * @param to End index (inclusive).
-     * @return A mutable Slice covering [0, to].
-     * @pre to < Size.
+     * @return A mutable Slice covering `[0, to]`.
+     * @pre `to < Size`.
      */
     constexpr Slice<T> slice_mut_to(USize to) & noexcept
         requires(!std::is_const_v<T>)
@@ -362,44 +337,29 @@ public:
 
     // ---------------------------------------------------------------  Capacity
 
-    /**
-     * @brief Get the number of elements in the array.
-     * @return Size.
-     */
+    /// @brief Get the number of elements in the array.
     constexpr USize size() const noexcept {
         return Size;
     }
 
-    /**
-     * @brief Get the capacity of the array.
-     * @return Size.
-     */
+    /// @brief Get the capacity of the array.
     constexpr USize capacity() const noexcept {
         return Size;
     }
 
-    /**
-     * @brief Check if the array is empty.
-     * @return True if Size is 0.
-     */
+    /// @brief Check if the array is empty.
     constexpr bool is_empty() const noexcept {
         return Size == 0;
     }
 
-    /**
-     * @brief Check if the array is full.
-     * @return Always true for Array.
-     */
+    /// @brief Check if the array is full.
     constexpr bool is_full() const noexcept {
         return true;
     }
 
     // --------------------------------------------------------------- Protocols
 
-    /**
-     * @brief Compute the hash of the array.
-     * @return Hash value.
-     */
+    /// @brief Compute the hash of the array.
     constexpr Hash hash() const noexcept {
         Hash h = Hash::from_raw(0);
         for (USize i = 0; i < Size; ++i) {
@@ -450,7 +410,7 @@ public:
     // ----------------------------------------------------- Structured Bindings
 
     /**
-     * @brief Access item at index I for structured bindings.
+     * @brief Access item at index `I` for structured bindings.
      * @tparam I Index to access.
      * @return Reference to the element.
      */
@@ -460,9 +420,7 @@ public:
         return std::forward_like<decltype(self)>(self.m_data[I]);
     }
 
-    /**
-     * @brief Structured binding support (friend).
-     */
+    /// @brief Structured binding support (friend).
     template <USize I>
     friend constexpr auto &&get(Array &self) noexcept {
         return self.template at<I>();

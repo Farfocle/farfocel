@@ -10,9 +10,7 @@
 
 namespace fr {
 
-/**
- * @brief High-level cooked asset kind.
- */
+/// @brief High-level cooked asset kind.
 enum class AssetKind : U32 {
     Unknown = 0,
     Mesh,

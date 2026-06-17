@@ -19,9 +19,7 @@
 
 namespace fr {
 
-/**
- * @brief Decoded shader source bundle.
- */
+/// @brief Decoded shader source bundle.
 struct ShaderSourceBundle {
     String vertex;
     String fragment;
@@ -118,9 +116,7 @@ validate_cooked_shader_stage_range(const CookedShaderHeader &header,
 
 } // namespace impl
 
-/**
- * @brief Decodes .fshader bytes into shader sources.
- */
+/// @brief Decodes .fshader bytes into shader sources.
 [[nodiscard]] inline bool load_cooked_shader_sources(Alloc *alloc, Slice<const Byte> bytes,
                                                      ShaderSourceBundle &out_sources) noexcept {
     FR_ASSERT(alloc, "allocator must be non-null");

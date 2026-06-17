@@ -49,9 +49,7 @@ using MaterialAssetHandle = StrongHandle<MaterialAssetTag>;
 struct ShaderAssetTag {};
 using ShaderAssetHandle = StrongHandle<ShaderAssetTag>;
 
-/**
- * @brief Asynchronous cooked asset loading state.
- */
+/// @brief Asynchronous cooked asset loading state.
 enum class AssetLoadState : U8 {
     Unloaded,
     LoadingCpu,
@@ -60,9 +58,7 @@ enum class AssetLoadState : U8 {
     Failed,
 };
 
-/**
- * @brief Runtime 2D texture creation descriptor.
- */
+/// @brief Runtime 2D texture creation descriptor.
 struct RuntimeTextureDesc {
     U32 width{0};
     U32 height{0};
@@ -88,9 +84,7 @@ struct RuntimeMaterialDesc {
     TextureAssetHandle extra_texture{};
 };
 
-/**
- * @brief Runtime mesh asset record.
- */
+/// @brief Runtime mesh asset record.
 struct MeshAsset {
     RenderMeshData data{};
     DynamicArray<MaterialAssetHandle> material_deps{};
@@ -101,9 +95,7 @@ struct MeshAsset {
     bool runtime_asset{false};
 };
 
-/**
- * @brief Runtime texture asset record.
- */
+/// @brief Runtime texture asset record.
 struct TextureAsset {
     TextureHandle handle{};
 
@@ -113,9 +105,7 @@ struct TextureAsset {
     bool runtime_asset{false};
 };
 
-/**
- * @brief Runtime material asset record.
- */
+/// @brief Runtime material asset record.
 struct MaterialAsset {
     MaterialAssetData data{};
 
@@ -129,9 +119,7 @@ struct MaterialAsset {
     bool runtime_asset{false};
 };
 
-/**
- * @brief Runtime shader asset record.
- */
+/// @brief Runtime shader asset record.
 struct ShaderAsset {
     ShaderHandle handle{};
 
@@ -328,9 +316,7 @@ public:
         return handle;
     }
 
-    /**
-     * @brief Creates a runtime 2D texture from memory.
-     */
+    /// @brief Creates a runtime 2D texture from memory.
     TextureAssetHandle create_runtime_texture_2d(const RuntimeTextureDesc &desc) noexcept {
         if (!validate_runtime_texture_desc(desc)) {
             FR_LOG_ERR("Invalid runtime texture descriptor.");
@@ -409,8 +395,6 @@ public:
 
         return handle;
     }
-
-    // ============================================================ Sync Loading
 
     MeshAssetHandle load_mesh(AssetId id) noexcept {
         if (!id.is_valid()) {
@@ -567,12 +551,9 @@ public:
         return handle;
     }
 
-    // =========================================================== Async Loading
-
     /**
      * @brief Queues CPU decode for a cooked mesh asset.
-     *
-     * @details GPU upload happens later in process_async_uploads().
+     * @note GPU upload happens later in process_async_uploads().
      */
     bool request_mesh(ThreadPool &pool, AssetId id, bool retry_failed = false) noexcept {
         if (!id.is_valid()) {
@@ -804,39 +785,29 @@ public:
         return get_load_state(m_shader_async_state, id.value);
     }
 
-    /**
-     * @brief Returns a loaded mesh handle without changing ref_count.
-     */
+    /// @brief Returns a loaded mesh handle without changing `ref_count`.
     [[nodiscard]] MeshAssetHandle try_get_mesh(AssetId id) const noexcept {
         auto cached = m_mesh_cache.find(id.value);
         return cached.is_some() ? *cached.unwrap() : MeshAssetHandle{};
     }
 
-    /**
-     * @brief Returns a loaded texture handle without changing ref_count.
-     */
+    /// @brief Returns a loaded texture handle without changing `ref_count`.
     [[nodiscard]] TextureAssetHandle try_get_texture(AssetId id) const noexcept {
         auto cached = m_texture_cache.find(id.value);
         return cached.is_some() ? *cached.unwrap() : TextureAssetHandle{};
     }
 
-    /**
-     * @brief Returns a loaded material handle without changing ref_count.
-     */
+    /// @brief Returns a loaded material handle without changing `ref_count`.
     [[nodiscard]] MaterialAssetHandle try_get_material(AssetId id) const noexcept {
         auto cached = m_material_cache.find(id.value);
         return cached.is_some() ? *cached.unwrap() : MaterialAssetHandle{};
     }
 
-    /**
-     * @brief Returns a loaded shader handle without changing ref_count.
-     */
+    /// @brief Returns a loaded shader handle without changing `ref_count`.
     [[nodiscard]] ShaderAssetHandle try_get_shader(AssetId id) const noexcept {
         auto cached = m_shader_cache.find(id.value);
         return cached.is_some() ? *cached.unwrap() : ShaderAssetHandle{};
     }
-
-    // ================================================================ Unloading
 
     void unload_mesh(MeshAssetHandle handle) noexcept {
         if (!handle.is_valid()) {
@@ -958,8 +929,6 @@ public:
         m_shader_cache.remove(record->cache_key);
         m_shaders.erase(handle.key);
     }
-
-    // ================================================================ Accessors
 
     [[nodiscard]] const RenderMeshData *get_mesh_data(MeshAssetHandle handle) const noexcept {
         const MeshAsset *record = m_meshes.get_data(handle.key);
@@ -1332,13 +1301,13 @@ private:
 
         template <typename T>
         bool read_object(T &out) noexcept {
-            static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+            FR_STATIC_ASSERT(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
             return read_exact(&out, sizeof(T));
         }
 
         template <typename T>
         bool read_array(T *dst, USize count) noexcept {
-            static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+            FR_STATIC_ASSERT(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
 
             if (count == 0) {
                 return true;

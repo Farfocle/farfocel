@@ -10,9 +10,7 @@
 
 namespace fr {
 
-/**
- * @brief Shader stage stored in .fshader.
- */
+/// @brief Shader stage stored in .fshader.
 enum class CookedShaderStage : U32 {
     Vertex = 0,
     Fragment = 1,
@@ -20,9 +18,7 @@ enum class CookedShaderStage : U32 {
 
 #pragma pack(push, 1)
 
-/**
- * @brief Header stored at the beginning of .fshader.
- */
+/// @brief Header stored at the beginning of .fshader.
 struct CookedShaderHeader {
     char verify[4]{'F', 'S', 'H', 'D'};
     U32 version{1};
@@ -35,9 +31,7 @@ struct CookedShaderHeader {
     U32 source_data_size{0};
 };
 
-/**
- * @brief One shader stage entry in .fshader.
- */
+/// @brief One shader stage entry in .fshader.
 struct CookedShaderStageRecord {
     CookedShaderStage stage{CookedShaderStage::Vertex};
     U32 source_offset{0};

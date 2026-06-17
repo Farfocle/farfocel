@@ -18,9 +18,7 @@
 
 namespace fr {
 
-/**
- * @brief Decoded material asset data.
- */
+/// @brief Decoded material asset data.
 struct MaterialAssetData {
     AssetId albedo_texture{};
     AssetId normal_texture{};
@@ -60,9 +58,7 @@ verify_cooked_material_header(const CookedMaterialHeader &header) noexcept {
 
 } // namespace impl
 
-/**
- * @brief Decodes .fmat bytes into material asset data.
- */
+/// @brief Decodes .fmat bytes into material asset data.
 [[nodiscard]] inline bool load_cooked_material(Slice<const Byte> bytes,
                                                MaterialAssetData &out_material) noexcept {
     CookedMaterialHeader header{};

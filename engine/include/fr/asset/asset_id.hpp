@@ -50,6 +50,14 @@ struct AssetId {
         return AssetId{hash_bytes(str, N - 1)};
     }
 
+    [[nodiscard]] static constexpr AssetId nil() noexcept {
+        return AssetId{0};
+    }
+
+    [[nodiscard]] constexpr bool is_nil() const noexcept {
+        return value == 0;
+    }
+
     [[nodiscard]] constexpr bool is_valid() const noexcept {
         return value != 0;
     }
@@ -78,9 +86,7 @@ private:
     }
 };
 
-/**
- * @brief Creates an AssetId from a string literal.
- */
+/// @brief Creates an AssetId from a string literal.
 template <USize N>
 [[nodiscard]] constexpr AssetId asset_id_literal(const char (&str)[N]) noexcept {
     return AssetId::from_literal(str);

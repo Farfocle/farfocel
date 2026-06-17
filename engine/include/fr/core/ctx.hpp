@@ -50,9 +50,7 @@ FR_API const Ctx &get_ambient_ctx() noexcept;
 FR_API Ctx &get_ambient_ctx_mut() noexcept;
 FR_API void set_ambient_ctx(Ctx *ctx) noexcept;
 
-/**
- * @brief RAII scope for switching ambient context.
- */
+/// @brief RAII scope for switching ambient context.
 class CtxScope {
 public:
     explicit CtxScope(Ctx *ctx) noexcept

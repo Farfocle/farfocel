@@ -48,9 +48,7 @@ public:
 
     // ----------------------------------------------------------------- Methods
 
-    /**
-     * @brief Returns the current number of frames in the buffer.
-     */
+    /// @brief Returns the current number of frames in the buffer.
     USize size() const noexcept {
         return (m_size < m_capacity) ? m_size : m_capacity;
     }
@@ -64,37 +62,27 @@ public:
         return m_size;
     }
 
-    /**
-     * @brief Returns the capacity of the tracer.
-     */
+    /// @brief Returns the capacity of the tracer.
     USize capacity() const noexcept {
         return m_capacity;
     }
 
-    /**
-     * @brief Checks if the tracer is empty.
-     */
+    /// @brief Checks if the tracer is empty.
     bool is_empty() const noexcept {
         return m_size == 0;
     }
 
-    /**
-     * @brief Checks if the tracer buffer is full.
-     */
+    /// @brief Checks if the tracer buffer is full.
     bool is_full() const noexcept {
         return m_size >= m_capacity;
     }
 
-    /**
-     * @brief Returns a slice of recorded frames.
-     */
+    /// @brief Returns a slice of recorded frames.
     Slice<const AllocFrame> frames() const noexcept {
         return Slice(m_frames, size());
     }
 
-    /**
-     * @brief Records an allocation frame.
-     */
+    /// @brief Records an allocation frame.
     void record(AllocFrame &&frame) noexcept {
         std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -103,7 +91,7 @@ public:
     }
 
 private:
-    // -------------------------------------------------------- Member Variables
+    // ----------------------------------------------------------------- Members
     AllocFrame *m_frames{nullptr};
     USize m_capacity{0};
     USize m_size{0};

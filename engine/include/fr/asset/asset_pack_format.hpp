@@ -12,9 +12,7 @@
 
 namespace fr {
 
-/**
- * @brief Compression mode stored in .fpack entries.
- */
+/// @brief Compression mode stored in .fpack entries.
 enum class CookedAssetPackCompression : U32 {
     None = 0,
 };
@@ -39,9 +37,7 @@ struct CookedAssetPackHeader {
     U64 data_size{0};
 };
 
-/**
- * @brief One cooked asset entry stored in .fpack.
- */
+/// @brief One cooked asset entry stored in .fpack.
 struct CookedAssetPackEntry {
     AssetId id{};
     AssetKind kind{AssetKind::Unknown};
@@ -56,6 +52,6 @@ struct CookedAssetPackEntry {
 
 #pragma pack(pop)
 
-static_assert(sizeof(AssetId) == sizeof(U64), "AssetId must remain a 64-bit disk value");
+FR_STATIC_ASSERT(sizeof(AssetId) == sizeof(U64), "AssetId must remain a 64-bit disk value");
 
 } // namespace fr

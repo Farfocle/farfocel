@@ -21,18 +21,14 @@
 
 namespace fr {
 
-/**
- * @brief Physical storage location kind for a cooked asset.
- */
+/// @brief Physical storage location kind for a cooked asset.
 enum class AssetLocationKind : U32 {
     None = 0,
     LooseFile,
     PackFile,
 };
 
-/**
- * @brief Registry entry for one logical asset.
- */
+/// @brief Registry entry for one logical asset.
 struct AssetRecord {
     AssetId id{};
     AssetKind kind{AssetKind::Unknown};
@@ -50,9 +46,7 @@ struct AssetRecord {
 
 /**
  * @brief Maps AssetIds to cooked asset storage locations.
- *
- * @details
- * AssetRegistry does not read files and does not create runtime resources.
+ * @note `AssetRegistry` does not read files and does not create runtime resources.
  */
 class AssetRegistry {
 public:
@@ -68,9 +62,7 @@ public:
     AssetRegistry &operator=(const AssetRegistry &) = delete;
     AssetRegistry &operator=(AssetRegistry &&) = delete;
 
-    /**
-     * @brief Registers or replaces a loose cooked asset record.
-     */
+    /// @brief Registers or replaces a loose cooked asset record.
     bool register_loose_asset(AssetId id, AssetKind kind, StringView path,
                               U64 content_hash = 0) noexcept {
         if (!id.is_valid() || path.is_empty() || kind == AssetKind::Unknown) {
@@ -109,9 +101,7 @@ public:
         return true;
     }
 
-    /**
-     * @brief Registers or replaces a packed cooked asset record.
-     */
+    /// @brief Registers or replaces a packed cooked asset record.
     bool register_pack_asset(AssetId id, AssetKind kind, U32 pack_index, U64 offset,
                              U64 packed_size, U64 unpacked_size, U64 content_hash = 0) noexcept {
         if (!id.is_valid() || kind == AssetKind::Unknown || packed_size == 0 ||
@@ -154,9 +144,7 @@ public:
         return true;
     }
 
-    /**
-     * @brief Finds a registry record for an asset id.
-     */
+    /// @brief Finds a registry record for an asset id.
     [[nodiscard]] const AssetRecord *find(AssetId id) const noexcept {
         if (!id.is_valid()) {
             return nullptr;
