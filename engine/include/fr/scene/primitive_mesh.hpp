@@ -89,10 +89,9 @@ inline void resolve_primitive_meshes(World &world, AssetManager &assets, Alloc *
         MeshRendererPart *mesh = world.try_get<MeshRendererPart>(thing);
         if (!mesh) {
             mesh = &world.emplace_now<MeshRendererPart>(thing);
+            mesh->visible = true;
+            mesh->casts_shadow = primitive->casts_shadow;
         }
-
-        mesh->visible = true;
-        mesh->casts_shadow = primitive->casts_shadow;
 
         if (!primitive_mesh_needs_rebuild(*mesh, *primitive)) {
             return;

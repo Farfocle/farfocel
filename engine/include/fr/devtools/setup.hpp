@@ -157,6 +157,7 @@ inline void draw_controls_panel(DevToolsState &tools) noexcept {
 inline void devtools_panels_system(fr::Scope scope) noexcept {
     auto &state = scope.get_resource<fr::scene::AppState>();
     auto &tools = scope.get_resource<DevToolsState>();
+    auto &scene_settings = scope.get_resource<fr::SceneRenderSettings>();
     auto &asset_state = scope.get_resource<AssetPanelState>();
     auto &asset_panel_ctx = scope.get_resource<AssetPanelCtx>();
     auto &input = scope.get_resource<fr::WindowInput>();
@@ -244,7 +245,7 @@ inline void devtools_panels_system(fr::Scope scope) noexcept {
         place(ImVec2(vw - RIGHT_W - PAD, TOP_H + 2.0f * PAD), ImVec2(RIGHT_W, rend_h));
         ImGui::PushID("renderer");
         if (ImGui::Begin("Renderer##renderer", &tools.show_render_settings)) {
-            draw_renderer_settings_panel(tools);
+            draw_renderer_settings_panel(scene_settings);
             ImGui::SeparatorText("Material Debug");
             draw_shading_override_combo(tools);
             ImGui::SeparatorText("Transform Gizmo");
@@ -328,19 +329,12 @@ inline void draw(fr::World &world) noexcept {
     extract_desc.geometry_pipeline = state.renderer->geometry_pipeline(false);
     extract_desc.forward_transparent_pipeline = state.renderer->forward_transparent_pipeline();
     extract_desc.shadow_pipeline = state.renderer->shadow_pipeline();
-    extract_desc.directional_shadow_settings = tools.directional_shadow_settings;
+    extract_desc.directional_shadow_settings = scene_settings.directional_shadow_settings;
 
     fr::RenderExtractResult result =
         fr::extract_render_frame(world, *state.assets, extract_desc, *state.submission);
 
     apply_shading_override(*state.submission, static_cast<ShadingOverride>(tools.shading_override));
-
-    // Sync tools → persistent scene settings
-    scene_settings.lighting = tools.lighting;
-    scene_settings.ao = tools.ao;
-    scene_settings.ibl = tools.ibl;
-    scene_settings.debug = tools.debug;
-    scene_settings.directional_shadow_settings = tools.directional_shadow_settings;
 
     tools.geometry_stats = result.geometry_stats;
     tools.shadow_stats = result.shadow_stats;
@@ -352,10 +346,10 @@ inline void draw(fr::World &world) noexcept {
     frame_desc.viewport.height = height;
     frame_desc.camera = result.camera;
     frame_desc.environment_source = fr::get_active_environment_texture(world, *state.assets);
-    frame_desc.lighting = tools.lighting;
-    frame_desc.ao = tools.ao;
-    frame_desc.ibl = tools.ibl;
-    frame_desc.debug = tools.debug;
+    frame_desc.lighting = scene_settings.lighting;
+    frame_desc.ao = scene_settings.ao;
+    frame_desc.ibl = scene_settings.ibl;
+    frame_desc.debug = scene_settings.debug;
 
     state.renderer->render(frame_desc);
 

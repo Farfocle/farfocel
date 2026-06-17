@@ -34,7 +34,11 @@ struct PhysicsState {
     impl::SpatialHashGrid grid;
     impl::CollisionManifoldPool manifold_pool;
     F32 dt{1.0f / 60.0f};
+    bool is_running{true};
 
-    FR_SHAPE({ FR_PROP(options); })
+    FR_SHAPE({
+        FR_PROP(options);
+        FR_PROP(is_running);
+    })
 };
 } // namespace fr

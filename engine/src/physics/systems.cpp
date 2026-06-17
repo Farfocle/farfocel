@@ -96,6 +96,9 @@ static void do_push_aabb_cells(impl::SpatialHashGrid &grid, Thing thing,
 /// @brief Broadphase collision detection system.
 void broadphase_collision_detection_system(Scope scope) {
     PhysicsState &state = scope.get_resource<PhysicsState>();
+    if (!state.is_running) {
+        return;
+    }
     state.grid.clear();
 
     for (auto [thing, wt, collider] : scope.query<WorldTransformPart, ColliderPart>()) {
@@ -109,6 +112,9 @@ void broadphase_collision_detection_system(Scope scope) {
 /// @brief Narrowphase collision detection system.
 void narrowphase_collision_detection_system(Scope scope) {
     PhysicsState &state = scope.get_resource<PhysicsState>();
+    if (!state.is_running) {
+        return;
+    }
 
     // Reset per-frame state.
     state.manifold_pool.clear();
@@ -211,6 +217,9 @@ static Vec3 do_world_com(const MassPart *mass, const WorldTransformPart &wt) noe
 
 void rigit_body_force_system(Scope scope) {
     const PhysicsState &state = scope.get_resource<PhysicsState>();
+    if (!state.is_running) {
+        return;
+    }
     const F32 dt = state.dt;
     const Vec3 gravity = state.options.gravity;
 
@@ -241,10 +250,12 @@ void rigit_body_force_system(Scope scope) {
 
 /// @brief Resolves collision constraints with full rigid-body impulse response.
 void rigit_body_collision_resolution_system(Scope scope) {
+    PhysicsState &state = scope.get_resource<PhysicsState>();
+    if (!state.is_running) {
+        return;
+    }
     constexpr F32 SLOP = 0.005f;
     constexpr F32 BAUMGARTE = 0.2f;
-
-    PhysicsState &state = scope.get_resource<PhysicsState>();
 
     for (const CollisionManifold &m : state.manifold_pool.manifolds()) {
         RigidBodyPart *rb_a = scope.try_get<RigidBodyPart>(m.a);

@@ -87,8 +87,7 @@ public:
         }
 
         if constexpr (std::is_same_v<RawT, bool>) {
-            do_label(label);
-            ImGui::Checkbox("##v", &value);
+            ImGui::Checkbox(label[0] != '#' ? label : "##v", &value);
 
         } else if constexpr (std::is_same_v<RawT, Byte>) {
             do_label(label);

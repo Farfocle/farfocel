@@ -83,7 +83,7 @@ inline void renderer_inspector_panel(World &world, DevToolsState &tools) noexcep
 
     if (ImGui::BeginTabItem("Renderer##renderer_tab")) {
         ImGui::PushID("render_settings");
-        draw_renderer_settings_panel(tools);
+        draw_renderer_settings_panel(world.get_resource<fr::SceneRenderSettings>());
         ImGui::PopID();
 
         ImGui::SeparatorText("Material Debug##material_debug_sep");
