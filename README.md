@@ -1,22 +1,19 @@
-# Farfocel
-
-Monorepo of the Farfocel Game Engine.
-
-Farfocel Renderer Testbed:
-![screenshot](screenshot.png)
+# Farfocel Game Engine
 
 See:
 - [**Engine**](engine/README.md) - the real Farfocel
 - [Asscooker](asscooker/READMEN.d) - asset loader and compiler (the worst part from this entire project)
 - [Editor](editor/README.md) - will likely not exist
-- [Examples](examples) - for now, a primary way to test the engine. For something visual, check [Renderer Testbed](examples/renderer/). Run from top directory: `./bin/farfocel_example_renderer_testbed`
+- [Examples](examples) - primary way of testing the project. Check our demos.
 
 Authors:
 - [Jakub Kijek (Kiju)](https://github.com/kijudev)
 - [Karol Szypuła (Tfoedy)](https://github.com/Tfoedy)
 - [Stanisław Dera](https://github.com/stanislawdera)
 
-Please note that we have a crazy ass deadline, and so, the code quality may vary, but this is all intentional.
+This was made under a crazy ass deadline as this was made as our **2nd semester final project** for our University and so the code quality and practices may vary.
+
+We would have done things differently otherwise.
 
 ### Third party libraries
 See [third party libraries](3rdparty/README.md) used in Farfocel.
