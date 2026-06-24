@@ -4,7 +4,7 @@ See:
 - [Engine](engine/README.md) - the real Farfocel
 - [Asscooker](asscooker/README.md) - asset loader and compiler (the worst part from this entire project)
 - [Editor](editor/README.md) - will likely not exist
-- [Examples](examples) - check our demos.
+- [Examples](examples/) - check our demos.
 
 Authors:
 - [Jakub Kijek (Kiju)](https://github.com/kijudev)
