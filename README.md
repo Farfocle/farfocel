@@ -1,6 +1,6 @@
 # Farfocel Game Engine
 
-A C++23 game engine. Minimal, pragmatic, data-oriented.
+A C++23 game engine. Minimal, data-oriented, funky, farfocel!
 
 Authors: [Kiju](https://github.com/kijudev), [Tfoedy](https://github.com/Tfoedy), [Stanisław Dera](https://github.com/stanislawdera)
 
