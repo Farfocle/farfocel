@@ -19,8 +19,21 @@ Authors: [Kiju](https://github.com/kijudev), [Tfoedy](https://github.com/Tfoedy)
 
 ## Third-party libraries
 
-SDL3, glad, glm, cgltf, stb, bc7enc, mikktspace, doctest, nanobench, yyjson.
-See [3rdparty/README.md](3rdparty/README.md) for the full list.
+See [3rdparty/README.md](3rdparty/README.md) for details.
+
+- SDL3
+- glad
+- glm
+- cgltf
+- stb
+- bc7enc
+- mikktspace
+- imgui
+- imguizmo
+- doctest
+- nanobench
+- wyhash
+- yyjson
 
 ---
 
